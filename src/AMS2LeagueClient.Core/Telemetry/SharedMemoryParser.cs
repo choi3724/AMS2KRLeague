@@ -125,7 +125,8 @@ namespace AMS2LeagueClient.Core.Telemetry
                 SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.CloudBrightness),
                 SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.SnowDensity),
                 SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.EnforcedPitStopLap),
-                buffer[SharedMemoryLayout.SessionIsPrivate] != 0);
+                buffer[SharedMemoryLayout.SessionIsPrivate] != 0,
+                SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.YellowFlagState));
 
             return TelemetryReadResult.Success(snapshot, sequenceRetries);
         }

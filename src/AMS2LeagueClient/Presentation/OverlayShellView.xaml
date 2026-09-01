@@ -12,6 +12,18 @@
                                      HorizontalAlignment="Left"
                                      VerticalAlignment="Top" />
 
+        <presentation:RelativeDriversView x:Name="RelativeZone"
+                                          xmlns:presentation="clr-namespace:AMS2LeagueClient.Presentation"
+                                          DataContext="{Binding Timing}"
+                                          HorizontalAlignment="Left"
+                                          VerticalAlignment="Top" />
+
+        <presentation:LapTimingView x:Name="LapTimingZone"
+                                    xmlns:presentation="clr-namespace:AMS2LeagueClient.Presentation"
+                                    DataContext="{Binding Timing}"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top" />
+
         <presentation:SessionInfoView x:Name="SessionZone"
                                       xmlns:presentation="clr-namespace:AMS2LeagueClient.Presentation"
                                       Width="224"

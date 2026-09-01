@@ -1,0 +1,25 @@
+<UserControl x:Class="AMS2LeagueClient.Presentation.LapTimingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:AMS2LeagueClient.Core.Presentation;assembly=AMS2LeagueClient.Core"
+             Width="380" Height="112"
+             FontFamily="{DynamicResource HudFontFamily}"
+             SnapsToDevicePixels="True" UseLayoutRounding="True" IsHitTestVisible="False">
+    <Border Background="{StaticResource TertiaryPanelBackgroundBrush}" BorderBrush="#47526779" BorderThickness="1" CornerRadius="8" Padding="11,8">
+        <StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="{Binding CurrentLabel}" Foreground="#9BB0C3" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold"/><TextBlock Text="{Binding CurrentLapText}" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" Style="{StaticResource HudNumericText}"/></StackPanel>
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center"><TextBlock Text="{Binding LastLabel}" Foreground="#9BB0C3" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="{Binding LastLapText}" Foreground="#E4EBF2" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="SemiBold" Style="{StaticResource HudNumericText}"/></StackPanel>
+                <StackPanel Grid.Column="2" HorizontalAlignment="Right"><TextBlock Text="{Binding BestLabel}" Foreground="#9BB0C3" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold" HorizontalAlignment="Right"/><TextBlock Text="{Binding BestLapText}" Foreground="#82F1D0" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" Style="{StaticResource HudNumericText}"/></StackPanel>
+            </Grid>
+            <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Sector1Text, StringFormat=S1  {0}}" Foreground="#D4DEE8" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold" Style="{StaticResource HudNumericText}"/>
+                <TextBlock Grid.Column="1" Text="{Binding Sector2Text, StringFormat=S2  {0}}" Foreground="#D4DEE8" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold" Style="{StaticResource HudNumericText}"/>
+                <TextBlock Grid.Column="2" Text="{Binding Sector3Text, StringFormat=S3  {0}}" Foreground="#D4DEE8" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold" Style="{StaticResource HudNumericText}"/>
+                <TextBlock Grid.Column="3" Text="{Binding CurrentLapStateText}" Foreground="#82F1D0" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}" FontWeight="SemiBold" />
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>

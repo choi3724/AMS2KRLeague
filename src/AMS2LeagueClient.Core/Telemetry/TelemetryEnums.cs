@@ -80,6 +80,24 @@ namespace AMS2LeagueClient.Core.Telemetry
         VehicleObstruction = 3
     }
 
+    /// <summary>
+    /// AMS2 Shared Memory v14 mYellowFlagState. Unlike mHighestFlagColour,
+    /// this is the authoritative Full Course Yellow / safety-car procedure state.
+    /// </summary>
+    public enum YellowFlagState : int
+    {
+        Invalid = -1,
+        None = 0,
+        Pending = 1,
+        PitsClosed = 2,
+        PitLeadLap = 3,
+        PitsOpen = 4,
+        PitsOpen2 = 5,
+        LastLap = 6,
+        Resume = 7,
+        RaceHalt = 8
+    }
+
     public enum GapSource
     {
         GameSplit,

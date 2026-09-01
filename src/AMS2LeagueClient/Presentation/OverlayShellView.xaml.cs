@@ -30,6 +30,12 @@ namespace AMS2LeagueClient.Presentation
             TimingZone.Width = layout.Timing.Width;
             TimingZone.Height = layout.Timing.Height;
             TimingZone.Margin = new Thickness(layout.Timing.X, layout.Timing.Y, 0, 0);
+            RelativeZone.Width = layout.Relative.Width;
+            RelativeZone.Height = layout.Relative.Height;
+            RelativeZone.Margin = new Thickness(layout.Relative.X, layout.Relative.Y, 0, 0);
+            LapTimingZone.Width = layout.LapTiming.Width;
+            LapTimingZone.Height = layout.LapTiming.Height;
+            LapTimingZone.Margin = new Thickness(layout.LapTiming.X, layout.LapTiming.Y, 0, 0);
             SessionZone.Width = layout.Session.Width;
             SessionZone.Height = layout.Session.Height;
             SessionZone.Margin = new Thickness(layout.Session.X, layout.Session.Y, 0, 0);

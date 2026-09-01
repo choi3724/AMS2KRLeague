@@ -175,6 +175,7 @@ namespace AMS2LeagueClient.Capture
                 Name = row.Name,
                 Class = row.Class,
                 Lap = row.Lap,
+                CurrentTime = row.CurrentTime,
                 IsPlayer = row.IsPlayer,
                 Background = row.Background,
                 Accent = row.Accent,

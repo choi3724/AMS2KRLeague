@@ -2,16 +2,18 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-현재 버전: **0.2.1**
+현재 버전 및 최신 공개 릴리스: **0.2.2**
 
 ## 주요 기능
 
-- League Classification 기준 Timing Tower
+- League Classification 기준 Timing Tower와 크게 확장한 드라이버명
+- 타워 행의 차량 클래스와 현재 랩 진행 시간
 - Safety Car를 순위와 참가자 수에서 제외
 - 현재 플레이어 강조
 - 물리적 트랙 진행거리 기준 앞차·뒤차 표시
 - 랩타임, 섹터, 시간/랩 기반 세션 정보
-- 황색기, 적색기, 체커드 등 Race Control 상태
+- 순위 타워, 전후방 거리, 랩/섹터, 세션, 이벤트, Race Control, 대기 화면의 독립 이동·크기 조절
+- 일반 황색기, 이중 황색기, 전 코스 황색기를 독립 판정하는 Race Control 상태
 - AMS2 상단 알림을 가리지 않는 좌측 Race Control 카드
 - 멀티플레이어 세션 전환·차고 대기 전용 compact overlay
 - 순위 변화, Personal Best, Fastest Lap, Pit 등 동적 이벤트
@@ -24,16 +26,24 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 ## 실행 방법
 
-1. [Releases](https://github.com/choi3724/AMS2KRLeague/releases)에서 `AMS2-League-Overlay-0.2.1-Setup.exe`를 받습니다.
+1. [Releases](https://github.com/choi3724/AMS2KRLeague/releases)에서 `AMS2-League-Overlay-0.2.2-Setup.exe`를 받습니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
 
-설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.2.1-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
+설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.2.2-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
 
 게임이 실행되지 않았거나 Shared Memory를 사용할 수 없으면 오버레이는 대기 상태로 유지됩니다. 프로그램은 게임 설정, 실행 파일, 저장 파일을 자동 변경하지 않습니다.
 
 멀티플레이어 세션 전환 중에는 주행용 Timing Tower 대신 세션 종류와 참가자 수를 담은 작은 대기 오버레이가 표시됩니다. `mEventTimeRemaining`이 순간적으로 `-1`이 되면 같은 세션에서 확인한 마지막 값만 최대 3초 유지하며, 이후에는 추정 시간을 만들지 않고 `종료 처리 중`, `세션 종료 대기` 또는 관측된 결과 상태에 따른 `세션 종료`를 표시합니다.
+
+## 오버레이 위치와 크기 조절
+
+상태창에서 **레이아웃 편집**을 누르면 각 UI가 독립된 청록색 편집 테두리로 표시됩니다. 각 UI 상단 바를 드래그해 이동하고 오른쪽 아래 손잡이로 크기를 조절합니다. **저장 후 잠금**을 누르면 `%LOCALAPPDATA%\AMS2KRLeague\overlay-layout.json`에 현재 게임 해상도 대비 비율로 저장되고 다시 click-through 상태가 됩니다. **기본 위치 복원**은 저장된 배치를 삭제하고 기본 배치를 즉시 적용합니다.
+
+순위 타워와 전후방 거리, 현재/섹터 타임은 서로 독립된 창이므로 각각 다른 위치와 크기를 사용할 수 있습니다. 레이아웃 편집 중에는 평소 조건에 따라 숨겨지는 이벤트 및 Race Control UI도 함께 배치할 수 있습니다. 상태창의 **표시할 UI** 체크박스를 해제하면 필요 없는 구성 요소를 끌 수 있으며, 다시 체크하면 저장된 위치로 복원됩니다.
+
+전후방 거리 값은 동일 차량을 연속 관찰했을 때 이전 표시값보다 멀어지면 파란색 `▲`, 가까워지면 빨간색 `▼`로 표시합니다. 일반 황색기·이중 황색기는 플래그 색상으로 구분하고, 전 코스 황색기는 AMS2 Shared Memory의 별도 FCY 진행 상태로 판정합니다.
 
 ## 상태와 Player 활동 기록
 
@@ -44,6 +54,8 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 첫 네트워크 사용 때 로그인이나 수동 코드 입력 없이 설치별 익명 자격을 자동 발급받습니다. 자격은 Windows DPAPI CurrentUser로 보호되며 다른 Windows 사용자나 다른 PC에서 복호화할 수 없습니다. 서버가 오프라인이어도 로컬 기록과 오버레이는 계속 동작하고, 대기 중인 개인 활동 및 Session Witness는 서버 복구 후 자동 재전송됩니다.
 
 일반 Player도 Shared Memory가 제공하는 참가자 배열과 세션 전환을 Session Witness로 기록합니다. 이는 공식 결과가 아니라 독립 Evidence이며, 한 Client만 관측해도 보존됩니다. 같은 경기를 여러 Client가 보내면 서버에서 하나의 세션 그룹으로 묶고 원본 Witness는 각각 유지합니다.
+
+서버로 전송되는 각 정보의 의미, 저장 위치, 전송되지 않는 정보와 현재 판정 한계는 [클라이언트-서버 전송 데이터 분석 보고서](docs/CLIENT_SERVER_DATA_TRANSMISSION_REPORT_2026-09-02.md)에 정리되어 있습니다.
 
 ## 안전 경계
 
@@ -85,7 +97,7 @@ dotnet run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.c
 
 ## 버전 정책
 
-첫 공개 버전은 `0.1.0`, 현재 Player Client 제품 버전은 `0.2.1`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
+첫 공개 버전은 `0.1.0`, 현재 Player Client 제품 버전은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
 
 ## 현재 제한사항
 

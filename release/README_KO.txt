@@ -1,4 +1,4 @@
-AMS2 League Overlay 0.2.1
+AMS2 League Overlay 0.2.2
 =======================
 
 빠른 시작
@@ -10,7 +10,9 @@ AMS2 League Overlay 0.2.1
 별도 .NET 설치, PowerShell, JSON 편집, API 토큰 입력은 필요하지 않습니다.
 
 현재 지원
-- 한국어 Timing Tower, 앞차/뒤차, 세션 정보, Race Control, 동적 이벤트
+- 개별 이동·크기 조절·표시 여부를 저장할 수 있는 한국어 Overlay UI
+- 확대된 Timing Tower와 클래스·현재 타임, 거리 변화 방향을 표시하는 앞차/뒤차 UI
+- 일반 황색기·이중 황색기·전 코스 황색기를 구분하는 Race Control
 - 멀티플레이어 세션 전환 대기 화면
 - 개인 General Race 및 Time Attack 기록의 로컬 저장
 - 로그인 없는 설치별 자동 등록 및 DPAPI 보호 전송

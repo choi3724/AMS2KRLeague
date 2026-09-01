@@ -7,6 +7,9 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
 using AMS2LeagueClient.Core.Presentation;
 using AMS2LeagueClient.Core.RaceControl;
@@ -24,6 +27,8 @@ namespace AMS2LeagueClient.Tests
         [STAThread]
         private static int Main()
         {
+            var application = new AMS2LeagueClient.App();
+            application.InitializeComponent();
             var tests = new (string Name, Action Test)[]
             {
                 ("Official v14 activity metadata offsets", ActivityMetadataLayoutOffsets),
@@ -34,9 +39,14 @@ namespace AMS2LeagueClient.Tests
                 ("RaceControl history alone stays hidden", RaceControlHistoryAloneHidden),
                 ("RaceControl state-only card fits", RaceControlStateOnlyCardFits),
                 ("Yellow semantics remain distinct", YellowSemanticsRemainDistinct),
+                ("Relative distance trend colours persist", RelativeDistanceTrendColoursPersist),
                 ("RaceControl clears AMS2 top-center alert", RaceControlLeftAuxiliaryPlacement),
                 ("Compact UI metrics meet target", CompactUiMetricsMeetTarget),
                 ("Compact anchors hold at target resolutions", CompactAnchorsHoldAtTargetResolutions),
+                ("Independent layout profile scales and clamps", IndependentLayoutProfileScalesAndClamps),
+                ("Timing rows expose class and current time", TimingRowsExposeClassAndCurrentTime),
+                ("Timing tower removes redundant headers", TimingTowerRemovesRedundantHeaders),
+                ("Overlay edit mode restores click-through", OverlayEditModeRestoresClickThrough),
                 ("Multiplayer menu shows waiting overlay", MultiplayerMenuShowsWaitingOverlay),
                 ("Multiplayer qualify-end transition shows waiting", MultiplayerQualifyEndShowsWaitingOverlay),
                 ("Waiting overlay excludes single and replay", WaitingOverlayExcludesSingleAndReplay),
@@ -45,6 +55,7 @@ namespace AMS2LeagueClient.Tests
                 ("Waiting timer never fabricates countdown", WaitingTimerDoesNotFabricateCountdown),
                 ("Session card uses observed terminal status", SessionCardUsesObservedTerminalStatus)
                 ,("Packaged overlay XAML constructs", PackagedOverlayXamlConstructs)
+                ,("Status window layout controls construct", StatusWindowLayoutControlsConstruct)
                 ,("Public launch shows first-run status", PublicLaunchShowsStatus)
                 ,("Background launch is explicit", BackgroundLaunchIsExplicit)
                 ,("Fresh user has no pairing identity", FreshUserHasNoPairingIdentity)
@@ -71,16 +82,23 @@ namespace AMS2LeagueClient.Tests
             }
 
             Console.WriteLine("RESULT: " + passed + " passed, " + (tests.Length - passed) + " failed, " + tests.Length + " total");
+            application.Shutdown();
             return passed == tests.Length ? 0 : 1;
         }
 
         private static void PackagedOverlayXamlConstructs()
         {
-            var application = new AMS2LeagueClient.App();
-            application.InitializeComponent();
             var window = new OverlayWindow(false);
             window.Close();
-            application.Shutdown();
+        }
+
+        private static void StatusWindowLayoutControlsConstruct()
+        {
+            var window = new ClientStatusWindow(new ClientStatusViewModel());
+            window.SetLayoutEditState(true, "레이아웃 편집 중");
+            window.SetLayoutComponentStates(OverlayComponentKeys.All.ToDictionary(key => key, _ => true));
+            window.SetLayoutEditState(false, "레이아웃이 잠겼습니다.");
+            window.Close();
         }
 
         private static void ActivityMetadataLayoutOffsets()
@@ -105,6 +123,8 @@ namespace AMS2LeagueClient.Tests
             AssertEqual(19248, SharedMemoryLayout.EnforcedPitStopLap);
             AssertEqual(20572, SharedMemoryLayout.SnowDensity);
             AssertEqual(20692, SharedMemoryLayout.SessionIsPrivate);
+            AssertEqual(20688, SharedMemoryLayout.YellowFlagState);
+            AssertEqual(20696, SharedMemoryLayout.LaunchStage);
             AssertEqual(20700, SharedMemoryLayout.RequiredBytes);
         }
 
@@ -166,6 +186,10 @@ namespace AMS2LeagueClient.Tests
                 new RawFixtureBuilder().SetSessionActivityMetadata(-1, false));
             AssertEqual(-1, publicSession.EnforcedPitStopLap);
             AssertEqual(false, publicSession.SessionIsPrivate);
+
+            TelemetrySnapshot fullCourseYellow = Parse(
+                new RawFixtureBuilder().SetYellowFlagState(YellowFlagState.PitsClosed));
+            AssertEqual(YellowFlagState.PitsClosed, fullCourseYellow.KnownYellowFlagState);
         }
 
         private static void RaceControlHistoryAloneHidden()
@@ -214,18 +238,62 @@ namespace AMS2LeagueClient.Tests
 
             RaceControlUpdate persistent = ObserveControl(analyzer, doubleYellow, t.AddSeconds(7));
             AssertEqual("!! 이중 황색기", RaceControlViewModel.FromUpdate(persistent).StateLabel);
-            AssertFalse(Enum.TryParse("FullCourseYellow", out BroadcastOverlayState _));
+
+            doubleYellow.SetYellowFlagState(YellowFlagState.Pending);
+            RaceControlUpdate fullCourse = ObserveControl(analyzer, doubleYellow, t.AddSeconds(8));
+            AssertEqual(RaceControlEventType.FullCourseYellow, fullCourse.ActiveEvent?.Type);
+            AssertEqual("전 코스 황색기", fullCourse.ActiveEvent?.Title);
+            AssertEqual("전 코스 황색기", RaceControlViewModel.FromUpdate(fullCourse).StateLabel);
+            AssertTrue((fullCourse.OverlayState & BroadcastOverlayState.FullCourseYellow) != 0);
+            AssertFalse((fullCourse.OverlayState & BroadcastOverlayState.DoubleYellow) != 0);
+
+            doubleYellow.SetYellowFlagState(YellowFlagState.None);
+            RaceControlUpdate localDoubleYellow = ObserveControl(analyzer, doubleYellow, t.AddSeconds(9));
+            AssertEqual(RaceControlEventType.DoubleYellow, localDoubleYellow.ActiveEvent?.Type);
+            AssertEqual("!! 이중 황색기", RaceControlViewModel.FromUpdate(localDoubleYellow).StateLabel);
+            AssertFalse((localDoubleYellow.OverlayState & BroadcastOverlayState.FullCourseYellow) != 0);
+            AssertTrue((localDoubleYellow.OverlayState & BroadcastOverlayState.DoubleYellow) != 0);
+        }
+
+        private static void RelativeDistanceTrendColoursPersist()
+        {
+            var tracker = new RelativeDistanceTrendTracker();
+            var view = new OverlayViewModel
+            {
+                AheadParticipantIndex = 4,
+                AheadDistanceMeters = 57,
+                BehindParticipantIndex = 5,
+                BehindDistanceMeters = 74
+            };
+            tracker.Apply(view, 1);
+            AssertEqual(string.Empty, view.AheadDistanceTrendArrow);
+            AssertEqual(string.Empty, view.BehindDistanceTrendArrow);
+
+            view.AheadDistanceMeters = 59;
+            view.BehindDistanceMeters = 72;
+            tracker.Apply(view, 1);
+            AssertEqual("▲", view.AheadDistanceTrendArrow);
+            AssertEqual("#57D5FF", view.AheadDistanceColor);
+            AssertEqual("▼", view.BehindDistanceTrendArrow);
+            AssertEqual("#FF7777", view.BehindDistanceColor);
+
+            tracker.Apply(view, 1);
+            AssertEqual("▲", view.AheadDistanceTrendArrow);
+            AssertEqual("▼", view.BehindDistanceTrendArrow);
+
+            view.AheadParticipantIndex = 6;
+            tracker.Apply(view, 1);
+            AssertEqual(string.Empty, view.AheadDistanceTrendArrow);
+            tracker.Apply(view, 2);
+            AssertEqual(string.Empty, view.BehindDistanceTrendArrow);
         }
 
         private static void CompactUiMetricsMeetTarget()
         {
-            AssertEqual(0.80, OverlayUiMetrics.TargetScale);
-            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.TowerWidth, OverlayUiMetrics.BaselineTowerWidth) >= 0.79);
-            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.TowerWidth, OverlayUiMetrics.BaselineTowerWidth) <= 0.81);
-            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.TowerHeight, OverlayUiMetrics.BaselineTowerHeight) >= 0.79);
-            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.TowerHeight, OverlayUiMetrics.BaselineTowerHeight) <= 0.81);
-            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.RowPitch, OverlayUiMetrics.BaselineRowPitch) >= 0.80);
-            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.RowPitch, OverlayUiMetrics.BaselineRowPitch) <= 0.83);
+            AssertEqual(1.00, OverlayUiMetrics.TargetScale);
+            AssertTrue(OverlayUiMetrics.FontDriverName >= 24);
+            AssertTrue(OverlayUiMetrics.RowPitch >= 37);
+            AssertTrue(OverlayUiMetrics.TowerHeight + OverlayUiMetrics.ComponentGap + OverlayUiMetrics.RelativeHeight <= 700);
             AssertEqual(15, LeftTowerLayoutMetrics.RankingRows);
             AssertTrue(LeftTowerLayoutMetrics.RequiredHeight <= LeftTowerLayoutMetrics.DesiredHeight);
         }
@@ -242,6 +310,11 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual(expectedTop, layout.Timing.Y);
                 AssertEqual(layout.Timing.Right + OverlayUiMetrics.ComponentGap, layout.Session.X);
                 AssertEqual(layout.Session.X, layout.RaceControl.X);
+                AssertEqual(layout.Timing.X, layout.Relative.X);
+                AssertEqual(layout.Timing.Bottom + OverlayUiMetrics.ComponentGap, layout.Relative.Y);
+                AssertEqual(layout.Session.X, layout.LapTiming.X);
+                AssertEqual(layout.Session.Bottom + OverlayUiMetrics.ComponentGap, layout.LapTiming.Y);
+                AssertEqual(layout.LapTiming.Bottom + OverlayUiMetrics.ComponentGap, layout.RaceControl.Y);
                 AssertEqual(width / 2, layout.EventCard.X + (layout.EventCard.Width / 2));
                 AssertEqual(height - expectedBottom, layout.EventCard.Bottom);
                 AssertEqual(expectedLeft, layout.Waiting.X);
@@ -253,6 +326,98 @@ namespace AMS2LeagueClient.Tests
             }
         }
 
+        private static void IndependentLayoutProfileScalesAndClamps()
+        {
+            var profile = new OverlayLayoutProfile();
+            profile.Capture(OverlayComponentKeys.RelativeDrivers, new OverlayBounds(192, 108, 460, 96), 1920, 1080);
+            OverlayBounds scaled = profile.Resolve(
+                OverlayComponentKeys.RelativeDrivers,
+                new OverlayBounds(0, 0, 1, 1),
+                3840,
+                2160);
+            AssertEqual(384, scaled.X);
+            AssertEqual(216, scaled.Y);
+            AssertEqual(920, scaled.Width);
+            AssertEqual(192, scaled.Height);
+
+            profile.Components[OverlayComponentKeys.LapTiming] = new NormalizedOverlayBounds
+            {
+                X = 2,
+                Y = 2,
+                Width = 0.5,
+                Height = 0.5
+            };
+            OverlayBounds clamped = profile.Resolve(
+                OverlayComponentKeys.LapTiming,
+                new OverlayBounds(0, 0, 1, 1),
+                1920,
+                1080);
+            AssertEqual(960, clamped.X);
+            AssertEqual(540, clamped.Y);
+            AssertEqual(960, clamped.Width);
+            AssertEqual(540, clamped.Height);
+        }
+
+        private static void TimingRowsExposeClassAndCurrentTime()
+        {
+            OverlayShellViewModel shell = DemoSnapshotFactory.CreateShell(false);
+            RankingRowViewModel player = shell.Timing.RankingRows.Single(row => row.IsPlayer);
+            AssertEqual("GT3", player.Class);
+            AssertEqual("1:42.881", player.CurrentTime);
+            AssertTrue(OverlayUiMetrics.FontDriverName > OverlayUiMetrics.FontTitle);
+        }
+
+        private static void TimingTowerRemovesRedundantHeaders()
+        {
+            var view = new OverlayHudView();
+            view.SetViewModel(DemoSnapshotFactory.CreateShell(false).Timing);
+            view.Measure(new Size(OverlayUiMetrics.TowerWidth, OverlayUiMetrics.TowerHeight));
+            view.Arrange(new Rect(0, 0, OverlayUiMetrics.TowerWidth, OverlayUiMetrics.TowerHeight));
+            view.UpdateLayout();
+            string[] text = DescendantText(view).ToArray();
+            AssertFalse(text.Contains("AMS2 LEAGUE · TIMING", StringComparer.Ordinal));
+            AssertFalse(text.Contains("리그 순위", StringComparer.Ordinal));
+            AssertTrue(text.Contains("GT3", StringComparer.Ordinal));
+            AssertTrue(text.Contains("1:42.881", StringComparer.Ordinal));
+        }
+
+        private static void OverlayEditModeRestoresClickThrough()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "ams2-layout-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var window = new OverlayWindow(false, Path.Combine(root, "overlay-layout.json"));
+            try
+            {
+                window.SetViewModel(DemoSnapshotFactory.CreateShell(false), false);
+                window.ShowDemoAt(-5000, -5000, 96);
+                AssertTrue(window.GetStyleState().ClickThrough);
+            AssertTrue(window.BeginLayoutEdit());
+            AssertFalse(window.GetStyleState().ClickThrough);
+            window.SetComponentEnabled(OverlayComponentKeys.RelativeDrivers, false);
+            AssertFalse(window.IsComponentEnabled(OverlayComponentKeys.RelativeDrivers));
+            window.EndLayoutEdit(true);
+            AssertTrue(window.GetStyleState().ClickThrough);
+            AssertTrue(File.Exists(Path.Combine(root, "overlay-layout.json")));
+            AssertTrue(File.ReadAllText(Path.Combine(root, "overlay-layout.json")).Contains("\"relativeDrivers\": false", StringComparison.Ordinal));
+            }
+            finally
+            {
+                window.Close();
+                Directory.Delete(root, true);
+            }
+        }
+
+        private static IEnumerable<string> DescendantText(DependencyObject root)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int index = 0; index < count; index++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, index);
+                if (child is TextBlock textBlock) yield return textBlock.Text;
+                foreach (string value in DescendantText(child)) yield return value;
+            }
+        }
+
         private static void RaceControlLeftAuxiliaryPlacement()
         {
             int towerLeft = Math.Max(8, (int)Math.Round(3440 * 0.004));
@@ -260,10 +425,10 @@ namespace AMS2LeagueClient.Tests
             int towerTop = Math.Max(8, (int)Math.Round(1440 * 0.008));
             int raceTop = towerTop + AuxiliaryOverlayLayoutMetrics.RaceControlTopOffset;
 
-            AssertEqual(AuxiliaryOverlayLayoutMetrics.SessionHeight + LeftTowerLayoutMetrics.SessionGap,
+            AssertEqual(AuxiliaryOverlayLayoutMetrics.SessionHeight + AuxiliaryOverlayLayoutMetrics.LapTimingHeight + (LeftTowerLayoutMetrics.SessionGap * 2),
                 AuxiliaryOverlayLayoutMetrics.RaceControlTopOffset);
             AssertTrue(auxiliaryLeft + AuxiliaryOverlayLayoutMetrics.RaceControlExpandedWidth < 3440 / 2);
-            AssertEqual(towerTop + AuxiliaryOverlayLayoutMetrics.SessionHeight + LeftTowerLayoutMetrics.SessionGap, raceTop);
+            AssertEqual(towerTop + AuxiliaryOverlayLayoutMetrics.SessionHeight + AuxiliaryOverlayLayoutMetrics.LapTimingHeight + (LeftTowerLayoutMetrics.SessionGap * 2), raceTop);
         }
 
         private static void MultiplayerMenuShowsWaitingOverlay()

@@ -35,6 +35,7 @@ namespace AMS2LeagueClient.Runtime
         private readonly SessionStateTracker _sessionTracker = new SessionStateTracker();
         private readonly OverlayVisibilityController _visibilityController = new OverlayVisibilityController();
         private readonly MultiplayerWaitingOverlayController _multiplayerOverlayController = new MultiplayerWaitingOverlayController();
+        private readonly RelativeDistanceTrendTracker _relativeDistanceTrendTracker = new RelativeDistanceTrendTracker();
         private readonly object _readerGate = new object();
         private readonly object _telemetryGate = new object();
         private readonly Channel<TelemetryLogEntry> _telemetryLogChannel;
@@ -499,6 +500,7 @@ namespace AMS2LeagueClient.Runtime
                     raceControl: raceControlUpdate,
                     eventTimeRemainingOverride: multiplayerDecision.EffectiveRemainingSeconds,
                     eventTimeRemainingTextOverride: multiplayerDecision.RemainingDisplayTextOverride);
+                _relativeDistanceTrendTracker.Apply(timing, _sessionTracker.Generation);
                 _overlay.SetViewModel(OverlayShellViewModel.Build(snapshot, timing, eventUpdate.CurrentEvent, false, raceControl: raceControlUpdate));
                 Interlocked.Increment(ref _uiUpdateCount);
             }
@@ -651,7 +653,7 @@ namespace AMS2LeagueClient.Runtime
                 + FormatFloat(snapshot.EventTimeRemaining) + "|" + (effectiveRemainingSeconds.HasValue ? FormatFloat(effectiveRemainingSeconds.Value) : "NONE") + "|"
                 + (remainingDisplayTextOverride ?? "NONE") + "|"
                 + FormatFloat(snapshot.SessionDuration) + "|" + snapshot.SessionAdditionalLaps + "|" + FormatFloat(snapshot.TrackLength) + "|" + FormatFloat(local.CurrentLapDistance) + "|"
-                + snapshot.HighestFlagColourRaw + "|" + snapshot.HighestFlagReasonRaw + "|" + raceControl.Version + "|" + raceControl.OverlayState + "|" + (raceControl.ActiveEvent?.Id ?? "-") + "|"
+                + snapshot.HighestFlagColourRaw + "|" + snapshot.HighestFlagReasonRaw + "|fcy=" + snapshot.YellowFlagStateRaw + "|" + raceControl.Version + "|" + raceControl.OverlayState + "|" + (raceControl.ActiveEvent?.Id ?? "-") + "|"
                 + FormatFloat(snapshot.SplitTimeAhead) + "|" + FormatFloat(snapshot.SplitTimeBehind) + "|"
                 + (league.Ahead?.Source.Index.ToString(CultureInfo.InvariantCulture) ?? "-") + "|"
                 + (league.Ahead == null ? "-" : FormatFloat(league.Ahead.Source.CurrentLapDistance)) + "|"

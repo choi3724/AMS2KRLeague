@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using AMS2LeagueClient.Core.Presentation;
 
 namespace AMS2LeagueClient.Overlay
 {
@@ -33,8 +35,14 @@ namespace AMS2LeagueClient.Overlay
         private const int HitTestTransparent = -1;
         private const uint SetWindowNoActivate = 0x0010;
         private const uint SetWindowShow = 0x0040;
+        private const uint SetWindowNoSize = 0x0001;
+        private const uint SetWindowNoMove = 0x0002;
+        private const uint SetWindowNoZOrder = 0x0004;
+        private const uint SetWindowFrameChanged = 0x0020;
         private const int ShowNoActivate = 4;
         private static readonly IntPtr TopMost = new IntPtr(-1);
+        private static readonly object StateGate = new object();
+        private static readonly HashSet<IntPtr> EditingHandles = new HashSet<IntPtr>();
 
         public static void Configure(IntPtr handle)
         {
@@ -44,6 +52,50 @@ namespace AMS2LeagueClient.Overlay
 
             HwndSource? source = HwndSource.FromHwnd(handle);
             source?.AddHook(WindowProcedure);
+        }
+
+        public static void SetEditMode(IntPtr handle, bool enabled)
+        {
+            if (handle == IntPtr.Zero) return;
+            lock (StateGate)
+            {
+                if (enabled) EditingHandles.Add(handle);
+                else EditingHandles.Remove(handle);
+            }
+
+            long styles = GetWindowLongPtr(handle, ExtendedStyleIndex).ToInt64();
+            if (enabled)
+            {
+                styles &= ~ExtendedTransparent;
+                styles &= ~ExtendedNoActivate;
+            }
+            else
+            {
+                styles |= ExtendedTransparent | ExtendedNoActivate;
+            }
+            SetWindowLongPtr(handle, ExtendedStyleIndex, new IntPtr(styles));
+            SetWindowPos(
+                handle,
+                IntPtr.Zero,
+                0,
+                0,
+                0,
+                0,
+                SetWindowNoMove | SetWindowNoSize | SetWindowNoZOrder | SetWindowNoActivate | SetWindowFrameChanged);
+        }
+
+        public static OverlayBounds ReadPhysicalBounds(IntPtr handle)
+        {
+            if (handle == IntPtr.Zero || !GetWindowRect(handle, out NativeRect rect))
+            {
+                return new OverlayBounds(0, 0, 0, 0);
+            }
+            return new OverlayBounds(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+        }
+
+        public static void Forget(IntPtr handle)
+        {
+            lock (StateGate) EditingHandles.Remove(handle);
         }
 
         public static OverlayStyleState ReadStyleState(IntPtr handle)
@@ -70,13 +122,15 @@ namespace AMS2LeagueClient.Overlay
 
         private static IntPtr WindowProcedure(IntPtr handle, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            if (message == MessageMouseActivate)
+            bool editing;
+            lock (StateGate) editing = EditingHandles.Contains(handle);
+            if (!editing && message == MessageMouseActivate)
             {
                 handled = true;
                 return new IntPtr(MouseActivateNoActivate);
             }
 
-            if (message == MessageNcHitTest)
+            if (!editing && message == MessageNcHitTest)
             {
                 handled = true;
                 return new IntPtr(HitTestTransparent);
@@ -121,5 +175,18 @@ namespace AMS2LeagueClient.Overlay
             int width,
             int height,
             uint flags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(IntPtr handle, out NativeRect rect);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeRect
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
     }
 }

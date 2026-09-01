@@ -186,8 +186,12 @@ namespace AMS2LeagueClient.Core.Presentation
         public const int RaceControlExpandedHeight = OverlayUiMetrics.RaceControlExpandedHeight;
         public const int EventWidth = OverlayUiMetrics.EventWidth;
         public const int EventHeight = OverlayUiMetrics.EventHeight;
+        public const int RelativeWidth = OverlayUiMetrics.RelativeWidth;
+        public const int RelativeHeight = OverlayUiMetrics.RelativeHeight;
+        public const int LapTimingWidth = OverlayUiMetrics.LapTimingWidth;
+        public const int LapTimingHeight = OverlayUiMetrics.LapTimingHeight;
 
         public static int RaceControlTopOffset
-            => SessionHeight + LeftTowerLayoutMetrics.SessionGap;
+            => SessionHeight + LapTimingHeight + (LeftTowerLayoutMetrics.SessionGap * 2);
     }
 }

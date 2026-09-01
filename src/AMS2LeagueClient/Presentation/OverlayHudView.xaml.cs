@@ -25,7 +25,8 @@ namespace AMS2LeagueClient.Presentation
 
             string rankingKey = viewModel.RankingRangeText + "\u001e" + string.Join(
                 "\u001f",
-                viewModel.RankingRows.Select(row => row.ParticipantIndex + "|" + row.Position + "|" + row.Name + "|" + row.Status + "|" + row.IsPlayer));
+                viewModel.RankingRows.Select(row => row.ParticipantIndex + "|" + row.Position + "|" + row.Name + "|"
+                    + row.Class + "|" + row.CurrentTime + "|" + row.Status + "|" + row.IsPlayer));
             if (rankingKey == _rankingKey)
             {
                 return;
@@ -33,7 +34,6 @@ namespace AMS2LeagueClient.Presentation
 
             _rankingKey = rankingKey;
             System.Collections.Generic.IReadOnlyList<TimingTowerTransition> transitions = _transitionTracker.Observe(viewModel.RankingRows);
-            RankingRange.Text = viewModel.RankingRangeText;
             RankingItems.ItemsSource = viewModel.RankingRows;
             RankingItems.UpdateLayout();
             AnimateChangedRows(viewModel.RankingRows, transitions);

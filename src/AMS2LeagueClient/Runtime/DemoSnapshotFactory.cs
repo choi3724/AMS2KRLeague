@@ -92,6 +92,10 @@ namespace AMS2LeagueClient.Runtime
                 OverlayTextCatalog.Korean.Get(OverlayTextKey.DemoSimulation),
                 item,
                 eventType.HasValue ? 2 : 0);
+            timing.AheadDistanceTrendArrow = "▲";
+            timing.AheadDistanceColor = "#57D5FF";
+            timing.BehindDistanceTrendArrow = "▼";
+            timing.BehindDistanceColor = "#FF7777";
             return OverlayShellViewModel.Build(snapshot, timing, item, true);
         }
 

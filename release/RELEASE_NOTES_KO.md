@@ -1,26 +1,22 @@
-# AMS2 League Overlay 0.2.1
+# AMS2 League Overlay 0.2.2
 
-일반 사용자가 별도 개발 도구 없이 설치하거나 압축을 풀어 실행할 수 있는 첫 정식 0.2 패키지입니다.
+오버레이 구성 요소를 운전자 환경에 맞게 직접 배치하고 불필요한 UI를 끌 수 있는 사용자 설정 릴리스입니다.
 
 ## 주요 변경
 
-- 한국어 첫 실행 상태창에서 AMS2, Shared Memory, 서버, 계정 상태 확인
-- Timing Tower, 앞차/뒤차, 세션 카드, Race Control, 동적 이벤트 및 멀티플레이어 대기 화면 제공
-- AMS2 `Yellow`와 `DoubleYellow`를 각각 `황색기`, `이중 황색기`로 구분하고 관측되지 않은 전 코스 황색기를 추정하지 않음
-- 로그와 개인 활동 기록을 `%LOCALAPPDATA%\AMS2KRLeague`에 저장
-- Player 연결 자격을 평문 JSON이 아닌 Windows DPAPI CurrentUser로 보호
-- 0.1.x 평문 자격은 보호 저장소로 이전하며, 과거 Canary/명시적 사용자 식별 설정은 자동 신뢰하지 않고 재연결 요구
-- 서버 또는 계정이 오프라인이어도 Shared Memory 오버레이와 로컬 기록은 독립 동작
-- 로그인·Steam·수동 페어링 없이 설치별 익명 자격을 자동 발급하고 DPAPI로 보호
-- 한 명의 Overlay만 실행해도 전체 Session Witness를 불변 보존하며, 다중 Client Evidence는 중복 경기 없이 서버에서 그룹화
-- `FULL_SESSION`, `MID_SESSION`, `END_ONLY` 완전성과 단계별 결과 충돌을 구분하고 모든 공식 승인은 관리자에게만 허용
-- Cafe24 공유호스팅에서도 익명 자격 전송이 유지되도록 HTTPS 호환 인증 헤더를 함께 사용
-- 실제 WPF OverlayWindow 로딩 검사를 릴리스 테스트에 포함
+- 순위 타워, 전후방 거리, 현재/섹터 타임, 세션 정보, 이벤트, Race Control, 대기 화면을 독립 창으로 분리
+- 상태창의 레이아웃 편집에서 각 UI를 이동·크기 조절하고 해상도 비율 기반으로 저장
+- 구성 요소별 체크박스로 필요 없는 UI를 끄거나 저장된 위치에서 다시 활성화
+- Timing Tower의 중복 헤더를 제거하고 확대된 드라이버명, 클래스, 현재 랩 진행 시간을 표시
+- 전후방 거리가 증가하면 파란색 `▲`, 감소하면 빨간색 `▼`와 같은 색의 거리 값을 표시
+- 일반 황색기와 이중 황색기는 플래그 색상으로, 전 코스 황색기는 별도 `mYellowFlagState`로 독립 판정
+- 클라이언트가 서버로 전송하는 필드의 의미·저장 위치·개인정보 범위를 설명하는 상세 보고서 포함
+- 기존 익명 등록, DPAPI 자격 보호, 개인 활동 및 Session Witness 오프라인 재전송 유지
 - .NET 8 self-contained `win-x64` Portable ZIP과 현재 사용자용 Installer 제공
 
 ## 설치
 
-1. `AMS2-League-Overlay-0.2.1-Setup.exe`를 실행해 현재 사용자용으로 설치합니다.
+1. `AMS2-League-Overlay-0.2.2-Setup.exe`를 실행해 현재 사용자용으로 설치합니다.
 2. AMS2 옵션의 Shared Memory를 `Project CARS 2`로 설정합니다.
 3. 시작 메뉴에서 `AMS2 League Overlay`를 실행한 뒤 AMS2를 실행합니다.
 
@@ -35,6 +31,6 @@
 
 ## SHA-256
 
-릴리스에 함께 첨부된 `SHA256SUMS-0.2.1.txt`에서 ZIP과 Installer 해시를 확인할 수 있습니다.
+릴리스에 함께 첨부된 `SHA256SUMS-0.2.2.txt`에서 ZIP과 Installer 해시를 확인할 수 있습니다.
 
 지원: https://github.com/choi3724/AMS2KRLeague/issues

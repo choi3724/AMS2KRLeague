@@ -73,6 +73,46 @@ namespace AMS2LeagueClient
                 }
 
                 _overlay = new OverlayWindow(startupPolicy.Diagnostic);
+                if (_statusWindow != null)
+                {
+                    _statusWindow.LayoutEditRequested += (sender, layoutArgs) =>
+                    {
+                        if (_overlay == null) return;
+                        if (_overlay.IsLayoutEditing)
+                        {
+                            _overlay.EndLayoutEdit(true);
+                            _statusWindow?.SetLayoutEditState(false, "위치와 크기를 저장했습니다. 오버레이는 다시 클릭 통과 상태입니다.");
+                        }
+                        else if (_overlay.BeginLayoutEdit())
+                        {
+                            _statusWindow.SetLayoutComponentStates(OverlayComponentKeys.All.ToDictionary(
+                                key => key,
+                                key => _overlay.IsComponentEnabled(key),
+                                StringComparer.OrdinalIgnoreCase));
+                            _statusWindow.SetLayoutEditState(true, "각 패널의 상단을 드래그하고 우측 하단 손잡이로 크기를 조절하세요.");
+                        }
+                        else
+                        {
+                            _statusWindow.SetLayoutEditState(false, "먼저 AMS2에서 오버레이가 표시되는 화면으로 진입하세요.");
+                        }
+                    };
+                    _statusWindow.LayoutResetRequested += (sender, layoutArgs) =>
+                    {
+                        _overlay?.ResetLayout();
+                        if (_overlay != null)
+                        {
+                            _statusWindow?.SetLayoutComponentStates(OverlayComponentKeys.All.ToDictionary(
+                                key => key,
+                                key => _overlay.IsComponentEnabled(key),
+                                StringComparer.OrdinalIgnoreCase));
+                        }
+                        _statusWindow?.SetLayoutEditState(
+                            _overlay?.IsLayoutEditing == true,
+                            "모든 패널을 기본 위치와 크기로 복원했습니다.");
+                    };
+                    _statusWindow.LayoutComponentToggled += (sender, toggleArgs) =>
+                        _overlay?.SetComponentEnabled(toggleArgs.Component, toggleArgs.Enabled);
+                }
                 if (demo)
                 {
                     status.SetDemo(startupPolicy.Diagnostic);

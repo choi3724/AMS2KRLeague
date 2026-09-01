@@ -161,7 +161,8 @@ namespace AMS2LeagueClient.Core.Telemetry
             float cloudBrightness = 0,
             float snowDensity = 0,
             int enforcedPitStopLap = -1,
-            bool sessionIsPrivate = false)
+            bool sessionIsPrivate = false,
+            int yellowFlagStateRaw = 0)
         {
             CapturedAt = capturedAt;
             Version = version;
@@ -216,6 +217,7 @@ namespace AMS2LeagueClient.Core.Telemetry
             SnowDensity = snowDensity;
             EnforcedPitStopLap = enforcedPitStopLap;
             SessionIsPrivate = sessionIsPrivate;
+            YellowFlagStateRaw = yellowFlagStateRaw;
             _participants = (ParticipantSnapshot[])(participants ?? throw new ArgumentNullException(nameof(participants))).Clone();
         }
 
@@ -272,6 +274,7 @@ namespace AMS2LeagueClient.Core.Telemetry
         public float SnowDensity { get; }
         public int EnforcedPitStopLap { get; }
         public bool SessionIsPrivate { get; }
+        public int YellowFlagStateRaw { get; }
         public IReadOnlyList<ParticipantSnapshot> Participants => _participants;
 
         public GameState? KnownGameState => Enum.IsDefined(typeof(GameState), GameStateRaw)
@@ -296,6 +299,10 @@ namespace AMS2LeagueClient.Core.Telemetry
 
         public PitSchedule? KnownRootPitSchedule => Enum.IsDefined(typeof(PitSchedule), RootPitScheduleRaw)
             ? (PitSchedule?)RootPitScheduleRaw
+            : null;
+
+        public YellowFlagState? KnownYellowFlagState => Enum.IsDefined(typeof(YellowFlagState), YellowFlagStateRaw)
+            ? (YellowFlagState?)YellowFlagStateRaw
             : null;
     }
 

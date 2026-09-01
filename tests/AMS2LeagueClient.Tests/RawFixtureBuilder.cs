@@ -18,6 +18,7 @@ namespace AMS2LeagueClient.Tests
             WriteUInt(SharedMemoryLayout.HighestFlagReason, (uint)FlagReason.None);
             WriteUInt(SharedMemoryLayout.PitMode, (uint)PitMode.None);
             WriteUInt(SharedMemoryLayout.PitSchedule, (uint)PitSchedule.None);
+            WriteInt(SharedMemoryLayout.YellowFlagState, (int)YellowFlagState.None);
             WriteInt(SharedMemoryLayout.ViewedParticipantIndex, 3);
             WriteInt(SharedMemoryLayout.NumParticipants, participantCount);
             WriteUInt(SharedMemoryLayout.LapsInEvent, 10);
@@ -188,6 +189,12 @@ namespace AMS2LeagueClient.Tests
             WriteUInt(SharedMemoryLayout.HighestFlagReason, (uint)reason);
             WriteUInt(SharedMemoryLayout.PitMode, (uint)pitMode);
             WriteUInt(SharedMemoryLayout.PitSchedule, (uint)pitSchedule);
+            return this;
+        }
+
+        public RawFixtureBuilder SetYellowFlagState(YellowFlagState state)
+        {
+            WriteInt(SharedMemoryLayout.YellowFlagState, (int)state);
             return this;
         }
 

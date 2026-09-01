@@ -6,6 +6,106 @@ using AMS2LeagueClient.Core.Telemetry;
 
 namespace AMS2LeagueClient.Core.Presentation
 {
+    public enum RelativeDistanceTrend
+    {
+        None,
+        Increasing,
+        Decreasing
+    }
+
+    /// <summary>
+    /// Keeps the last displayed whole-metre distance for the same physical car.
+    /// Retaining the last non-neutral trend avoids 20 Hz arrow flicker while the
+    /// rounded distance remains unchanged.
+    /// </summary>
+    public sealed class RelativeDistanceTrendTracker
+    {
+        private readonly TrendState _ahead = new TrendState();
+        private readonly TrendState _behind = new TrendState();
+        private int _sessionGeneration = int.MinValue;
+
+        public void Apply(OverlayViewModel viewModel, int sessionGeneration)
+        {
+            if (viewModel == null) throw new ArgumentNullException(nameof(viewModel));
+            if (_sessionGeneration != sessionGeneration)
+            {
+                _sessionGeneration = sessionGeneration;
+                _ahead.Reset();
+                _behind.Reset();
+            }
+
+            RelativeDistanceTrend ahead = _ahead.Observe(viewModel.AheadParticipantIndex, viewModel.AheadDistanceMeters);
+            RelativeDistanceTrend behind = _behind.Observe(viewModel.BehindParticipantIndex, viewModel.BehindDistanceMeters);
+            ApplyVisual(ahead, out string aheadArrow, out string aheadColor);
+            ApplyVisual(behind, out string behindArrow, out string behindColor);
+            viewModel.AheadDistanceTrendArrow = aheadArrow;
+            viewModel.AheadDistanceColor = aheadColor;
+            viewModel.BehindDistanceTrendArrow = behindArrow;
+            viewModel.BehindDistanceColor = behindColor;
+        }
+
+        public void Reset()
+        {
+            _sessionGeneration = int.MinValue;
+            _ahead.Reset();
+            _behind.Reset();
+        }
+
+        private static void ApplyVisual(RelativeDistanceTrend trend, out string arrow, out string color)
+        {
+            switch (trend)
+            {
+                case RelativeDistanceTrend.Increasing:
+                    arrow = "▲";
+                    color = "#57D5FF";
+                    return;
+                case RelativeDistanceTrend.Decreasing:
+                    arrow = "▼";
+                    color = "#FF7777";
+                    return;
+                default:
+                    arrow = string.Empty;
+                    color = "#F1F5F9";
+                    return;
+            }
+        }
+
+        private sealed class TrendState
+        {
+            private int _participantIndex = -1;
+            private int? _meters;
+            private RelativeDistanceTrend _trend;
+
+            public RelativeDistanceTrend Observe(int participantIndex, int? meters)
+            {
+                if (participantIndex < 0 || !meters.HasValue)
+                {
+                    Reset();
+                    return RelativeDistanceTrend.None;
+                }
+                if (_participantIndex != participantIndex || !_meters.HasValue)
+                {
+                    _participantIndex = participantIndex;
+                    _meters = meters;
+                    _trend = RelativeDistanceTrend.None;
+                    return _trend;
+                }
+
+                if (meters.Value > _meters.Value) _trend = RelativeDistanceTrend.Increasing;
+                else if (meters.Value < _meters.Value) _trend = RelativeDistanceTrend.Decreasing;
+                _meters = meters;
+                return _trend;
+            }
+
+            public void Reset()
+            {
+                _participantIndex = -1;
+                _meters = null;
+                _trend = RelativeDistanceTrend.None;
+            }
+        }
+    }
+
     public sealed class TrackProgressDistance
     {
         private TrackProgressDistance(bool isAvailable, double signedMeters, string text)

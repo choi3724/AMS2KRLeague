@@ -91,7 +91,9 @@ namespace AMS2LeagueClient.Core.Telemetry
         public const int SnowDensity = 20572;
         public const int SessionDuration = 20576;
         public const int SessionAdditionalLaps = 20580;
+        public const int YellowFlagState = 20688;
         public const int SessionIsPrivate = 20692;
+        public const int LaunchStage = 20696;
         public const int RequiredBytes = 20700;
 
         public static int ParticipantOffset(int index)

@@ -18,6 +18,7 @@ namespace AMS2LeagueClient.Core.RaceControl
         private uint _sessionStateRaw;
         private DateTimeOffset _lastSnapshotAt;
         private uint _lastRootFlag;
+        private int _lastYellowFlagState;
         private float _lastRemaining = -1;
         private BroadcastOverlayState _lastOverlayState;
         private string _lastDriverStateKey = string.Empty;
@@ -65,6 +66,7 @@ namespace AMS2LeagueClient.Core.RaceControl
 
             _lastSnapshotAt = snapshot.CapturedAt;
             _lastRootFlag = snapshot.HighestFlagColourRaw;
+            _lastYellowFlagState = snapshot.YellowFlagStateRaw;
             _lastRemaining = snapshot.EventTimeRemaining;
             return BuildUpdate(detected, snapshot, league, now, false);
         }
@@ -76,6 +78,7 @@ namespace AMS2LeagueClient.Core.RaceControl
             _sessionStateRaw = 0;
             _lastSnapshotAt = default;
             _lastRootFlag = 0;
+            _lastYellowFlagState = (int)YellowFlagState.Invalid;
             _lastRemaining = -1;
             _lastOverlayState = BroadcastOverlayState.NormalRacing;
             _lastDriverStateKey = string.Empty;
@@ -92,6 +95,7 @@ namespace AMS2LeagueClient.Core.RaceControl
             _sessionStateRaw = snapshot.SessionStateRaw;
             _lastSnapshotAt = snapshot.CapturedAt;
             _lastRootFlag = snapshot.HighestFlagColourRaw;
+            _lastYellowFlagState = snapshot.YellowFlagStateRaw;
             _lastRemaining = snapshot.EventTimeRemaining;
             _participants.Clear();
             _timeMilestones.Clear();
@@ -200,31 +204,48 @@ namespace AMS2LeagueClient.Core.RaceControl
 
         private void ObserveRootFlag(TelemetrySnapshot snapshot, List<RaceControlEvent> detected, DateTimeOffset now)
         {
-            if (snapshot.HighestFlagColourRaw == _lastRootFlag) return;
+            bool rootChanged = snapshot.HighestFlagColourRaw != _lastRootFlag;
+            bool fcyChanged = snapshot.YellowFlagStateRaw != _lastYellowFlagState;
+            if (!rootChanged && !fcyChanged) return;
             FlagColour? current = snapshot.KnownHighestFlagColour;
             FlagColour? previous = Enum.IsDefined(typeof(FlagColour), _lastRootFlag) ? (FlagColour?)_lastRootFlag : null;
+            bool fullCourseYellow = IsFullCourseYellow(snapshot.KnownYellowFlagState);
+            bool previousFullCourseYellow = IsFullCourseYellow(
+                Enum.IsDefined(typeof(YellowFlagState), _lastYellowFlagState)
+                    ? (YellowFlagState?)_lastYellowFlagState
+                    : null);
             RaceControlEvent? item = null;
-            if (current == FlagColour.Green && (previous == FlagColour.Yellow || previous == FlagColour.DoubleYellow || previous == FlagColour.Red))
+            if (fcyChanged && fullCourseYellow && !previousFullCourseYellow)
             {
-                item = GlobalEvent(RaceControlEventType.Green, RaceControlPriority.Flag, now, "그린 플래그", "레이스 재개", snapshot, current.Value);
+                item = FullCourseYellowEvent(now, snapshot);
             }
-            else if (current == FlagColour.Yellow)
+            else if (!fullCourseYellow
+                && current == FlagColour.Yellow
+                && (rootChanged || (fcyChanged && previousFullCourseYellow)))
             {
                 item = GlobalEvent(RaceControlEventType.Yellow, RaceControlPriority.Flag, now, "! 황색기", "위험 구간", snapshot, current.Value);
             }
-            else if (current == FlagColour.DoubleYellow)
+            else if (!fullCourseYellow
+                && current == FlagColour.DoubleYellow
+                && (rootChanged || (fcyChanged && previousFullCourseYellow)))
             {
                 item = GlobalEvent(RaceControlEventType.DoubleYellow, RaceControlPriority.Flag, now, "!! 이중 황색기", "위험 구간 · 강한 감속", snapshot, current.Value);
             }
-            else if (current == FlagColour.Red)
+            else if (!fullCourseYellow
+                && current == FlagColour.Green
+                && (previous == FlagColour.Yellow || previous == FlagColour.DoubleYellow || previous == FlagColour.Red || previousFullCourseYellow))
+            {
+                item = GlobalEvent(RaceControlEventType.Green, RaceControlPriority.Flag, now, "그린 플래그", "레이스 재개", snapshot, current.Value);
+            }
+            else if (rootChanged && current == FlagColour.Red)
             {
                 item = GlobalEvent(RaceControlEventType.Red, RaceControlPriority.SessionInterruption, now, "적색기", "세션 중단", snapshot, current.Value);
             }
-            else if (current == FlagColour.WhiteFinalLap)
+            else if (rootChanged && current == FlagColour.WhiteFinalLap)
             {
                 item = GlobalEvent(RaceControlEventType.FinalLap, RaceControlPriority.DriverState, now, "마지막 랩", string.Empty, snapshot, current.Value);
             }
-            else if (current == FlagColour.Chequered)
+            else if (rootChanged && current == FlagColour.Chequered)
             {
                 item = GlobalEvent(RaceControlEventType.Chequered, RaceControlPriority.DriverState, now, "체커드 플래그", string.Empty, snapshot, current.Value);
             }
@@ -302,8 +323,15 @@ namespace AMS2LeagueClient.Core.RaceControl
         {
             BroadcastOverlayState result = BroadcastOverlayState.NormalRacing;
             FlagColour? root = snapshot.KnownHighestFlagColour;
-            if (root == FlagColour.Yellow) result |= BroadcastOverlayState.Yellow;
-            if (root == FlagColour.DoubleYellow) result |= BroadcastOverlayState.DoubleYellow;
+            if (IsFullCourseYellow(snapshot.KnownYellowFlagState))
+            {
+                result |= BroadcastOverlayState.FullCourseYellow;
+            }
+            else
+            {
+                if (root == FlagColour.Yellow) result |= BroadcastOverlayState.Yellow;
+                if (root == FlagColour.DoubleYellow) result |= BroadcastOverlayState.DoubleYellow;
+            }
             if (root == FlagColour.Red) result |= BroadcastOverlayState.RedFlag;
             if (root == FlagColour.WhiteFinalLap) result |= BroadcastOverlayState.FinalLap;
             if (root == FlagColour.Chequered) result |= BroadcastOverlayState.Chequered;
@@ -374,6 +402,42 @@ namespace AMS2LeagueClient.Core.RaceControl
                 colour.ToString(),
                 _evidenceKind,
                 Confidence());
+        }
+
+        private RaceControlEvent FullCourseYellowEvent(DateTimeOffset now, TelemetrySnapshot snapshot)
+        {
+            YellowFlagState state = snapshot.KnownYellowFlagState ?? YellowFlagState.Invalid;
+            return new RaceControlEvent(
+                RaceControlEventType.FullCourseYellow,
+                RaceControlPriority.Flag,
+                now,
+                TimeSpan.FromSeconds(8),
+                "전 코스 황색기",
+                FullCourseYellowStageText(state),
+                "mYellowFlagState",
+                snapshot.YellowFlagStateRaw.ToString(CultureInfo.InvariantCulture),
+                state.ToString(),
+                _evidenceKind,
+                Confidence());
+        }
+
+        private static bool IsFullCourseYellow(YellowFlagState? state)
+            => state.HasValue && state.Value != YellowFlagState.Invalid && state.Value != YellowFlagState.None;
+
+        private static string FullCourseYellowStageText(YellowFlagState state)
+        {
+            switch (state)
+            {
+                case YellowFlagState.Pending: return "전 코스 감속 준비";
+                case YellowFlagState.PitsClosed: return "피트 폐쇄";
+                case YellowFlagState.PitLeadLap: return "리드 랩 차량 피트 허용";
+                case YellowFlagState.PitsOpen:
+                case YellowFlagState.PitsOpen2: return "피트 오픈";
+                case YellowFlagState.LastLap: return "마지막 주의 랩";
+                case YellowFlagState.Resume: return "재시작 준비";
+                case YellowFlagState.RaceHalt: return "세이프티카와 함께 피트 진입";
+                default: return "세이프티카 절차 진행";
+            }
         }
 
         private EvidenceConfidence Confidence()

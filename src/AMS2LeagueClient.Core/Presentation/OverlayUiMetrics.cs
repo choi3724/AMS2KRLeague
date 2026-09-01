@@ -9,8 +9,8 @@ namespace AMS2LeagueClient.Core.Presentation
     /// </summary>
     public static class OverlayUiMetrics
     {
-        public const double TargetScale = 0.80;
-        public const double FontScale = 0.86;
+        public const double TargetScale = 1.00;
+        public const double FontScale = 1.00;
 
         public const int BaselineTowerWidth = 460;
         public const int BaselineTowerHeight = 700;
@@ -24,15 +24,19 @@ namespace AMS2LeagueClient.Core.Presentation
         public const int BaselineEventWidth = 650;
         public const int BaselineEventHeight = 105;
 
-        public const int TowerWidth = 368;
-        public const int TowerHeight = 560;
-        public const int DiagnosticTowerHeight = 720;
-        public const int RowPitch = 22;
-        public const int HeaderAndFooterHeight = 230;
+        public const int TowerWidth = 520;
+        public const int TowerHeight = 570;
+        public const int DiagnosticTowerHeight = 690;
+        public const int RowPitch = 37;
+        public const int HeaderAndFooterHeight = 15;
         public const int ComponentGap = 10;
 
-        public const int SessionWidth = 224;
-        public const int SessionHeight = 120;
+        public const int RelativeWidth = 520;
+        public const int RelativeHeight = 110;
+        public const int LapTimingWidth = 380;
+        public const int LapTimingHeight = 112;
+        public const int SessionWidth = 250;
+        public const int SessionHeight = 140;
         public const int WaitingWidth = 312;
         public const int WaitingHeight = 120;
         public const int RaceControlCompactWidth = 288;
@@ -42,14 +46,15 @@ namespace AMS2LeagueClient.Core.Presentation
         public const int EventWidth = 520;
         public const int EventHeight = 84;
 
-        public const double FontMicro = 8;
-        public const double FontTiny = 9;
-        public const double FontSmall = 10.5;
-        public const double FontBody = 12;
-        public const double FontTitle = 13;
-        public const double FontEmphasis = 15;
-        public const double FontValue = 19;
-        public const double FontHero = 25;
+        public const double FontMicro = 10;
+        public const double FontTiny = 11.5;
+        public const double FontSmall = 14.5;
+        public const double FontBody = 16.5;
+        public const double FontTitle = 18;
+        public const double FontEmphasis = 20;
+        public const double FontDriverName = 24;
+        public const double FontValue = 24;
+        public const double FontHero = 30;
 
         public static double ScaleRatio(int compact, int baseline)
             => baseline <= 0 ? 0 : compact / (double)baseline;
@@ -87,6 +92,8 @@ namespace AMS2LeagueClient.Core.Presentation
     {
         public OverlayComponentLayout(
             OverlayBounds timing,
+            OverlayBounds relative,
+            OverlayBounds lapTiming,
             OverlayBounds session,
             OverlayBounds eventCard,
             OverlayBounds raceControl,
@@ -94,6 +101,8 @@ namespace AMS2LeagueClient.Core.Presentation
             int bottomInset)
         {
             Timing = timing;
+            Relative = relative;
+            LapTiming = lapTiming;
             Session = session;
             EventCard = eventCard;
             RaceControl = raceControl;
@@ -102,6 +111,8 @@ namespace AMS2LeagueClient.Core.Presentation
         }
 
         public OverlayBounds Timing { get; }
+        public OverlayBounds Relative { get; }
+        public OverlayBounds LapTiming { get; }
         public OverlayBounds Session { get; }
         public OverlayBounds EventCard { get; }
         public OverlayBounds RaceControl { get; }
@@ -130,6 +141,10 @@ namespace AMS2LeagueClient.Core.Presentation
                 Math.Max(1, viewportHeight - (topInset * 2)));
             int sessionWidth = Scale(OverlayUiMetrics.SessionWidth, dpiScale);
             int sessionHeight = Scale(OverlayUiMetrics.SessionHeight, dpiScale);
+            int relativeWidth = Scale(OverlayUiMetrics.RelativeWidth, dpiScale);
+            int relativeHeight = Scale(OverlayUiMetrics.RelativeHeight, dpiScale);
+            int lapTimingWidth = Scale(OverlayUiMetrics.LapTimingWidth, dpiScale);
+            int lapTimingHeight = Scale(OverlayUiMetrics.LapTimingHeight, dpiScale);
             int eventWidth = Scale(OverlayUiMetrics.EventWidth, dpiScale);
             int eventHeight = Scale(OverlayUiMetrics.EventHeight, dpiScale);
             int raceWidth = Scale(
@@ -139,12 +154,15 @@ namespace AMS2LeagueClient.Core.Presentation
                 raceControlExpanded ? OverlayUiMetrics.RaceControlExpandedHeight : OverlayUiMetrics.RaceControlCompactHeight,
                 dpiScale);
             int auxiliaryLeft = leftInset + timingWidth + Scale(OverlayUiMetrics.ComponentGap, dpiScale);
+            int componentGap = Scale(OverlayUiMetrics.ComponentGap, dpiScale);
 
             return new OverlayComponentLayout(
                 new OverlayBounds(leftInset, topInset, timingWidth, timingHeight),
+                new OverlayBounds(leftInset, topInset + timingHeight + componentGap, relativeWidth, relativeHeight),
+                new OverlayBounds(auxiliaryLeft, topInset + sessionHeight + componentGap, lapTimingWidth, lapTimingHeight),
                 new OverlayBounds(auxiliaryLeft, topInset, sessionWidth, sessionHeight),
                 new OverlayBounds((viewportWidth - eventWidth) / 2, viewportHeight - bottomInset - eventHeight, eventWidth, eventHeight),
-                new OverlayBounds(auxiliaryLeft, topInset + Scale(OverlayUiMetrics.SessionHeight + OverlayUiMetrics.ComponentGap, dpiScale), raceWidth, raceHeight),
+                new OverlayBounds(auxiliaryLeft, topInset + sessionHeight + lapTimingHeight + (componentGap * 2), raceWidth, raceHeight),
                 new OverlayBounds(leftInset, topInset, Scale(OverlayUiMetrics.WaitingWidth, dpiScale), Scale(OverlayUiMetrics.WaitingHeight, dpiScale)),
                 bottomInset);
         }

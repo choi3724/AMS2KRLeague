@@ -18,7 +18,8 @@ namespace AMS2LeagueClient.Core.RaceControl
         PlayerPit = 1 << 6,
         PlayerPenalty = 1 << 7,
         PlayerDsq = 1 << 8,
-        SessionTransition = 1 << 9
+        SessionTransition = 1 << 9,
+        FullCourseYellow = 1 << 10
     }
 
     public enum ParticipantPenaltyState
@@ -46,6 +47,7 @@ namespace AMS2LeagueClient.Core.RaceControl
         Green,
         Yellow,
         DoubleYellow,
+        FullCourseYellow,
         BluePlayer,
         Red,
         BlackAndWhite,

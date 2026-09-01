@@ -113,6 +113,7 @@ namespace AMS2LeagueClient.Core.Presentation
         {
             if ((state & BroadcastOverlayState.RedFlag) != 0 || item?.Type == RaceControlEventType.Disqualified) return "#FF5C5C";
             if ((state & BroadcastOverlayState.BlueFlagPlayer) != 0) return "#57A9FF";
+            if ((state & BroadcastOverlayState.FullCourseYellow) != 0) return "#FFE14D";
             if ((state & BroadcastOverlayState.DoubleYellow) != 0) return "#FF9F43";
             if ((state & BroadcastOverlayState.Yellow) != 0) return "#FFD166";
             if (item?.Priority == RaceControlPriority.Penalty) return "#FFB454";
@@ -122,6 +123,7 @@ namespace AMS2LeagueClient.Core.Presentation
         private static string StateTextFor(BroadcastOverlayState state)
         {
             if ((state & BroadcastOverlayState.RedFlag) != 0) return "적색기";
+            if ((state & BroadcastOverlayState.FullCourseYellow) != 0) return "전 코스 황색기";
             if ((state & BroadcastOverlayState.DoubleYellow) != 0) return "!! 이중 황색기";
             if ((state & BroadcastOverlayState.Yellow) != 0) return "! 황색기";
             if ((state & BroadcastOverlayState.Chequered) != 0) return "FINAL";

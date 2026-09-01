@@ -1,9 +1,9 @@
 param(
     [string]$DotnetExecutable = 'dotnet',
     [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version = '0.2.1',
+    [string]$Version = '0.2.2',
     [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$DisplayVersion = '0.2.1',
+    [string]$DisplayVersion = '0.2.2',
     [string]$IsccExecutable = ''
 )
 

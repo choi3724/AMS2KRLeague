@@ -11,7 +11,7 @@ namespace AMS2LeagueClient.Core.RaceControl
                 return IsBattle(type) || IsPosition(type) || type == OverlayEventType.PersonalBest;
             }
 
-            if ((state & (BroadcastOverlayState.Yellow | BroadcastOverlayState.DoubleYellow)) != 0)
+            if ((state & (BroadcastOverlayState.Yellow | BroadcastOverlayState.DoubleYellow | BroadcastOverlayState.FullCourseYellow)) != 0)
             {
                 return IsBattle(type) || IsPosition(type) || type == OverlayEventType.OpeningStart;
             }

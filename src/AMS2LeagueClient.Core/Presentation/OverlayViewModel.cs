@@ -17,6 +17,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string Name { get; set; } = "—";
         public string Class { get; set; } = "—";
         public string Lap { get; set; } = "L—";
+        public string CurrentTime { get; set; } = "—";
         public bool IsPlayer { get; set; }
         public string Background { get; set; } = OverlayUiPalette.NormalRowBackground;
         public string Accent { get; set; } = "Transparent";
@@ -43,6 +44,14 @@ namespace AMS2LeagueClient.Core.Presentation
         public string BehindGap { get; set; } = "—";
         public string AheadDistance { get; set; } = "—";
         public string BehindDistance { get; set; } = "—";
+        public int AheadParticipantIndex { get; set; } = -1;
+        public int BehindParticipantIndex { get; set; } = -1;
+        public int? AheadDistanceMeters { get; set; }
+        public int? BehindDistanceMeters { get; set; }
+        public string AheadDistanceTrendArrow { get; set; } = string.Empty;
+        public string BehindDistanceTrendArrow { get; set; } = string.Empty;
+        public string AheadDistanceColor { get; set; } = "#F1F5F9";
+        public string BehindDistanceColor { get; set; } = "#F1F5F9";
         public bool IsBottomGapPanelVisible { get; set; }
         public string BehindSource { get; set; } = "UNKNOWN";
         public string BehindIndex { get; set; } = "—";
@@ -144,7 +153,12 @@ namespace AMS2LeagueClient.Core.Presentation
             float best = local.BestLapTime > 0 ? local.BestLapTime : snapshot.BestLapTime;
             uint displayLap = local.CurrentLap > 0 ? local.CurrentLap : local.LapsCompleted + 1;
             string noCar = catalog.CultureName == "ko-KR" ? "차량 없음" : "NO CAR";
-            IReadOnlyList<RankingRowViewModel> rankingRows = BuildRankingRows(league, local.Index, broadcastStates, league.FastestLapParticipant?.Source.Index);
+            IReadOnlyList<RankingRowViewModel> rankingRows = BuildRankingRows(
+                snapshot,
+                league,
+                local.Index,
+                broadcastStates,
+                league.FastestLapParticipant?.Source.Index);
             bool playerPinnedAfterLeaders = league.Local?.LeaguePosition > MaxRankingRows;
             float displayedEventTimeRemaining = eventTimeRemainingOverride ?? snapshot.EventTimeRemaining;
             string range = rankingRows.Count == 0
@@ -164,12 +178,16 @@ namespace AMS2LeagueClient.Core.Presentation
                 AheadName = NameOf(ahead, noCar),
                 AheadGap = aheadGap.Text,
                 AheadDistance = proximity.AheadDistance.Text,
+                AheadParticipantIndex = ahead?.Index ?? -1,
+                AheadDistanceMeters = DisplayedMeters(proximity.AheadDistance),
                 AheadSource = StateText.GapSourceText(aheadGap.Source),
                 AheadIndex = IndexOf(ahead),
                 BehindPosition = PositionOf(behindLeague),
                 BehindName = NameOf(behind, noCar),
                 BehindGap = behindGap.Text,
                 BehindDistance = proximity.BehindDistance.Text,
+                BehindParticipantIndex = behind?.Index ?? -1,
+                BehindDistanceMeters = DisplayedMeters(proximity.BehindDistance),
                 IsBottomGapPanelVisible = ahead != null || behind != null,
                 BehindSource = StateText.GapSourceText(behindGap.Source),
                 BehindIndex = IndexOf(behind),
@@ -258,6 +276,7 @@ namespace AMS2LeagueClient.Core.Presentation
         }
 
         private static IReadOnlyList<RankingRowViewModel> BuildRankingRows(
+            TelemetrySnapshot snapshot,
             LeagueClassification league,
             int localIndex,
             IReadOnlyDictionary<int, ParticipantBroadcastState>? broadcastStates,
@@ -281,6 +300,9 @@ namespace AMS2LeagueClient.Core.Presentation
                     Name = string.IsNullOrWhiteSpace(item.Source.Name) ? "—" : item.Source.Name,
                     Class = CompactClass(item.Source.VehicleClass),
                     Lap = "L" + (item.Source.CurrentLap > 0 ? item.Source.CurrentLap : item.Source.LapsCompleted + 1),
+                    CurrentTime = FormatParticipantCurrentTime(
+                        item.Source,
+                        item.Source.Index == localIndex ? snapshot.CurrentTime : (float?)null),
                     IsPlayer = item.Source.Index == localIndex,
                     Background = item.Source.Index == localIndex ? OverlayUiPalette.PlayerRowBackground : OverlayUiPalette.NormalRowBackground,
                     Accent = item.Source.Index == localIndex ? "#82F1D0" : "Transparent",
@@ -289,6 +311,30 @@ namespace AMS2LeagueClient.Core.Presentation
                     StatusColor = StatusColorOf(item.Source.Index, broadcastStates, fastestIndex)
                 })
                 .ToArray();
+        }
+
+        private static string FormatParticipantCurrentTime(ParticipantSnapshot participant, float? localCurrentTime)
+        {
+            if (localCurrentTime.HasValue && IsPositiveFinite(localCurrentTime.Value))
+            {
+                return FormatLapTime(localCurrentTime.Value);
+            }
+
+            float elapsed = 0;
+            bool observed = false;
+            foreach (float sectorTime in new[]
+            {
+                participant.CurrentSector1Time,
+                participant.CurrentSector2Time,
+                participant.CurrentSector3Time
+            })
+            {
+                if (!IsPositiveFinite(sectorTime)) continue;
+                elapsed += sectorTime;
+                observed = true;
+            }
+
+            return observed ? FormatLapTime(elapsed) : "—";
         }
 
         private static string StatusOf(
@@ -345,6 +391,12 @@ namespace AMS2LeagueClient.Core.Presentation
 
         private static float PreferParticipantTime(float participantTime, float viewedParticipantTime)
             => IsPositiveFinite(participantTime) ? participantTime : viewedParticipantTime;
+
+        private static int? DisplayedMeters(TrackProgressDistance distance)
+        {
+            if (!distance.IsAvailable || !distance.Text.EndsWith("m", StringComparison.Ordinal)) return null;
+            return (int)Math.Round(Math.Abs(distance.SignedMeters), MidpointRounding.AwayFromZero);
+        }
 
         private static string FormatSectorTime(float seconds, int sector, int numSectors, int currentSector)
         {
