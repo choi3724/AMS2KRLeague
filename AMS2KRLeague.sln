@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2LeagueClient.Core", "src\AMS2LeagueClient.Core\AMS2LeagueClient.Core.csproj", "{5B7150D2-4994-4F8C-9CB8-7D62045B0AC7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2LeagueClient", "src\AMS2LeagueClient\AMS2LeagueClient.csproj", "{00FE77A0-8879-4B59-B112-B5EE3A1978CC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5B7150D2-4994-4F8C-9CB8-7D62045B0AC7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5B7150D2-4994-4F8C-9CB8-7D62045B0AC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5B7150D2-4994-4F8C-9CB8-7D62045B0AC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5B7150D2-4994-4F8C-9CB8-7D62045B0AC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{00FE77A0-8879-4B59-B112-B5EE3A1978CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00FE77A0-8879-4B59-B112-B5EE3A1978CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00FE77A0-8879-4B59-B112-B5EE3A1978CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00FE77A0-8879-4B59-B112-B5EE3A1978CC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

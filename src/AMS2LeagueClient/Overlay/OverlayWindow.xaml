@@ -1,0 +1,16 @@
+<Window x:Class="AMS2LeagueClient.Overlay.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:presentation="clr-namespace:AMS2LeagueClient.Presentation"
+        Title="AMS2 League Overlay"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        Topmost="True"
+        SizeToContent="WidthAndHeight">
+    <presentation:OverlayHudView x:Name="TimingHud" />
+</Window>

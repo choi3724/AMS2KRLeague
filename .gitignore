@@ -1,0 +1,29 @@
+# .NET build output
+**/bin/
+**/obj/
+.vs/
+.dotnet-home/
+
+# Local release output and runtime data
+artifacts/
+logs/
+captures/
+
+# IDE and user-local files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+.vscode/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Secrets and local configuration
+*.local.*
+*.secret
+*.secrets
+.env
+.env.*

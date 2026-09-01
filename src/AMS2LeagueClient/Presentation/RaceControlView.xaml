@@ -1,0 +1,18 @@
+<UserControl x:Class="AMS2LeagueClient.Presentation.RaceControlView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" FontFamily="{DynamicResource HudFontFamily}" IsHitTestVisible="False">
+    <Border x:Name="Panel" CornerRadius="13" Background="#F00A111C" BorderBrush="{Binding Accent}" BorderThickness="1.5" Padding="18,10">
+        <Border.RenderTransform><TranslateTransform /></Border.RenderTransform>
+        <StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Title}" Foreground="{Binding Accent}" FontWeight="Bold" FontSize="17" />
+                <Border Grid.Column="1" Background="#332B3A49" CornerRadius="6" Padding="7,2"><TextBlock Text="{Binding CountText}" Foreground="#DDE7F1" FontWeight="SemiBold" FontSize="10" Style="{StaticResource HudNumericText}"/></Border>
+            </Grid>
+            <StackPanel Visibility="{Binding IsExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,5,0,0">
+                <TextBlock Text="{Binding DriverLine}" Foreground="White" FontWeight="SemiBold" FontSize="17" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Message}" Foreground="{Binding Accent}" FontWeight="Bold" FontSize="19" />
+                <TextBlock Text="{Binding HistoryText}" Foreground="#8FA4B8" FontSize="10" Margin="0,6,0,0" LineHeight="14" />
+            </StackPanel>
+            <TextBlock Text="{Binding StateLabel}" Foreground="{Binding Accent}" FontWeight="SemiBold" FontSize="11" HorizontalAlignment="Right" />
+        </StackPanel>
+    </Border>
+</UserControl>

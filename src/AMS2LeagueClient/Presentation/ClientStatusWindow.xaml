@@ -1,0 +1,22 @@
+<Window x:Class="AMS2LeagueClient.Presentation.ClientStatusWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:AMS2LeagueClient.Presentation"
+        Title="AMS2 League Player Overlay PoC"
+        Width="920" Height="570"
+        MinWidth="820" MinHeight="520"
+        ShowActivated="False"
+        WindowStartupLocation="CenterScreen"
+        Background="#07101A">
+    <Grid>
+        <Grid.Background>
+            <RadialGradientBrush Center="0.18,0.12" GradientOrigin="0.18,0.12" RadiusX="0.9" RadiusY="0.9">
+                <GradientStop Color="#17314B" Offset="0" />
+                <GradientStop Color="#07101A" Offset="0.72" />
+            </RadialGradientBrush>
+        </Grid.Background>
+        <local:ClientStatusView HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <TextBlock Text="Close this window to exit the client. Overlay windows never accept input."
+                   Foreground="#61758B" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18" />
+    </Grid>
+</Window>
