@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
+using AMS2LeagueClient.Core.Security;
 
 namespace AMS2LeagueClient.Runtime
 {
@@ -28,21 +29,48 @@ namespace AMS2LeagueClient.Runtime
         public int? SchemaVersion { get; set; }
     }
 
+    public sealed class Cafe24AnonymousEnrollmentResponse
+    {
+        public string InstallationToken { get; set; } = string.Empty;
+        public string InstallationId { get; set; } = string.Empty;
+        public string[] Scopes { get; set; } = Array.Empty<string>();
+        public bool Duplicate { get; set; }
+    }
+
     public sealed class Cafe24ActivityUploadTransport : IActivityUploadTransport, IDisposable
     {
         public const string PlayerActivitiesEndpoint = "v1/player/activities";
+        public const string SessionWitnessEndpoint = "v1/session/witness";
+        public const string EnrollmentEndpoint = "v1/player/enroll";
         public const string BootstrapEndpoint = "v1/bootstrap";
         public const string HealthEndpoint = "v1/health";
 
         private const int MaximumResponseBytes = 256 * 1024;
+        private static readonly SemaphoreSlim EnrollmentGate = new SemaphoreSlim(1, 1);
         private readonly ActivityConnectionOptions _options;
+        private readonly string _installationId;
+        private readonly string _clientVersion;
+        private readonly string _credentialDirectory;
         private readonly HttpClient _httpClient;
         private readonly bool _ownsHttpClient;
         private bool _disposed;
 
         public Cafe24ActivityUploadTransport(ActivityConnectionOptions options, HttpClient? httpClient = null)
+            : this(options, string.Empty, string.Empty, httpClient)
+        {
+        }
+
+        public Cafe24ActivityUploadTransport(
+            ActivityConnectionOptions options,
+            string installationId,
+            string clientVersion,
+            HttpClient? httpClient = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
+            _installationId = (installationId ?? string.Empty).Trim();
+            _clientVersion = (clientVersion ?? string.Empty).Trim();
+            _credentialDirectory = Path.GetDirectoryName(_options.ConfigPath)
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AMS2KRLeague");
             if (httpClient == null)
             {
                 // The platform handler performs normal TLS certificate and hostname
@@ -69,7 +97,8 @@ namespace AMS2LeagueClient.Runtime
             ThrowIfDisposed();
 
             string endpoint = NormalizeEndpoint(item.Metadata.Endpoint);
-            if (!string.Equals(endpoint, PlayerActivitiesEndpoint, StringComparison.Ordinal))
+            if (!string.Equals(endpoint, PlayerActivitiesEndpoint, StringComparison.Ordinal)
+                && !string.Equals(endpoint, SessionWitnessEndpoint, StringComparison.Ordinal))
             {
                 return ActivityUploadTransportResult.Http(400, false, "ENDPOINT_NOT_ALLOWED");
             }
@@ -93,17 +122,39 @@ namespace AMS2LeagueClient.Runtime
                 return ActivityUploadTransportResult.Http(422, false, "LOCAL_BODY_HASH_MISMATCH");
             }
 
+            try
+            {
+                await EnsureAnonymousEnrollmentAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return ActivityUploadTransportResult.NetworkFailure("ENROLLMENT_TIMEOUT");
+            }
+            catch (HttpRequestException)
+            {
+                return ActivityUploadTransportResult.NetworkFailure("ENROLLMENT_NETWORK_UNAVAILABLE");
+            }
+            catch (IOException)
+            {
+                return ActivityUploadTransportResult.NetworkFailure("ENROLLMENT_IO_FAILURE");
+            }
+            catch (InvalidOperationException)
+            {
+                return ActivityUploadTransportResult.NetworkFailure("ENROLLMENT_UNAVAILABLE");
+            }
+
             using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Headers.TryAddWithoutValidation("Idempotency-Key", item.Metadata.IdempotencyKey);
             request.Content = new ByteArrayContent(payload);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-
-            if (!ActivityConnectionOptions.IsBearerTokenValid(_options.BearerToken))
-            {
-                return ActivityUploadTransportResult.Http(401, false, "BEARER_NOT_CONFIGURED");
-            }
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.BearerToken);
+            // Cafe24's shared-hosting FastCGI layer may remove the standard
+            // Authorization header before PHP. Send the same value in a
+            // service-specific HTTPS compatibility header as well.
+            request.Headers.TryAddWithoutValidation(
+                "X-AMS2-Authorization",
+                "Bearer " + _options.BearerToken);
 
             using CancellationTokenSource timeout = CreateTimeout(cancellationToken);
             try
@@ -143,6 +194,7 @@ namespace AMS2LeagueClient.Runtime
         public async Task<Cafe24BootstrapResponse> GetBootstrapAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
+            await EnsureAnonymousEnrollmentAsync(cancellationToken).ConfigureAwait(false);
             if (!TryBuildRouteUri(BootstrapEndpoint, out Uri? requestUri) || requestUri == null)
             {
                 throw new InvalidOperationException("A valid HTTPS API base URL is required.");
@@ -176,6 +228,85 @@ namespace AMS2LeagueClient.Runtime
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 throw new TimeoutException("Cafe24 bootstrap request timed out.");
+            }
+        }
+
+        public async Task<Cafe24AnonymousEnrollmentResponse> EnsureAnonymousEnrollmentAsync(
+            CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+            if (ActivityConnectionOptions.IsBearerTokenValid(_options.BearerToken))
+            {
+                return new Cafe24AnonymousEnrollmentResponse
+                {
+                    InstallationToken = string.Empty,
+                    InstallationId = _installationId,
+                    Duplicate = true
+                };
+            }
+            if (!ClientInstallationIdentity.IsValid(_installationId) || _clientVersion.Length > 32)
+            {
+                throw new InvalidOperationException("Anonymous enrollment requires a valid installation ID and client version.");
+            }
+
+            await EnrollmentGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                string existing = PairingTokenStore.Load(_credentialDirectory);
+                if (ActivityConnectionOptions.IsBearerTokenValid(existing))
+                {
+                    _options.BearerToken = existing;
+                    return new Cafe24AnonymousEnrollmentResponse
+                    {
+                        InstallationId = _installationId,
+                        Duplicate = true
+                    };
+                }
+                if (!TryBuildRouteUri(EnrollmentEndpoint, out Uri? requestUri) || requestUri == null)
+                {
+                    throw new InvalidOperationException("A valid HTTPS API base URL is required.");
+                }
+
+                byte[] body = JsonSerializer.SerializeToUtf8Bytes(new
+                {
+                    schema = "ams2-anonymous-enrollment-v1",
+                    installationId = _installationId,
+                    clientVersion = _clientVersion
+                });
+                using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                request.Content = new ByteArrayContent(body);
+                request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                using CancellationTokenSource timeout = CreateTimeout(cancellationToken);
+                using HttpResponseMessage response = await _httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    timeout.Token).ConfigureAwait(false);
+                int statusCode = (int)response.StatusCode;
+                byte[]? responseBytes = await ReadLimitedAsync(response.Content, MaximumResponseBytes, timeout.Token).ConfigureAwait(false);
+                if (responseBytes == null)
+                {
+                    throw new InvalidDataException("Cafe24 enrollment response is too large.");
+                }
+                if (!IsSuccessStatus(statusCode))
+                {
+                    throw new HttpRequestException("Cafe24 anonymous enrollment failed with HTTP " + statusCode.ToString(CultureInfo.InvariantCulture) + ".");
+                }
+
+                Cafe24AnonymousEnrollmentResponse enrolled = ParseEnrollment(responseBytes);
+                if (!ActivityConnectionOptions.IsBearerTokenValid(enrolled.InstallationToken)
+                    || !string.Equals(enrolled.InstallationId, _installationId, StringComparison.Ordinal))
+                {
+                    throw new InvalidDataException("Cafe24 enrollment response credential is invalid.");
+                }
+                PairingTokenStore.Save(_credentialDirectory, enrolled.InstallationToken);
+                _options.BearerToken = enrolled.InstallationToken;
+                enrolled.InstallationToken = string.Empty;
+                return enrolled;
+            }
+            finally
+            {
+                EnrollmentGate.Release();
             }
         }
 
@@ -278,6 +409,42 @@ namespace AMS2LeagueClient.Runtime
             catch (JsonException)
             {
                 throw new InvalidDataException("Cafe24 health response JSON is invalid.");
+            }
+        }
+
+        public static Cafe24AnonymousEnrollmentResponse ParseEnrollment(ReadOnlyMemory<byte> utf8Json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(utf8Json);
+                JsonElement root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object)
+                {
+                    throw new InvalidDataException("Cafe24 enrollment response must be a JSON object.");
+                }
+                string token = StringValue(root, "installationToken");
+                string installationId = StringValue(root, "installationId");
+                string[] scopes = root.TryGetProperty("scopes", out JsonElement scopeElement)
+                    && scopeElement.ValueKind == JsonValueKind.Array
+                    ? scopeElement.EnumerateArray()
+                        .Where(value => value.ValueKind == JsonValueKind.String)
+                        .Select(value => value.GetString() ?? string.Empty)
+                        .Where(value => value.Length > 0)
+                        .ToArray()
+                    : Array.Empty<string>();
+                bool duplicate = root.TryGetProperty("duplicate", out JsonElement duplicateElement)
+                    && duplicateElement.ValueKind == JsonValueKind.True;
+                return new Cafe24AnonymousEnrollmentResponse
+                {
+                    InstallationToken = token,
+                    InstallationId = installationId,
+                    Scopes = scopes,
+                    Duplicate = duplicate
+                };
+            }
+            catch (JsonException)
+            {
+                throw new InvalidDataException("Cafe24 enrollment response JSON is invalid.");
             }
         }
 

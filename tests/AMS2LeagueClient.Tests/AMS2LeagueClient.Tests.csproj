@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\AMS2LeagueClient.Core\AMS2LeagueClient.Core.csproj" />
+    <ProjectReference Include="..\..\src\AMS2LeagueClient\AMS2LeagueClient.csproj" />
   </ItemGroup>
 </Project>

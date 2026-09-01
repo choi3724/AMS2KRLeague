@@ -11,13 +11,15 @@ namespace AMS2LeagueClient.Core.ActivityCapture
 
     public enum ActivityRecordScope
     {
+        Unclassified,
         General,
         League
     }
 
     public enum ActivityAuthority
     {
-        PlayerPersonal
+        PlayerPersonal,
+        HostRecorder
     }
 
     public enum ActivityCompletionStatus
@@ -118,8 +120,6 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         public bool IsValid { get; set; }
         public string ValiditySource { get; set; } = "AMS2_LAP_INVALIDATED_LATCH";
         public string? InvalidReason { get; set; }
-        public bool ClientPersonalBest { get; set; }
-        public bool ClientSessionBest { get; set; }
         public List<string> Issues { get; set; } = new List<string>();
     }
 
@@ -130,7 +130,6 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         public uint CompletedLaps { get; set; }
         public int? BestLapMilliseconds { get; set; }
         public string ResultState { get; set; } = "UNKNOWN";
-        public bool SafetyCarExcludedFromFieldSize { get; set; }
     }
 
     public sealed class ActivitySourceEvidence
@@ -148,12 +147,11 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         public string Schema { get; set; } = "ams2-league-activity-v1";
         public string ActivityId { get; set; } = string.Empty;
         public ActivityType ActivityType { get; set; }
-        public ActivityRecordScope RecordScopeHint { get; set; } = ActivityRecordScope.General;
+        public ActivityRecordScope RecordScopeHint { get; set; } = ActivityRecordScope.Unclassified;
         public ActivityAuthority Authority { get; set; } = ActivityAuthority.PlayerPersonal;
         public ActivityCompletionStatus CompletionStatus { get; set; } = ActivityCompletionStatus.Incomplete;
         public string SessionFingerprint { get; set; } = string.Empty;
-        public string? LeagueCandidateId { get; set; }
-        public string? ScheduledEventId { get; set; }
+        public string? ScheduledEventHint { get; set; }
         public int AttemptNumber { get; set; } = 1;
         public DateTimeOffset StartedAtUtc { get; set; }
         public DateTimeOffset EndedAtUtc { get; set; }
@@ -177,4 +175,20 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         public List<string> Events { get; set; } = new List<string>();
     }
 
+    public sealed class HostSessionActivityMetadata
+    {
+        public string ActivityId { get; set; } = string.Empty;
+        public ActivityType ActivityType { get; set; } = ActivityType.Race;
+        public ActivityRecordScope RecordScopeHint { get; set; } = ActivityRecordScope.Unclassified;
+        public string SessionFingerprint { get; set; } = string.Empty;
+        public string? CaptureChainId { get; set; }
+        public string? ScheduledEventHint { get; set; }
+        public int AttemptNumber { get; set; } = 1;
+        public string AttemptStatus { get; set; } = "INCOMPLETE";
+        public string RaceMode { get; set; } = "UNKNOWN";
+        public Dictionary<string, ConfiguredSessionSettings> ConfiguredSettings { get; set; }
+            = new Dictionary<string, ConfiguredSessionSettings>(StringComparer.Ordinal);
+        public Dictionary<string, ObservedSessionConditions> ObservedConditions { get; set; }
+            = new Dictionary<string, ObservedSessionConditions>(StringComparer.Ordinal);
+    }
 }

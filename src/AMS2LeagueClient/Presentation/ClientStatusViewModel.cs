@@ -16,9 +16,9 @@ namespace AMS2LeagueClient.Presentation
         private string _serverText = "서버: 확인 중";
         private string _accountText = "계정: 연결 안 됨";
 
-        public ClientStatusViewModel(string version = "0.2")
+        public ClientStatusViewModel(string version = "0.2.1")
         {
-            VersionText = "AMS2 League Overlay " + (string.IsNullOrWhiteSpace(version) ? "0.2" : version);
+            VersionText = "AMS2 League Overlay " + (string.IsNullOrWhiteSpace(version) ? "0.2.1" : version);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -88,11 +88,13 @@ namespace AMS2LeagueClient.Presentation
             ServerText = "서버: 오프라인 · 오버레이는 계속 작동합니다";
         }
 
-        public void SetAccount(bool paired)
+        public void SetAccount(bool credentialReady, bool automaticEnrollmentEnabled = false)
         {
-            AccountText = paired
-                ? "계정: 안전하게 연결됨"
-                : "계정: 연결 안 됨 · 개인 기록 전송은 비활성";
+            AccountText = credentialReady
+                ? "익명 단말: 자동 등록됨 · 기록 전송 활성"
+                : automaticEnrollmentEnabled
+                    ? "익명 단말: 자동 등록 대기 · 로컬 기록 활성"
+                    : "네트워크 전송: 사용 안 함 · 로컬 기록 활성";
         }
 
         private void Set(ref string field, string value, [CallerMemberName] string? propertyName = null)

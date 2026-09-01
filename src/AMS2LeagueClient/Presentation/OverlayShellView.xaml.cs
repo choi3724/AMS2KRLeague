@@ -21,14 +21,23 @@ namespace AMS2LeagueClient.Presentation
 
         public void SetLayout(double width, double height)
         {
-            OverlayLayout layout = OverlayLayoutCalculator.Calculate(width, height);
-            TimingZone.Margin = new Thickness(layout.TowerLeftInset, layout.TowerTopInset, 0, 0);
-            SessionZone.Margin = new Thickness(
-                layout.TowerLeftInset + LeftTowerLayoutMetrics.Width + LeftTowerLayoutMetrics.SessionGap,
-                layout.TowerTopInset,
-                0,
-                0);
-            RaceControlZone.Margin = new Thickness(0, layout.TopInset, 0, 0);
+            OverlayComponentLayout layout = OverlayComponentLayoutCalculator.Calculate(
+                (int)Math.Round(width),
+                (int)Math.Round(height),
+                96,
+                false,
+                true);
+            TimingZone.Width = layout.Timing.Width;
+            TimingZone.Height = layout.Timing.Height;
+            TimingZone.Margin = new Thickness(layout.Timing.X, layout.Timing.Y, 0, 0);
+            SessionZone.Width = layout.Session.Width;
+            SessionZone.Height = layout.Session.Height;
+            SessionZone.Margin = new Thickness(layout.Session.X, layout.Session.Y, 0, 0);
+            RaceControlZone.Width = layout.RaceControl.Width;
+            RaceControlZone.Height = layout.RaceControl.Height;
+            RaceControlZone.Margin = new Thickness(layout.RaceControl.X, layout.RaceControl.Y, 0, 0);
+            EventZone.Width = layout.EventCard.Width;
+            EventZone.Height = layout.EventCard.Height;
             EventZone.Margin = new Thickness(0, 0, 0, layout.BottomInset);
         }
 
@@ -39,11 +48,11 @@ namespace AMS2LeagueClient.Presentation
             if (!animate) return;
             if (viewModel.EventCard.IsVisible && viewModel.EventCard.EventId != _eventId)
             {
-                AnimateIn(EventZone, 18);
+                AnimateIn(EventZone, 14);
             }
             if (viewModel.RaceControl.IsVisible && viewModel.RaceControl.EventId != _raceControlId)
             {
-                AnimateIn(RaceControlZone, -12);
+                AnimateIn(RaceControlZone, -10);
             }
             _eventId = viewModel.EventCard.EventId;
             _raceControlId = viewModel.RaceControl.EventId;

@@ -1,9 +1,9 @@
 param(
     [string]$DotnetExecutable = 'dotnet',
     [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version = '0.2.0',
-    [ValidatePattern('^\d+\.\d+$')]
-    [string]$DisplayVersion = '0.2',
+    [string]$Version = '0.2.1',
+    [ValidatePattern('^\d+\.\d+\.\d+$')]
+    [string]$DisplayVersion = '0.2.1',
     [string]$IsccExecutable = ''
 )
 
@@ -13,8 +13,8 @@ $artifactsRoot = Join-Path $projectRoot 'artifacts'
 $publishRoot = Join-Path $artifactsRoot "AMS2-League-Overlay-$DisplayVersion-win-x64"
 $zipPath = "$publishRoot.zip"
 $installerPath = Join-Path $artifactsRoot "AMS2-League-Overlay-$DisplayVersion-Setup.exe"
-$checksumPath = Join-Path $artifactsRoot 'SHA256SUMS.txt'
-$manifestPath = Join-Path $artifactsRoot 'release-manifest.json'
+$checksumPath = Join-Path $artifactsRoot "SHA256SUMS-$DisplayVersion.txt"
+$manifestPath = Join-Path $artifactsRoot "release-manifest-$DisplayVersion.json"
 $solutionPath = Join-Path $projectRoot 'AMS2KRLeague.sln'
 $clientProject = Join-Path $projectRoot 'src\AMS2LeagueClient\AMS2LeagueClient.csproj'
 $telemetryTests = Join-Path $projectRoot 'tests\AMS2LeagueClient.Tests\AMS2LeagueClient.Tests.csproj'
@@ -119,7 +119,7 @@ $manifest = [ordered]@{
     architecture = 'win-x64'
     selfContained = $true
     minimumOs = 'Windows 10'
-    serverApiCompatibility = '>=1.2 (capability-tolerant; verified with 1.3.0)'
+    serverApiCompatibility = '>=1.4.0 for anonymous enrollment and distributed witness'
     assets = $manifestAssets
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM

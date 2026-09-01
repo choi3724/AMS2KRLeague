@@ -100,11 +100,11 @@ namespace AMS2LeagueClient
                     string activityData = ValueAfter(args, "--activity-data")
                         ?? Path.Combine(userDataRoot, "activity");
                     ActivityConnectionOptions connection = ActivityConnectionOptions.Load(ValueAfter(args, "--activity-config"));
-                    status.SetAccount(connection.HasPlayerCredentials);
+                    status.SetAccount(connection.HasPlayerCredentials, networkEnabled);
                     string installationId = ValueAfter(args, "--installation-id")
                         ?? ClientInstallationIdentity.LoadOrCreate(activityData);
-                    Cafe24ActivityUploadTransport? playerTransport = networkEnabled && connection.HasPlayerCredentials
-                        ? new Cafe24ActivityUploadTransport(connection)
+                    Cafe24ActivityUploadTransport? playerTransport = networkEnabled
+                        ? new Cafe24ActivityUploadTransport(connection, installationId, ClientVersion())
                         : null;
                     try
                     {
@@ -129,7 +129,7 @@ namespace AMS2LeagueClient
                     // Local event data from 0.1.x is never authoritative in a public client.
                     // Only the authenticated server bootstrap may activate a league event.
                     _activityCapture.SetScheduledEvent(null);
-                    bool bootstrapRequired = networkEnabled && connection.HasPlayerCredentials;
+                    bool bootstrapRequired = networkEnabled;
 
                     _coordinator = new PlayerOverlayCoordinator(
                         _overlay,
@@ -144,7 +144,7 @@ namespace AMS2LeagueClient
                         // Otherwise a race already in progress can be permanently
                         // classified as General before bootstrap finishes.
                         status.SetWaiting();
-                        StartBootstrapRefresh(connection, _coordinator, status);
+                        StartBootstrapRefresh(connection, installationId, _coordinator, status);
                     }
                     else
                     {
@@ -292,6 +292,7 @@ namespace AMS2LeagueClient
 
         private void StartBootstrapRefresh(
             ActivityConnectionOptions connection,
+            string installationId,
             PlayerOverlayCoordinator coordinator,
             ClientStatusViewModel status)
         {
@@ -301,7 +302,10 @@ namespace AMS2LeagueClient
             {
                 try
                 {
-                    using var transport = new Cafe24ActivityUploadTransport(connection);
+                    using var transport = new Cafe24ActivityUploadTransport(
+                        connection,
+                        installationId,
+                        ClientVersion());
                     Cafe24BootstrapResponse bootstrap = await transport.GetBootstrapAsync(token).ConfigureAwait(false);
                     ScheduledLeagueEvent? scheduledEvent = ToScheduledEvent(bootstrap.ScheduledEvent);
                     _activityCapture?.SetScheduledEvent(scheduledEvent);
@@ -309,7 +313,11 @@ namespace AMS2LeagueClient
                         "ACTIVITY_BOOTSTRAP",
                         "status=OK event=" + (bootstrap.ScheduledEvent.PublicId.Length == 0 ? "none" : bootstrap.ScheduledEvent.PublicId)
                         + " serviceVersion=" + bootstrap.ServiceVersion);
-                    _ = Dispatcher.BeginInvoke(new Action(() => status.SetServerConnected(bootstrap.ServiceVersion)));
+                    _ = Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        status.SetAccount(connection.HasPlayerCredentials, true);
+                        status.SetServerConnected(bootstrap.ServiceVersion);
+                    }));
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {

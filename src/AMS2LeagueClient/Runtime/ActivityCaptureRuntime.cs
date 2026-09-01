@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using AMS2LeagueClient.Core.ActivityCapture;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
 using AMS2LeagueClient.Core.Diagnostics;
+using AMS2LeagueClient.Core.SessionWitness;
 using AMS2LeagueClient.Core.Telemetry;
 
 namespace AMS2LeagueClient.Runtime
@@ -21,15 +22,19 @@ namespace AMS2LeagueClient.Runtime
         private const int PersistenceAttemptLimit = 3;
         private readonly object _engineGate = new object();
         private readonly ActivityCaptureEngine _engine;
+        private readonly SessionWitnessCaptureEngine _witnessEngine;
         private readonly ActivityLocalParticipantResolver _localResolver = new ActivityLocalParticipantResolver();
         private readonly ActivityRecordStore _recordStore;
+        private readonly SessionWitnessStore _witnessStore;
         private readonly ActivityUploadQueue _uploadQueue;
         private readonly ActivityUploadWorker? _uploadWorker;
         private readonly IDisposable? _uploadTransportDisposable;
         private readonly FileLogger _logger;
         private readonly Channel<ActivityCaptureUpdate> _persistChannel;
+        private readonly Channel<SessionWitnessUpdate> _witnessChannel;
         private readonly CancellationTokenSource _uploadCancellation = new CancellationTokenSource();
         private readonly Task _recordTask;
+        private readonly Task _witnessTask;
         private readonly Task? _uploadTask;
         private bool _disposed;
 
@@ -44,9 +49,17 @@ namespace AMS2LeagueClient.Runtime
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             string root = Path.GetFullPath(dataRoot);
             _engine = new ActivityCaptureEngine(installationId, clientVersion);
+            _witnessEngine = new SessionWitnessCaptureEngine(installationId, clientVersion);
             _recordStore = new ActivityRecordStore(root);
+            _witnessStore = new SessionWitnessStore(Path.Combine(root, "witness"));
             _uploadQueue = new ActivityUploadQueue(Path.Combine(root, "upload-queue"));
             _persistChannel = Channel.CreateUnbounded<ActivityCaptureUpdate>(new UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            });
+            _witnessChannel = Channel.CreateUnbounded<SessionWitnessUpdate>(new UnboundedChannelOptions
             {
                 SingleReader = true,
                 SingleWriter = false,
@@ -70,6 +83,7 @@ namespace AMS2LeagueClient.Runtime
                 _uploadWorker = new ActivityUploadWorker(_uploadQueue, uploadTransport);
             }
             _recordTask = Task.Run(PersistLoopAsync);
+            _witnessTask = Task.Run(PersistWitnessLoopAsync);
             if (_uploadWorker != null)
             {
                 _uploadTask = Task.Run(() => UploadLoopAsync(_uploadCancellation.Token));
@@ -82,6 +96,7 @@ namespace AMS2LeagueClient.Runtime
             {
                 if (_disposed) return;
                 _engine.SetScheduledEvent(scheduledEvent);
+                _witnessEngine.SetScheduledEvent(scheduledEvent);
             }
         }
 
@@ -93,6 +108,7 @@ namespace AMS2LeagueClient.Runtime
                 if (_disposed) return;
                 ActivityLocalParticipantResolution local = _localResolver.Resolve(snapshot);
                 Handle(_engine.Observe(snapshot, local.IsValid ? local.Participant : null));
+                HandleWitness(_witnessEngine.Observe(snapshot));
             }
         }
 
@@ -102,6 +118,7 @@ namespace AMS2LeagueClient.Runtime
             {
                 if (_disposed) return;
                 Handle(_engine.Close(DateTimeOffset.UtcNow, "GAME_DETACHED"));
+                HandleWitness(_witnessEngine.Close(DateTimeOffset.UtcNow, "GAME_DETACHED"));
             }
         }
 
@@ -111,15 +128,18 @@ namespace AMS2LeagueClient.Runtime
             {
                 if (_disposed) return;
                 Handle(_engine.Close(DateTimeOffset.UtcNow, "CLIENT_STOP"));
+                HandleWitness(_witnessEngine.Close(DateTimeOffset.UtcNow, "CLIENT_STOP"));
                 _disposed = true;
                 _persistChannel.Writer.TryComplete();
+                _witnessChannel.Writer.TryComplete();
             }
 
             // Finish immutable local commits on a clean shutdown. Network delivery
             // is never required for exit because its queue is already durable.
             try
             {
-                _recordTask.GetAwaiter().GetResult();
+                WaitForPersistence(_recordTask, "ACTIVITY_PERSIST_LOOP_EXCEPTION");
+                WaitForPersistence(_witnessTask, "SESSION_WITNESS_PERSIST_LOOP_EXCEPTION");
             }
             finally
             {
@@ -142,6 +162,20 @@ namespace AMS2LeagueClient.Runtime
                     _uploadCancellation.Dispose();
                     _uploadTransportDisposable?.Dispose();
                 }
+            }
+        }
+
+        private void WaitForPersistence(Task task, string eventName)
+        {
+            try
+            {
+                task.GetAwaiter().GetResult();
+            }
+            catch (Exception exception)
+            {
+                // One failed persistence consumer must never prevent the other
+                // durable queue from flushing during a clean shutdown.
+                LogErrorSafely(eventName, exception);
             }
         }
 
@@ -176,6 +210,72 @@ namespace AMS2LeagueClient.Runtime
                     LogInfoSafely("ACTIVITY_EVENT", eventValue);
                 }
             }
+        }
+
+        private void HandleWitness(SessionWitnessUpdate update)
+        {
+            if (update.Events.Count == 0 && update.FinalizedWitness == null)
+            {
+                return;
+            }
+            if (!_witnessChannel.Writer.TryWrite(update))
+            {
+                throw new InvalidOperationException("Session witness persistence channel rejected a finalized update.");
+            }
+        }
+
+        private async Task PersistWitnessLoopAsync()
+        {
+            await foreach (SessionWitnessUpdate update in _witnessChannel.Reader.ReadAllAsync())
+            {
+                if (update.FinalizedWitness != null)
+                {
+                    await PersistWitnessAsync(update.FinalizedWitness).ConfigureAwait(false);
+                }
+                foreach (string eventValue in update.Events)
+                {
+                    LogInfoSafely("SESSION_WITNESS_EVENT", eventValue);
+                }
+            }
+        }
+
+        private async Task PersistWitnessAsync(SessionWitnessRecord witness)
+        {
+            Exception? lastError = null;
+            for (int attempt = 1; attempt <= PersistenceAttemptLimit; attempt++)
+            {
+                try
+                {
+                    byte[] payload = SessionWitnessUploadPayloadBuilder.Build(witness);
+                    SessionWitnessStoreOutcome stored = _witnessStore.Commit(witness, payload);
+                    ActivityEnqueueOutcome queued = _uploadQueue.Enqueue(
+                        witness.WitnessId,
+                        Cafe24Routes.SessionWitnesses,
+                        SessionWitnessUploadPayloadBuilder.CreateIdempotencyKey(witness),
+                        payload);
+                    LogInfoSafely(
+                        "SESSION_WITNESS_COMMIT",
+                        "witness=" + witness.WitnessId
+                        + " fingerprint=" + witness.SessionFingerprint
+                        + " completeness=" + witness.CaptureCompleteness
+                        + " disposition=" + stored.Disposition
+                        + " bytes=" + payload.Length
+                        + " payloadSha256=" + queued.Item.Metadata.BodySha256
+                        + " path=" + stored.WitnessPath);
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    lastError = exception;
+                    if (attempt < PersistenceAttemptLimit)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt)).ConfigureAwait(false);
+                    }
+                }
+            }
+            LogErrorSafely(
+                "SESSION_WITNESS_COMMIT_EXCEPTION",
+                lastError ?? new IOException("Session witness persistence failed without an exception."));
         }
 
         private async Task PersistRecordAsync(ActivityRecord record)
@@ -281,5 +381,6 @@ namespace AMS2LeagueClient.Runtime
     public static class Cafe24Routes
     {
         public const string PlayerActivities = "v1/player/activities";
+        public const string SessionWitnesses = "v1/session/witness";
     }
 }

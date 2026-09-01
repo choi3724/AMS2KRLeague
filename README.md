@@ -2,7 +2,7 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-현재 버전: **0.2**
+현재 버전: **0.2.1**
 
 ## 주요 기능
 
@@ -17,18 +17,19 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 - 순위 변화, Personal Best, Fastest Lap, Pit 등 동적 이벤트
 - General Race 개인 결과와 Time Attack 랩 자동 캡처
 - 활동 기록의 로컬 영구 저장과 재시작 가능한 전송 대기열
-- 페어링된 Player bearer가 있을 때만 사용하는 선택적 HTTPS 업로드
+- 로그인 없는 설치별 자동 등록과 DPAPI 보호 자격을 이용한 HTTPS 업로드
+- 멀티 참가 세션의 전체 관측 결과를 불변 Session Witness로 저장·재전송
 - 3440×1440을 포함한 다중 해상도 대응
 - 게임 창에 입력을 가로채지 않는 click-through overlay
 
 ## 실행 방법
 
-1. [Releases](https://github.com/choi3724/AMS2KRLeague/releases)에서 `AMS2-League-Overlay-0.2-Setup.exe`를 받습니다.
+1. [Releases](https://github.com/choi3724/AMS2KRLeague/releases)에서 `AMS2-League-Overlay-0.2.1-Setup.exe`를 받습니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
 
-설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.2-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
+설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.2.1-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
 
 게임이 실행되지 않았거나 Shared Memory를 사용할 수 없으면 오버레이는 대기 상태로 유지됩니다. 프로그램은 게임 설정, 실행 파일, 저장 파일을 자동 변경하지 않습니다.
 
@@ -40,7 +41,9 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 실제 플레이 중인 로컬 참가자의 General Race 개인 결과와 Time Attack 랩은 로컬에 기록됩니다. 기록에는 Shared Memory v14에서 관찰한 차량·트랙·랩·날씨·세션 메타데이터만 사용하며, 클라이언트가 공식 순위나 승인 상태를 주장하지 않습니다.
 
-공개 계정 연결은 현재 운영 포털의 Steam 로그인 기능이 준비되는 동안 **연결 안 됨**으로 안전하게 동작합니다. 연결 정보가 없으면 네트워크 업로드는 실행되지 않으며 로컬 오버레이에는 영향이 없습니다. 향후 발급되는 연결 credential은 Windows DPAPI로 현재 Windows 사용자에게만 복호화되도록 저장합니다.
+첫 네트워크 사용 때 로그인이나 수동 코드 입력 없이 설치별 익명 자격을 자동 발급받습니다. 자격은 Windows DPAPI CurrentUser로 보호되며 다른 Windows 사용자나 다른 PC에서 복호화할 수 없습니다. 서버가 오프라인이어도 로컬 기록과 오버레이는 계속 동작하고, 대기 중인 개인 활동 및 Session Witness는 서버 복구 후 자동 재전송됩니다.
+
+일반 Player도 Shared Memory가 제공하는 참가자 배열과 세션 전환을 Session Witness로 기록합니다. 이는 공식 결과가 아니라 독립 Evidence이며, 한 Client만 관측해도 보존됩니다. 같은 경기를 여러 Client가 보내면 서버에서 하나의 세션 그룹으로 묶고 원본 Witness는 각각 유지합니다.
 
 ## 안전 경계
 
@@ -48,8 +51,9 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 - DLL injection, DirectX hook, 프로세스 메모리 쓰기, 패킷 가로채기를 사용하지 않습니다.
 - AMS2 설치 파일, 설정 파일, 레지스트리, 방화벽을 수정하지 않습니다.
 - 업로드는 절대 HTTPS URL, 고정된 Player endpoint, 리디렉션 금지 정책을 사용합니다.
+- Cafe24 FastCGI 호환 헤더는 표준 Bearer와 동일한 설치 토큰을 같은 HTTPS 요청에만 중복 전달하며 로그에 기록하지 않습니다.
 - Player payload에는 서버 사용자 ID, 공식 판정, 승인 상태 같은 권한 주장을 넣지 않습니다.
-- 웹서비스/server 구현, Host Recorder 코드와 Host 인증 형식은 이 저장소와 릴리스에 포함하지 않습니다.
+- 웹서비스/server 구현, 공식 결과 업로더와 Host 인증 자격은 이 저장소와 릴리스에 포함하지 않습니다.
 - pairing credential, 비밀, 실제 사용자 설정과 내부 검증 산출물은 Git과 공개 패키지에 포함하지 않습니다.
 
 ## 소스 빌드
@@ -81,14 +85,14 @@ dotnet run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.c
 
 ## 버전 정책
 
-첫 공개 버전은 `0.1.0`, 현재 Player Client 제품 버전은 `0.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
+첫 공개 버전은 `0.1.0`, 현재 Player Client 제품 버전은 `0.2.1`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
 
 ## 현재 제한사항
 
 - Replay/Spectator에서는 viewed participant가 실제 로컬 플레이어와 다를 수 있어 Player HUD를 숨깁니다.
 - AMS2 Shared Memory가 제공하지 않는 구체적인 penalty reason은 추론해서 표시하지 않습니다.
 - Shared Memory v14가 제공하지 않는 세션 종료 cooldown 숫자는 추정하지 않습니다.
-- Player 활동 기록은 개인 기록이며 공식 경기 결과를 대체하지 않습니다.
-- Steam 계정 연결과 개인 기록 서버 동기화는 운영 포털 인증이 열리기 전까지 사용할 수 없습니다.
+- Player 활동과 Session Witness는 공식 경기 승인이 아니며, 공식 리그 기록은 서버 관리자 승인 후에만 확정됩니다.
+- Shared Memory v14에는 권위 있는 멀티플레이어 여부 필드가 없어 현재 Witness 수집 자격은 관련 세션에서 둘 이상의 참가자가 관측되었는지로 판단합니다. 이 값은 온라인 또는 공식 경기라는 주장으로 사용하지 않습니다.
 - 코드 서명 인증서가 없어 Windows SmartScreen 경고가 표시될 수 있습니다.
 - 서버의 운영·저장·승인 로직과 Host 경기 결과 수집은 이 사용자용 저장소 범위에 포함하지 않습니다.

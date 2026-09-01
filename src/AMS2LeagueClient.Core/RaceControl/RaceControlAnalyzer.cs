@@ -210,11 +210,11 @@ namespace AMS2LeagueClient.Core.RaceControl
             }
             else if (current == FlagColour.Yellow)
             {
-                item = GlobalEvent(RaceControlEventType.Yellow, RaceControlPriority.Flag, now, "황색기", "위험 구간", snapshot, current.Value);
+                item = GlobalEvent(RaceControlEventType.Yellow, RaceControlPriority.Flag, now, "! 황색기", "위험 구간", snapshot, current.Value);
             }
             else if (current == FlagColour.DoubleYellow)
             {
-                item = GlobalEvent(RaceControlEventType.DoubleYellow, RaceControlPriority.Penalty, now, "전 코스 황색기", "감속 주의", snapshot, current.Value);
+                item = GlobalEvent(RaceControlEventType.DoubleYellow, RaceControlPriority.Flag, now, "!! 이중 황색기", "위험 구간 · 강한 감속", snapshot, current.Value);
             }
             else if (current == FlagColour.Red)
             {

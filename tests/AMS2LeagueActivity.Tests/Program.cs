@@ -12,6 +12,7 @@ namespace AMS2LeagueActivity.Tests
             IReadOnlyList<TestCase> tests = ActivityCaptureTests.Cases()
                 .Concat(UploadQueueTests.Cases())
                 .Concat(PayloadContractTests.Cases())
+                .Concat(SessionWitnessTests.Cases())
                 .ToArray();
             int passed = 0;
             int failed = 0;

@@ -14,18 +14,18 @@ namespace AMS2LeagueActivity.Tests
         public static IEnumerable<TestCase> Cases()
         {
             yield return new TestCase("Fixed Phase 1-D.3 fixture inventory", FixedFixtureInventory);
-            yield return new TestCase("Tuesday 21:59 KST is general", Tuesday2159IsGeneral);
-            yield return new TestCase("Tuesday 22:00 KST starts league capture", Tuesday2200StartsLeagueCapture);
-            yield return new TestCase("Tuesday chain continues across KST midnight", TuesdayChainContinuesAcrossMidnight);
-            yield return new TestCase("Scheduled event overrides weekly fallback", ScheduledEventOverridesWeeklyFallback);
+            yield return new TestCase("Tuesday 21:59 KST is captured unclassified", Tuesday2159IsUnclassified);
+            yield return new TestCase("Tuesday 22:00 KST is captured unclassified", Tuesday2200IsUnclassified);
+            yield return new TestCase("KST midnight does not change client classification", KstMidnightDoesNotClassify);
+            yield return new TestCase("Scheduled event remains a non-authoritative hint", ScheduledEventRemainsHint);
             yield return new TestCase("Time Attack auto-detect accepts position zero", TimeAttackAutoDetects);
-            yield return new TestCase("Time Attack valid lap history uses valid-only PB", TimeAttackValidHistoryAndPb);
-            yield return new TestCase("Time Attack invalid lap cannot become PB", TimeAttackInvalidLapCannotBecomePb);
+            yield return new TestCase("Time Attack retains every valid completed lap fact", TimeAttackValidHistoryHasNoClientPb);
+            yield return new TestCase("Time Attack retains invalid and valid facts without PB claims", TimeAttackInvalidAndValidFactsHaveNoClientPb);
             yield return new TestCase("Time Attack counter gap is invalid", TimeAttackCounterGapIsInvalid);
             yield return new TestCase("Time Attack lap IDs are deterministic", TimeAttackLapIdsAreDeterministic);
-            yield return new TestCase("General race is player personal-only", GeneralRaceIsPlayerPersonalOnly);
-            yield return new TestCase("General race excludes Safety Car field row", GeneralRaceExcludesSafetyCar);
-            yield return new TestCase("Safety Car fixture uses metadata classification", SafetyCarFixtureUsesMetadataClassification);
+            yield return new TestCase("Race fact is unclassified and player personal-only", RaceIsUnclassifiedPlayerPersonalOnly);
+            yield return new TestCase("Player race retains raw participant count", PlayerRaceRetainsRawParticipantCount);
+            yield return new TestCase("Safety Car fixture retains raw vehicle metadata", SafetyCarFixtureRetainsRawMetadata);
             yield return new TestCase("Unresolved local participant is null-safe", UnresolvedLocalParticipantIsNullSafe);
             yield return new TestCase("Configured and observed weather remain separate", ConfiguredAndObservedWeatherSeparate);
             yield return new TestCase("Unsupported configured fields stay null", UnsupportedConfiguredFieldsStayNull);
@@ -56,40 +56,32 @@ namespace AMS2LeagueActivity.Tests
             }
         }
 
-        private static void Tuesday2159IsGeneral()
+        private static void Tuesday2159IsUnclassified()
         {
-            var policy = new LeagueCapturePolicy();
-            DateTimeOffset utc = new DateTimeOffset(2026, 9, 1, 12, 59, 0, TimeSpan.Zero);
-            LeagueCaptureDecision result = policy.Classify(utc);
-            AssertEx.False(result.IsLeagueCandidate);
-            AssertEx.Equal("OUTSIDE_LEAGUE_CAPTURE_WINDOW", result.Reason);
-            AssertEx.Equal(21, policy.ToKoreaTime(utc).Hour);
+            ActivityRecord record = CaptureRaceAt(new DateTimeOffset(2026, 9, 1, 12, 59, 0, TimeSpan.Zero), "tuesday-2159");
+            AssertEx.Equal(ActivityRecordScope.Unclassified, record.RecordScopeHint);
+            AssertEx.Null(record.ScheduledEventHint);
         }
 
-        private static void Tuesday2200StartsLeagueCapture()
+        private static void Tuesday2200IsUnclassified()
         {
-            var policy = new LeagueCapturePolicy();
-            DateTimeOffset utc = new DateTimeOffset(2026, 9, 1, 13, 0, 0, TimeSpan.Zero);
-            LeagueCaptureDecision result = policy.Classify(utc);
-            AssertEx.True(result.IsLeagueCandidate);
-            AssertEx.NotNull(result.ChainAnchorUtc);
-            AssertEx.True(result.LeagueCandidateId != null && result.LeagueCandidateId.StartsWith("league-chain-", StringComparison.Ordinal));
-            AssertEx.Equal("TUESDAY_2200_KST_FALLBACK", result.Reason);
-            AssertEx.Equal(22, policy.ToKoreaTime(utc).Hour);
+            ActivityRecord record = CaptureRaceAt(new DateTimeOffset(2026, 9, 1, 13, 0, 0, TimeSpan.Zero), "tuesday-2200");
+            AssertEx.Equal(ActivityRecordScope.Unclassified, record.RecordScopeHint);
+            AssertEx.Null(record.ScheduledEventHint);
         }
 
-        private static void TuesdayChainContinuesAcrossMidnight()
+        private static void KstMidnightDoesNotClassify()
         {
             var engine = new ActivityCaptureEngine("fixture-installation", "phase1d3-test");
             ActivityCaptureUpdate update = ActivityFixtureLoader.Replay(engine, "LEAGUE_TIMED_RACE.json");
             ActivityRecord record = AssertEx.Single(update.CompletedRecords.Where(item => item.ActivityType == ActivityType.Race));
-            AssertEx.Equal(ActivityRecordScope.League, record.RecordScopeHint);
-            AssertEx.NotNull(record.LeagueCandidateId);
+            AssertEx.Equal(ActivityRecordScope.Unclassified, record.RecordScopeHint);
+            AssertEx.Null(record.ScheduledEventHint);
             AssertEx.Equal(ActivityCompletionStatus.Finished, record.CompletionStatus);
-            AssertEx.True(update.Events.Any(value => value.Contains("LEAGUE_CHAIN_STARTED", StringComparison.Ordinal)));
+            AssertEx.False(update.Events.Any(value => value.Contains("LEAGUE", StringComparison.Ordinal)));
         }
 
-        private static void ScheduledEventOverridesWeeklyFallback()
+        private static void ScheduledEventRemainsHint()
         {
             var engine = new ActivityCaptureEngine("scheduled-installation", "phase1d3-test");
             engine.SetScheduledEvent(new ScheduledLeagueEvent
@@ -101,9 +93,8 @@ namespace AMS2LeagueActivity.Tests
             });
             ActivityCaptureUpdate update = ActivityFixtureLoader.Replay(engine, "GENERAL_RACE.json");
             ActivityRecord record = AssertEx.Single(update.CompletedRecords);
-            AssertEx.Equal(ActivityRecordScope.League, record.RecordScopeHint);
-            AssertEx.Equal("EVT-MONDAY-OVERRIDE", record.ScheduledEventId);
-            AssertEx.Equal("league-EVT-MONDAY-OVERRIDE", record.LeagueCandidateId);
+            AssertEx.Equal(ActivityRecordScope.Unclassified, record.RecordScopeHint);
+            AssertEx.Equal("EVT-MONDAY-OVERRIDE", record.ScheduledEventHint);
         }
 
         private static void TimeAttackAutoDetects()
@@ -118,7 +109,7 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal(0, update.CompletedRecords.Count);
         }
 
-        private static void TimeAttackValidHistoryAndPb()
+        private static void TimeAttackValidHistoryHasNoClientPb()
         {
             var engine = new ActivityCaptureEngine("ta-history", "phase1d3-test");
             ActivityCaptureUpdate update = ActivityFixtureLoader.Replay(engine, "TIME_ATTACK_VALID_LAPS.json");
@@ -128,23 +119,20 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal(90000, history[0].TimeAttackLap!.LapTimeMilliseconds);
             AssertEx.Equal(92000, history[1].TimeAttackLap!.LapTimeMilliseconds);
             AssertEx.Equal(89000, history[2].TimeAttackLap!.LapTimeMilliseconds);
-            AssertEx.True(history[0].TimeAttackLap!.ClientPersonalBest);
-            AssertEx.False(history[1].TimeAttackLap!.ClientPersonalBest);
-            AssertEx.True(history[2].TimeAttackLap!.ClientPersonalBest);
             AssertEx.Equal(3, history.Select(item => item.TimeAttackLap!.LapUid).Distinct(StringComparer.Ordinal).Count());
+            AssertNoClientPbFields();
         }
 
-        private static void TimeAttackInvalidLapCannotBecomePb()
+        private static void TimeAttackInvalidAndValidFactsHaveNoClientPb()
         {
             var engine = new ActivityCaptureEngine("ta-invalid", "phase1d3-test");
             ActivityCaptureUpdate update = ActivityFixtureLoader.Replay(engine, "TIME_ATTACK_INVALID_LAP.json");
             ActivityRecord[] history = update.CompletedRecords.ToArray();
             AssertEx.Equal(2, history.Length);
             AssertEx.False(history[0].TimeAttackLap!.IsValid);
-            AssertEx.False(history[0].TimeAttackLap!.ClientPersonalBest);
             AssertEx.Equal("AMS2_LAP_INVALIDATED", history[0].TimeAttackLap!.InvalidReason);
             AssertEx.True(history[1].TimeAttackLap!.IsValid);
-            AssertEx.True(history[1].TimeAttackLap!.ClientPersonalBest, "An invalid faster lap must not poison the valid-only PB baseline.");
+            AssertNoClientPbFields();
         }
 
         private static void TimeAttackCounterGapIsInvalid()
@@ -154,7 +142,6 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.False(record.TimeAttackLap!.IsValid);
             AssertEx.Equal("INCOMPLETE_LAP_COUNTER_GAP", record.TimeAttackLap.InvalidReason);
             AssertEx.True(record.TimeAttackLap.Issues.Contains("INCOMPLETE_LAP_COUNTER_GAP"));
-            AssertEx.False(record.TimeAttackLap.ClientPersonalBest);
         }
 
         private static void TimeAttackLapIdsAreDeterministic()
@@ -166,12 +153,12 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal(string.Join("|", firstIds), string.Join("|", secondIds));
         }
 
-        private static void GeneralRaceIsPlayerPersonalOnly()
+        private static void RaceIsUnclassifiedPlayerPersonalOnly()
         {
             var engine = new ActivityCaptureEngine("general-personal", "phase1d3-test");
             ActivityRecord record = AssertEx.Single(ActivityFixtureLoader.Replay(engine, "GENERAL_RACE.json").CompletedRecords);
             AssertEx.Equal(ActivityType.Race, record.ActivityType);
-            AssertEx.Equal(ActivityRecordScope.General, record.RecordScopeHint);
+            AssertEx.Equal(ActivityRecordScope.Unclassified, record.RecordScopeHint);
             AssertEx.Equal(ActivityAuthority.PlayerPersonal, record.Authority);
             AssertEx.NotNull(record.PersonalRaceSummary);
             string payload = Encoding.UTF8.GetString(ActivityCanonicalSerializer.Serialize(record));
@@ -180,20 +167,32 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.False(payload.Contains("Safety Car", StringComparison.Ordinal));
         }
 
-        private static void GeneralRaceExcludesSafetyCar()
+        private static void PlayerRaceRetainsRawParticipantCount()
         {
             var engine = new ActivityCaptureEngine("general-sc", "phase1d3-test");
             ActivityRecord record = AssertEx.Single(ActivityFixtureLoader.Replay(engine, "GENERAL_RACE.json").CompletedRecords);
-            AssertEx.Equal(2, record.PersonalRaceSummary!.FieldSize);
-            AssertEx.True(record.PersonalRaceSummary.SafetyCarExcludedFromFieldSize);
+            AssertEx.Equal(3, record.PersonalRaceSummary!.FieldSize);
         }
 
-        private static void SafetyCarFixtureUsesMetadataClassification()
+        private static void SafetyCarFixtureRetainsRawMetadata()
         {
             TelemetrySnapshot snapshot = ActivityFixtureLoader.LoadSnapshots("SAFETY_CAR_PRESENT.json")[0];
-            var classifier = new ParticipantRoleClassifier();
-            AssertEx.Equal(ParticipantRole.RacingDriver, classifier.Classify(snapshot.Participants[0]));
-            AssertEx.Equal(ParticipantRole.SafetyCar, classifier.Classify(snapshot.Participants[1]));
+            AssertEx.Equal("Safety Car", snapshot.Participants[1].Name);
+            AssertEx.Equal("SafetyCar", snapshot.Participants[1].VehicleClass);
+        }
+
+        private static ActivityRecord CaptureRaceAt(DateTimeOffset startedAtUtc, string installationId)
+        {
+            var engine = new ActivityCaptureEngine(installationId, "phase1d3-test");
+            Observe(engine, RaceSnapshot(startedAtUtc, GameState.InGamePlaying, RaceState.Racing));
+            Observe(engine, RaceSnapshot(startedAtUtc.AddMinutes(1), GameState.InGameMenuTimeTicking, RaceState.Finished));
+            return AssertEx.Single(Observe(engine, RaceSnapshot(startedAtUtc.AddMinutes(2), GameState.FrontEnd, RaceState.Invalid)).CompletedRecords);
+        }
+
+        private static void AssertNoClientPbFields()
+        {
+            AssertEx.Null(typeof(TimeAttackLapRecord).GetProperty("ClientPersonalBest"));
+            AssertEx.Null(typeof(TimeAttackLapRecord).GetProperty("ClientSessionBest"));
         }
 
         private static void UnresolvedLocalParticipantIsNullSafe()

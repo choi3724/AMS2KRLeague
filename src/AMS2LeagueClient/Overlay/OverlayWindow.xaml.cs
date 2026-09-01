@@ -89,47 +89,38 @@ namespace AMS2LeagueClient.Overlay
         public void ShowAt(GameWindowSnapshot gameWindow)
         {
             _waitingWindow.HideOverlay();
-            double scale = gameWindow.Dpi / 96.0;
-            int bottomInset = (int)Math.Round(gameWindow.Height * 0.09);
-            int towerLeftInset = Math.Max(8, (int)Math.Round(gameWindow.Width * 0.004));
-            int towerTopInset = Math.Max(8, (int)Math.Round(gameWindow.Height * 0.008));
-            int timingWidth = Scale(LeftTowerLayoutMetrics.Width, scale);
-            int timingHeight = Math.Min(
-                Scale(_diagnostic ? LeftTowerLayoutMetrics.DiagnosticHeight : LeftTowerLayoutMetrics.DesiredHeight, scale),
-                Math.Max(1, gameWindow.Height - (towerTopInset * 2)));
-            int sessionWidth = Scale(AuxiliaryOverlayLayoutMetrics.SessionWidth, scale);
-            int sessionHeight = Scale(AuxiliaryOverlayLayoutMetrics.SessionHeight, scale);
-            int eventWidth = Scale(650, scale);
-            int eventHeight = Scale(105, scale);
-            int raceWidth = Scale(
-                _viewModel.RaceControl.IsExpanded
-                    ? AuxiliaryOverlayLayoutMetrics.RaceControlExpandedWidth
-                    : AuxiliaryOverlayLayoutMetrics.RaceControlCompactWidth,
-                scale);
-            int raceHeight = Scale(
-                _viewModel.RaceControl.IsExpanded
-                    ? AuxiliaryOverlayLayoutMetrics.RaceControlExpandedHeight
-                    : AuxiliaryOverlayLayoutMetrics.RaceControlCompactHeight,
-                scale);
-            int auxiliaryLeft = gameWindow.Left + towerLeftInset + timingWidth + Scale(LeftTowerLayoutMetrics.SessionGap, scale);
+            OverlayComponentLayout layout = OverlayComponentLayoutCalculator.Calculate(
+                gameWindow.Width,
+                gameWindow.Height,
+                gameWindow.Dpi,
+                _diagnostic,
+                _viewModel.RaceControl.IsExpanded);
 
-            EnsureShown(gameWindow.Left + towerLeftInset, gameWindow.Top + towerTopInset, timingWidth, timingHeight);
+            EnsureShown(
+                gameWindow.Left + layout.Timing.X,
+                gameWindow.Top + layout.Timing.Y,
+                layout.Timing.Width,
+                layout.Timing.Height);
             _sessionWindow.ShowAt(
-                auxiliaryLeft,
-                gameWindow.Top + towerTopInset,
-                sessionWidth,
-                sessionHeight);
+                gameWindow.Left + layout.Session.X,
+                gameWindow.Top + layout.Session.Y,
+                layout.Session.Width,
+                layout.Session.Height);
             if (_viewModel.EventCard.IsVisible)
             {
-                _eventWindow.ShowAt(gameWindow.Left + (gameWindow.Width - eventWidth) / 2, gameWindow.Top + gameWindow.Height - bottomInset - eventHeight, eventWidth, eventHeight);
+                _eventWindow.ShowAt(
+                    gameWindow.Left + layout.EventCard.X,
+                    gameWindow.Top + layout.EventCard.Y,
+                    layout.EventCard.Width,
+                    layout.EventCard.Height);
             }
             if (_viewModel.RaceControl.IsVisible)
             {
                 _raceControlWindow.ShowAt(
-                    auxiliaryLeft,
-                    gameWindow.Top + towerTopInset + Scale(AuxiliaryOverlayLayoutMetrics.RaceControlTopOffset, scale),
-                    raceWidth,
-                    raceHeight);
+                    gameWindow.Left + layout.RaceControl.X,
+                    gameWindow.Top + layout.RaceControl.Y,
+                    layout.RaceControl.Width,
+                    layout.RaceControl.Height);
             }
         }
 
@@ -150,14 +141,17 @@ namespace AMS2LeagueClient.Overlay
                 _waitingView.DataContext = viewModel;
             }
 
-            double scale = gameWindow.Dpi / 96.0;
-            int towerLeftInset = Math.Max(8, (int)Math.Round(gameWindow.Width * 0.004));
-            int towerTopInset = Math.Max(8, (int)Math.Round(gameWindow.Height * 0.008));
+            OverlayComponentLayout layout = OverlayComponentLayoutCalculator.Calculate(
+                gameWindow.Width,
+                gameWindow.Height,
+                gameWindow.Dpi,
+                _diagnostic,
+                false);
             _waitingWindow.ShowAt(
-                gameWindow.Left + towerLeftInset,
-                gameWindow.Top + towerTopInset,
-                Scale(AuxiliaryOverlayLayoutMetrics.WaitingWidth, scale),
-                Scale(AuxiliaryOverlayLayoutMetrics.WaitingHeight, scale));
+                gameWindow.Left + layout.Waiting.X,
+                gameWindow.Top + layout.Waiting.Y,
+                layout.Waiting.Width,
+                layout.Waiting.Height);
         }
 
         public void ShowDemoAt(int left, int top, uint dpi)

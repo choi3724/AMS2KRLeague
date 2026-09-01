@@ -2,17 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using AMS2LeagueClient.Core.ActivityCapture.Upload;
 using AMS2LeagueClient.Core.Presentation;
 using AMS2LeagueClient.Core.RaceControl;
 using AMS2LeagueClient.Core.Security;
 using AMS2LeagueClient.Core.Session;
 using AMS2LeagueClient.Core.Telemetry;
+using AMS2LeagueClient.Runtime;
+using AMS2LeagueClient.Presentation;
+using AMS2LeagueClient.Overlay;
 
 namespace AMS2LeagueClient.Tests
 {
     internal static class Program
     {
+        [STAThread]
         private static int Main()
         {
             var tests = new (string Name, Action Test)[]
@@ -24,8 +33,10 @@ namespace AMS2LeagueClient.Tests
                 ("Official v14 pit, snow and privacy metadata parses", SessionActivityMetadataParses),
                 ("RaceControl history alone stays hidden", RaceControlHistoryAloneHidden),
                 ("RaceControl state-only card fits", RaceControlStateOnlyCardFits),
-                ("Double yellow uses full-course Korean label", DoubleYellowUsesFullCourseKoreanLabel),
+                ("Yellow semantics remain distinct", YellowSemanticsRemainDistinct),
                 ("RaceControl clears AMS2 top-center alert", RaceControlLeftAuxiliaryPlacement),
+                ("Compact UI metrics meet target", CompactUiMetricsMeetTarget),
+                ("Compact anchors hold at target resolutions", CompactAnchorsHoldAtTargetResolutions),
                 ("Multiplayer menu shows waiting overlay", MultiplayerMenuShowsWaitingOverlay),
                 ("Multiplayer qualify-end transition shows waiting", MultiplayerQualifyEndShowsWaitingOverlay),
                 ("Waiting overlay excludes single and replay", WaitingOverlayExcludesSingleAndReplay),
@@ -33,11 +44,15 @@ namespace AMS2LeagueClient.Tests
                 ("Remaining timer fallback is bounded to generation", RemainingTimerFallbackBounded),
                 ("Waiting timer never fabricates countdown", WaitingTimerDoesNotFabricateCountdown),
                 ("Session card uses observed terminal status", SessionCardUsesObservedTerminalStatus)
+                ,("Packaged overlay XAML constructs", PackagedOverlayXamlConstructs)
                 ,("Public launch shows first-run status", PublicLaunchShowsStatus)
                 ,("Background launch is explicit", BackgroundLaunchIsExplicit)
                 ,("Fresh user has no pairing identity", FreshUserHasNoPairingIdentity)
                 ,("Pairing credential is DPAPI protected", PairingCredentialIsProtected)
                 ,("Unpair clears protected credential", UnpairClearsCredential)
+                ,("Fresh install enrolls anonymously before upload", FreshInstallEnrollsBeforeUpload)
+                ,("Two anonymous installs receive independent credentials", TwoAnonymousInstallsRemainIndependent)
+                ,("Anonymous enrollment status never claims upload is disabled", AnonymousEnrollmentStatusIsAccurate)
             };
             int passed = 0;
             foreach ((string name, Action test) in tests)
@@ -57,6 +72,15 @@ namespace AMS2LeagueClient.Tests
 
             Console.WriteLine("RESULT: " + passed + " passed, " + (tests.Length - passed) + " failed, " + tests.Length + " total");
             return passed == tests.Length ? 0 : 1;
+        }
+
+        private static void PackagedOverlayXamlConstructs()
+        {
+            var application = new AMS2LeagueClient.App();
+            application.InitializeComponent();
+            var window = new OverlayWindow(false);
+            window.Close();
+            application.Shutdown();
         }
 
         private static void ActivityMetadataLayoutOffsets()
@@ -174,22 +198,59 @@ namespace AMS2LeagueClient.Tests
             AssertNull(persistent.ActiveEvent);
             AssertTrue(view.IsVisible);
             AssertFalse(view.IsExpanded);
-            AssertEqual("황색기", view.StateLabel);
-            AssertTrue(AuxiliaryOverlayLayoutMetrics.RaceControlCompactHeight >= 80);
+            AssertEqual("! 황색기", view.StateLabel);
+            AssertTrue(AuxiliaryOverlayLayoutMetrics.RaceControlCompactHeight >= 64);
             AssertTrue(AuxiliaryOverlayLayoutMetrics.RaceControlExpandedHeight > AuxiliaryOverlayLayoutMetrics.RaceControlCompactHeight);
         }
 
-        private static void DoubleYellowUsesFullCourseKoreanLabel()
+        private static void YellowSemanticsRemainDistinct()
         {
             var analyzer = new RaceControlAnalyzer(EvidenceKind.Fixture);
             DateTimeOffset t = FixedTime();
             ObserveControl(analyzer, new RawFixtureBuilder(), t);
             var doubleYellow = new RawFixtureBuilder().SetRootControl(FlagColour.DoubleYellow);
             RaceControlUpdate active = ObserveControl(analyzer, doubleYellow, t.AddSeconds(1));
-            AssertEqual("전 코스 황색기", active.ActiveEvent?.Title);
+            AssertEqual("!! 이중 황색기", active.ActiveEvent?.Title);
 
             RaceControlUpdate persistent = ObserveControl(analyzer, doubleYellow, t.AddSeconds(7));
-            AssertEqual("전 코스 황색기", RaceControlViewModel.FromUpdate(persistent).StateLabel);
+            AssertEqual("!! 이중 황색기", RaceControlViewModel.FromUpdate(persistent).StateLabel);
+            AssertFalse(Enum.TryParse("FullCourseYellow", out BroadcastOverlayState _));
+        }
+
+        private static void CompactUiMetricsMeetTarget()
+        {
+            AssertEqual(0.80, OverlayUiMetrics.TargetScale);
+            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.TowerWidth, OverlayUiMetrics.BaselineTowerWidth) >= 0.79);
+            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.TowerWidth, OverlayUiMetrics.BaselineTowerWidth) <= 0.81);
+            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.TowerHeight, OverlayUiMetrics.BaselineTowerHeight) >= 0.79);
+            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.TowerHeight, OverlayUiMetrics.BaselineTowerHeight) <= 0.81);
+            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.RowPitch, OverlayUiMetrics.BaselineRowPitch) >= 0.80);
+            AssertTrue(OverlayUiMetrics.ScaleRatio(OverlayUiMetrics.RowPitch, OverlayUiMetrics.BaselineRowPitch) <= 0.83);
+            AssertEqual(15, LeftTowerLayoutMetrics.RankingRows);
+            AssertTrue(LeftTowerLayoutMetrics.RequiredHeight <= LeftTowerLayoutMetrics.DesiredHeight);
+        }
+
+        private static void CompactAnchorsHoldAtTargetResolutions()
+        {
+            foreach ((int width, int height) in new[] { (1920, 1080), (2560, 1440), (3440, 1440) })
+            {
+                OverlayComponentLayout layout = OverlayComponentLayoutCalculator.Calculate(width, height, 96, false, true);
+                int expectedLeft = Math.Max(8, (int)Math.Round(width * 0.004));
+                int expectedTop = Math.Max(8, (int)Math.Round(height * 0.008));
+                int expectedBottom = (int)Math.Round(height * 0.09);
+                AssertEqual(expectedLeft, layout.Timing.X);
+                AssertEqual(expectedTop, layout.Timing.Y);
+                AssertEqual(layout.Timing.Right + OverlayUiMetrics.ComponentGap, layout.Session.X);
+                AssertEqual(layout.Session.X, layout.RaceControl.X);
+                AssertEqual(width / 2, layout.EventCard.X + (layout.EventCard.Width / 2));
+                AssertEqual(height - expectedBottom, layout.EventCard.Bottom);
+                AssertEqual(expectedLeft, layout.Waiting.X);
+                AssertEqual(expectedTop, layout.Waiting.Y);
+                AssertTrue(layout.Timing.Right < width);
+                AssertTrue(layout.Session.Right < width);
+                AssertTrue(layout.RaceControl.Right < width);
+                AssertTrue(layout.EventCard.X >= 0 && layout.EventCard.Right <= width);
+            }
         }
 
         private static void RaceControlLeftAuxiliaryPlacement()
@@ -388,6 +449,77 @@ namespace AMS2LeagueClient.Tests
             });
         }
 
+        private static void FreshInstallEnrollsBeforeUpload()
+        {
+            WithTemporaryDirectory(directory =>
+            {
+                const string installationId = "client-anonymous-fixture-0001";
+                const string token = "anonymous_fixture_token_00000001";
+                string configPath = Path.Combine(directory, ActivityConnectionOptions.DefaultFileName);
+                ActivityConnectionOptions options = ActivityConnectionOptions.Load(configPath);
+                options.ApiBaseUrl = "https://fixture.invalid/ams2";
+                var handler = new EnrollmentFixtureHandler(installationId, token);
+                using var http = new HttpClient(handler);
+                using var transport = new Cafe24ActivityUploadTransport(options, installationId, "0.2.1", http);
+                using var queueDirectory = new TemporaryClientDirectory();
+                var queue = new ActivityUploadQueue(queueDirectory.Root);
+                ActivityUploadItem item = queue.Enqueue(
+                    "witness-enroll-fixture",
+                    Cafe24ActivityUploadTransport.SessionWitnessEndpoint,
+                    "witness:enrollment-fixture-0001",
+                    "{\"schema\":\"ams2-session-witness-v1\"}").Item;
+
+                ActivityUploadTransportResult result = transport.SendAsync(item, CancellationToken.None).GetAwaiter().GetResult();
+
+                AssertEqual(201, result.StatusCode);
+                AssertEqual(1, handler.EnrollmentCalls);
+                AssertEqual(1, handler.UploadCalls);
+                AssertEqual("Bearer " + token, handler.UploadAuthorization);
+                AssertEqual("Bearer " + token, handler.UploadCompatibilityAuthorization);
+                AssertEqual(token, PairingTokenStore.Load(directory));
+                AssertFalse(Encoding.UTF8.GetString(File.ReadAllBytes(PairingTokenStore.ResolvePath(directory)))
+                    .Contains(token, StringComparison.Ordinal));
+            });
+        }
+
+        private static void TwoAnonymousInstallsRemainIndependent()
+        {
+            string firstToken = EnrollOnly("client-anonymous-alpha-0001", "anonymous_alpha_token_0000000001");
+            string secondToken = EnrollOnly("client-anonymous-beta-00002", "anonymous_beta_token_00000000002");
+            AssertFalse(string.Equals(firstToken, secondToken, StringComparison.Ordinal));
+        }
+
+        private static void AnonymousEnrollmentStatusIsAccurate()
+        {
+            var status = new ClientStatusViewModel("0.2.1");
+            status.SetAccount(false, true);
+            AssertTrue(status.AccountText.Contains("자동 등록 대기", StringComparison.Ordinal));
+            AssertFalse(status.AccountText.Contains("비활성", StringComparison.Ordinal));
+            status.SetAccount(true, true);
+            AssertTrue(status.AccountText.Contains("기록 전송 활성", StringComparison.Ordinal));
+        }
+
+        private static string EnrollOnly(string installationId, string token)
+        {
+            string captured = string.Empty;
+            WithTemporaryDirectory(directory =>
+            {
+                ActivityConnectionOptions options = ActivityConnectionOptions.Load(
+                    Path.Combine(directory, ActivityConnectionOptions.DefaultFileName));
+                options.ApiBaseUrl = "https://fixture.invalid/ams2";
+                var handler = new EnrollmentFixtureHandler(installationId, token);
+                using var http = new HttpClient(handler);
+                using var transport = new Cafe24ActivityUploadTransport(options, installationId, "0.2.1", http);
+                Cafe24AnonymousEnrollmentResponse response = transport.EnsureAnonymousEnrollmentAsync(CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                AssertEqual(installationId, response.InstallationId);
+                AssertTrue(response.Scopes.Contains("witnesses:write", StringComparer.Ordinal));
+                AssertEqual(1, handler.EnrollmentCalls);
+                captured = PairingTokenStore.Load(directory);
+            });
+            return captured;
+        }
+
         private static void WithTemporaryDirectory(Action<string> action)
         {
             string path = Path.Combine(Path.GetTempPath(), "ams2-release020-" + Guid.NewGuid().ToString("N"));
@@ -400,6 +532,71 @@ namespace AMS2LeagueClient.Tests
             {
                 if (Directory.Exists(path)) Directory.Delete(path, true);
             }
+        }
+
+        private sealed class TemporaryClientDirectory : IDisposable
+        {
+            public TemporaryClientDirectory()
+            {
+                Root = Path.Combine(Path.GetTempPath(), "ams2-release021-queue-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(Root);
+            }
+
+            public string Root { get; }
+
+            public void Dispose()
+            {
+                if (Directory.Exists(Root)) Directory.Delete(Root, true);
+            }
+        }
+
+        private sealed class EnrollmentFixtureHandler : HttpMessageHandler
+        {
+            private readonly string _installationId;
+            private readonly string _token;
+
+            public EnrollmentFixtureHandler(string installationId, string token)
+            {
+                _installationId = installationId;
+                _token = token;
+            }
+
+            public int EnrollmentCalls { get; private set; }
+            public int UploadCalls { get; private set; }
+            public string UploadAuthorization { get; private set; } = string.Empty;
+            public string UploadCompatibilityAuthorization { get; private set; } = string.Empty;
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string query = Uri.UnescapeDataString(request.RequestUri?.Query ?? string.Empty);
+                if (query.Contains(Cafe24ActivityUploadTransport.EnrollmentEndpoint, StringComparison.Ordinal))
+                {
+                    EnrollmentCalls++;
+                    string json = "{\"installationToken\":\"" + _token
+                        + "\",\"installationId\":\"" + _installationId
+                        + "\",\"scopes\":[\"presence:write\",\"activities:write\",\"witnesses:write\"],\"duplicate\":false}";
+                    return Task.FromResult(Response(HttpStatusCode.Created, json));
+                }
+
+                if (query.Contains(Cafe24ActivityUploadTransport.SessionWitnessEndpoint, StringComparison.Ordinal))
+                {
+                    UploadCalls++;
+                    UploadAuthorization = request.Headers.Authorization?.ToString() ?? string.Empty;
+                    UploadCompatibilityAuthorization = request.Headers.TryGetValues("X-AMS2-Authorization", out var values)
+                        ? values.SingleOrDefault() ?? string.Empty
+                        : string.Empty;
+                    return Task.FromResult(Response(HttpStatusCode.Created, "{\"status\":\"stored\",\"duplicate\":false}"));
+                }
+
+                return Task.FromResult(Response(HttpStatusCode.NotFound, "{\"error\":\"not_found\"}"));
+            }
+
+            private static HttpResponseMessage Response(HttpStatusCode status, string json)
+                => new HttpResponseMessage(status)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
         }
 
         private static TelemetrySnapshot Parse(RawFixtureBuilder fixture)

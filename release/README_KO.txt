@@ -1,4 +1,4 @@
-AMS2 League Overlay 0.2
+AMS2 League Overlay 0.2.1
 =======================
 
 빠른 시작
@@ -13,10 +13,13 @@ AMS2 League Overlay 0.2
 - 한국어 Timing Tower, 앞차/뒤차, 세션 정보, Race Control, 동적 이벤트
 - 멀티플레이어 세션 전환 대기 화면
 - 개인 General Race 및 Time Attack 기록의 로컬 저장
+- 로그인 없는 설치별 자동 등록 및 DPAPI 보호 전송
+- 전체 참가자 Session Witness의 불변 저장과 오프라인 자동 재전송
 
 현재 제한
-- Steam 계정 연결과 개인 기록 서버 동기화는 운영 포털 인증이 열리기 전까지 비활성입니다.
-- 공식 경기 결과 업로드는 운영자용 Host Recorder만 수행하며 이 Player 패키지에는 포함되지 않습니다.
+- Player가 전송하는 기록과 Session Witness는 Evidence이며 공식 승인이 아닙니다.
+- 공식 리그 기록 확정은 서버 관리자만 수행할 수 있습니다.
+- AMS2 Shared Memory에는 권위 있는 멀티플레이어 여부 값이 없어 둘 이상의 관측 참가자를 수집 자격으로 사용합니다.
 - 코드 서명 인증서가 없어 Windows SmartScreen 경고가 표시될 수 있습니다.
 
 데이터 위치

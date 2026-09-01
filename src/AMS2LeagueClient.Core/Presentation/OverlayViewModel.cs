@@ -18,7 +18,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string Class { get; set; } = "—";
         public string Lap { get; set; } = "L—";
         public bool IsPlayer { get; set; }
-        public string Background { get; set; } = "#B5121D2A";
+        public string Background { get; set; } = OverlayUiPalette.NormalRowBackground;
         public string Accent { get; set; } = "Transparent";
         public string Foreground { get; set; } = "#DDE7F1";
         public string Status { get; set; } = string.Empty;
@@ -282,7 +282,7 @@ namespace AMS2LeagueClient.Core.Presentation
                     Class = CompactClass(item.Source.VehicleClass),
                     Lap = "L" + (item.Source.CurrentLap > 0 ? item.Source.CurrentLap : item.Source.LapsCompleted + 1),
                     IsPlayer = item.Source.Index == localIndex,
-                    Background = item.Source.Index == localIndex ? "#F02A554F" : "#B5121D2A",
+                    Background = item.Source.Index == localIndex ? OverlayUiPalette.PlayerRowBackground : OverlayUiPalette.NormalRowBackground,
                     Accent = item.Source.Index == localIndex ? "#82F1D0" : "Transparent",
                     Foreground = item.Source.Index == localIndex ? "#FFFFFF" : "#DDE7F1",
                     Status = StatusOf(item.Source.Index, broadcastStates, fastestIndex),

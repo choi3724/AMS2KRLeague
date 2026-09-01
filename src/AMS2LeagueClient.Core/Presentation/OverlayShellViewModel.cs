@@ -113,7 +113,8 @@ namespace AMS2LeagueClient.Core.Presentation
         {
             if ((state & BroadcastOverlayState.RedFlag) != 0 || item?.Type == RaceControlEventType.Disqualified) return "#FF5C5C";
             if ((state & BroadcastOverlayState.BlueFlagPlayer) != 0) return "#57A9FF";
-            if ((state & (BroadcastOverlayState.Yellow | BroadcastOverlayState.DoubleYellow)) != 0) return "#FFD166";
+            if ((state & BroadcastOverlayState.DoubleYellow) != 0) return "#FF9F43";
+            if ((state & BroadcastOverlayState.Yellow) != 0) return "#FFD166";
             if (item?.Priority == RaceControlPriority.Penalty) return "#FFB454";
             return "#82F1D0";
         }
@@ -121,8 +122,8 @@ namespace AMS2LeagueClient.Core.Presentation
         private static string StateTextFor(BroadcastOverlayState state)
         {
             if ((state & BroadcastOverlayState.RedFlag) != 0) return "적색기";
-            if ((state & BroadcastOverlayState.DoubleYellow) != 0) return "전 코스 황색기";
-            if ((state & BroadcastOverlayState.Yellow) != 0) return "황색기";
+            if ((state & BroadcastOverlayState.DoubleYellow) != 0) return "!! 이중 황색기";
+            if ((state & BroadcastOverlayState.Yellow) != 0) return "! 황색기";
             if ((state & BroadcastOverlayState.Chequered) != 0) return "FINAL";
             if ((state & BroadcastOverlayState.FinalLap) != 0) return "마지막 랩";
             if ((state & BroadcastOverlayState.BlueFlagPlayer) != 0) return "청색기";
@@ -174,48 +175,15 @@ namespace AMS2LeagueClient.Core.Presentation
         }
     }
 
-    public sealed class OverlayLayout
-    {
-        public OverlayLayout(double sideInset, double topInset, double bottomInset, double towerLeftInset, double towerTopInset)
-        {
-            SideInset = sideInset;
-            TopInset = topInset;
-            BottomInset = bottomInset;
-            TowerLeftInset = towerLeftInset;
-            TowerTopInset = towerTopInset;
-        }
-
-        public double SideInset { get; }
-        public double TopInset { get; }
-        public double BottomInset { get; }
-        public double TowerLeftInset { get; }
-        public double TowerTopInset { get; }
-    }
-
-    public static class OverlayLayoutCalculator
-    {
-        public static OverlayLayout Calculate(double width, double height)
-        {
-            if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
-            if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height));
-            return new OverlayLayout(
-                Math.Max(28, width * 0.07),
-                Math.Max(28, height * 0.07),
-                Math.Max(60, height * 0.09),
-                Math.Max(8, width * 0.004),
-                Math.Max(8, height * 0.008));
-        }
-    }
-
     public static class LeftTowerLayoutMetrics
     {
-        public const int Width = 460;
-        public const int DesiredHeight = 700;
-        public const int DiagnosticHeight = 900;
+        public const int Width = OverlayUiMetrics.TowerWidth;
+        public const int DesiredHeight = OverlayUiMetrics.TowerHeight;
+        public const int DiagnosticHeight = OverlayUiMetrics.DiagnosticTowerHeight;
         public const int RankingRows = OverlayViewModel.MaxRankingRows;
-        public const int RankingRowPitch = 27;
-        public const int HeaderAndFooterHeight = 295;
-        public const int SessionGap = 12;
+        public const int RankingRowPitch = OverlayUiMetrics.RowPitch;
+        public const int HeaderAndFooterHeight = OverlayUiMetrics.HeaderAndFooterHeight;
+        public const int SessionGap = OverlayUiMetrics.ComponentGap;
         public const int GapRows = 2;
         public const int TimingColumns = 3;
         public const int SectorColumns = 3;

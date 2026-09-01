@@ -24,7 +24,7 @@ namespace AMS2LeagueClient.Presentation
             var duration = new Duration(TimeSpan.FromMilliseconds(280));
             var easing = new QuadraticEase { EasingMode = EasingMode.EaseOut };
             Panel.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = easing });
-            if (Panel.RenderTransform is TranslateTransform transform) transform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-12, 0, duration) { EasingFunction = easing });
+            if (Panel.RenderTransform is TranslateTransform transform) transform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-10, 0, duration) { EasingFunction = easing });
         }
     }
 }

@@ -35,7 +35,6 @@ try {
         'SEASON-CANARY',
         'TIMEATTACK-CANARY',
         'GENERAL-CANARY',
-        'host-race-',
         '--host-recorder',
         'v1/recorder/results',
         'C:\Users\User\',

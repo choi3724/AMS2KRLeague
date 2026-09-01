@@ -13,24 +13,18 @@ namespace AMS2LeagueClient.Core.ActivityCapture
     {
         private readonly string _installationId;
         private readonly string _clientVersion;
-        private readonly LeagueCapturePolicy _leaguePolicy;
-        private readonly ParticipantRoleClassifier _participantRoles = new ParticipantRoleClassifier();
         private readonly Dictionary<string, int> _attemptsByChain = new Dictionary<string, int>(StringComparer.Ordinal);
-        private readonly Dictionary<string, int> _bestValidLapByTrackVehicle = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private ActiveRace? _race;
         private ActiveTimeAttack? _timeAttack;
-        private DateTimeOffset? _leagueChainAnchorUtc;
-        private LeagueCaptureDecision? _leagueChainDecision;
         private ScheduledLeagueEvent? _scheduledEvent;
+        private string? _raceCaptureChainKey;
 
         public ActivityCaptureEngine(
             string installationId,
-            string clientVersion,
-            LeagueCapturePolicy? leaguePolicy = null)
+            string clientVersion)
         {
             _installationId = string.IsNullOrWhiteSpace(installationId) ? "local-installation" : installationId.Trim();
             _clientVersion = clientVersion ?? string.Empty;
-            _leaguePolicy = leaguePolicy ?? new LeagueCapturePolicy();
         }
 
         public void SetScheduledEvent(ScheduledLeagueEvent? scheduledEvent)
@@ -42,8 +36,6 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var update = new ActivityCaptureUpdate();
-
-            ObserveLeagueChainAnchor(snapshot, localParticipant, update);
 
             if (snapshot.KnownGameState == GameState.InGameRestarting)
             {
@@ -65,6 +57,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             if (!playing || localParticipant == null || !localParticipant.IsActive)
             {
                 FinalizeActive(snapshot.CapturedAt, CompletionFromLastState(), "GAMEPLAY_ENDED", update);
+                ResetRaceCaptureChain();
                 return update;
             }
 
@@ -75,6 +68,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
                 {
                     FinalizeRace(snapshot.CapturedAt, CompletionFromLastState(), "SESSION_CHANGED_TO_TIME_ATTACK", update);
                 }
+                ResetRaceCaptureChain();
                 ObserveTimeAttack(snapshot, localParticipant, update);
             }
             else if (session == SessionState.Race)
@@ -88,6 +82,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             else
             {
                 FinalizeActive(snapshot.CapturedAt, CompletionFromLastState(), "SESSION_STATE_CHANGED", update);
+                ResetRaceCaptureChain();
             }
 
             return update;
@@ -97,36 +92,8 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         {
             var update = new ActivityCaptureUpdate();
             FinalizeActive(atUtc, CompletionFromLastState(), string.IsNullOrWhiteSpace(reason) ? "CAPTURE_CLOSED" : reason, update);
+            ResetRaceCaptureChain();
             return update;
-        }
-
-        private void ObserveLeagueChainAnchor(
-            TelemetrySnapshot snapshot,
-            ParticipantSnapshot? localParticipant,
-            ActivityCaptureUpdate update)
-        {
-            SessionState? session = snapshot.KnownSessionState;
-            bool chainRelevant = snapshot.KnownGameState == GameState.InGamePlaying
-                && (session == SessionState.Practice || session == SessionState.Qualify || session == SessionState.FormationLap || session == SessionState.Race);
-            if (!chainRelevant) return;
-
-            string vehicleClass = localParticipant?.VehicleClass ?? snapshot.RootCarClassName;
-            LeagueCaptureDecision decision = _leaguePolicy.Classify(
-                snapshot.CapturedAt,
-                _leagueChainAnchorUtc,
-                _scheduledEvent,
-                snapshot.TrackLocation,
-                vehicleClass);
-            if (!decision.IsLeagueCandidate) return;
-
-            bool changed = _leagueChainDecision == null
-                || !string.Equals(_leagueChainDecision.LeagueCandidateId, decision.LeagueCandidateId, StringComparison.Ordinal);
-            _leagueChainAnchorUtc = decision.ChainAnchorUtc;
-            _leagueChainDecision = decision;
-            if (changed)
-            {
-                update.Events.Add("LEAGUE_CHAIN_STARTED candidate=" + decision.LeagueCandidateId + " reason=" + decision.Reason);
-            }
         }
 
         private void ObserveRace(TelemetrySnapshot snapshot, ParticipantSnapshot local, ActivityCaptureUpdate update)
@@ -149,15 +116,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
 
             if (_race == null)
             {
-                LeagueCaptureDecision decision = _leaguePolicy.Classify(
-                    snapshot.CapturedAt,
-                    _leagueChainAnchorUtc,
-                    _scheduledEvent,
-                    snapshot.TrackLocation,
-                    local.VehicleClass);
-                string chainKey = decision.IsLeagueCandidate
-                    ? decision.LeagueCandidateId ?? "league-unknown"
-                    : "general-" + snapshot.CapturedAt.ToUniversalTime().ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                string chainKey = _raceCaptureChainKey ??= CreateCaptureChainKey(snapshot, local);
                 int attempt = NextAttempt(chainKey);
                 string fingerprint = CreateFingerprint(
                     ActivityType.Race,
@@ -172,15 +131,14 @@ namespace AMS2LeagueClient.Core.ActivityCapture
                     StartedAtUtc = snapshot.CapturedAt.ToUniversalTime(),
                     Fingerprint = fingerprint,
                     AttemptNumber = attempt,
-                    Scope = decision.IsLeagueCandidate ? ActivityRecordScope.League : ActivityRecordScope.General,
-                    LeagueCandidateId = decision.LeagueCandidateId,
-                    ScheduledEventId = decision.ScheduledEventId,
+                    Scope = ActivityRecordScope.Unclassified,
+                    ScheduledEventHint = string.IsNullOrWhiteSpace(_scheduledEvent?.EventId) ? null : _scheduledEvent!.EventId,
                     Metadata = new SessionMetadataAccumulator(snapshot.CapturedAt, "RACE"),
                     Local = local,
                     LastSnapshot = snapshot
                 };
                 ObserveRaceField(_race, snapshot);
-                update.Events.Add("ACTIVITY_STARTED type=RACE scope=" + _race.Scope + " attempt=" + attempt);
+                update.Events.Add("ACTIVITY_STARTED type=RACE scope=UNCLASSIFIED attempt=" + attempt);
             }
 
             _race.Metadata.Observe(snapshot);
@@ -280,7 +238,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             _race = null;
             ParticipantSnapshot local = race.TerminalLocal ?? race.Local;
             TelemetrySnapshot snapshot = race.TerminalSnapshot ?? race.LastSnapshot;
-            int leagueFieldSize = race.LeagueParticipantKeys.Count;
+            int rawFieldSize = race.RawParticipantKeys.Count;
             uint? finishPosition = local.RacePosition > 0 ? local.RacePosition : (uint?)null;
             var record = new ActivityRecord
             {
@@ -290,8 +248,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
                 Authority = ActivityAuthority.PlayerPersonal,
                 CompletionStatus = completion,
                 SessionFingerprint = race.Fingerprint,
-                LeagueCandidateId = race.LeagueCandidateId,
-                ScheduledEventId = race.ScheduledEventId,
+                ScheduledEventHint = race.ScheduledEventHint,
                 AttemptNumber = race.AttemptNumber,
                 StartedAtUtc = race.StartedAtUtc,
                 EndedAtUtc = endedAtUtc.ToUniversalTime(),
@@ -306,16 +263,14 @@ namespace AMS2LeagueClient.Core.ActivityCapture
                 PersonalRaceSummary = new PersonalRaceSummary
                 {
                     FinishPosition = finishPosition,
-                    FieldSize = leagueFieldSize,
+                    FieldSize = rawFieldSize,
                     CompletedLaps = local.LapsCompleted,
                     BestLapMilliseconds = SecondsToMilliseconds(local.BestLapTime),
-                    ResultState = StateName(local.RaceStateRaw),
-                    SafetyCarExcludedFromFieldSize = race.NonDriverParticipantObserved
+                    ResultState = StateName(local.RaceStateRaw)
                 },
                 Evidence = Evidence(snapshot),
                 ClientVersion = _clientVersion
             };
-            ActivityCanonicalSerializer.Seal(record);
             update.CompletedRecords.Add(record);
             update.Events.Add("ACTIVITY_FINALIZED type=RACE id=" + record.ActivityId + " status=" + completion + " reason=" + reason);
         }
@@ -366,7 +321,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
                 TimeAttackLapRecord lap = BuildTimeAttackLap(state, snapshot, local, completedDelta);
                 ActivityRecord record = BuildTimeAttackActivity(state, snapshot, local, lap);
                 update.CompletedRecords.Add(record);
-                update.Events.Add("TIME_ATTACK_LAP_CAPTURED id=" + lap.LapUid + " valid=" + lap.IsValid + " pb=" + lap.ClientPersonalBest);
+                update.Events.Add("TIME_ATTACK_LAP_CAPTURED id=" + lap.LapUid + " valid=" + lap.IsValid);
                 state.CurrentLapInvalid = local.LapInvalidated || snapshot.LapInvalidated;
                 state.Sector1 = null;
                 state.Sector2 = null;
@@ -395,23 +350,6 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             int? lapMs = SecondsToMilliseconds(local.LastLapTime);
             bool counterGap = completedDelta > 1;
             bool valid = !state.CurrentLapInvalid && !counterGap && lapMs.HasValue;
-            string trackVehicleKey = snapshot.TrackLocation + "|" + snapshot.TrackVariation + "|" + Vehicle(snapshot, local);
-            bool personalBest = false;
-            bool sessionBest = false;
-            if (valid && lapMs.HasValue)
-            {
-                if (!state.BestValidLapMilliseconds.HasValue || lapMs.Value < state.BestValidLapMilliseconds.Value)
-                {
-                    state.BestValidLapMilliseconds = lapMs.Value;
-                    sessionBest = true;
-                }
-                if (!_bestValidLapByTrackVehicle.TryGetValue(trackVehicleKey, out int previousBest) || lapMs.Value < previousBest)
-                {
-                    _bestValidLapByTrackVehicle[trackVehicleKey] = lapMs.Value;
-                    personalBest = true;
-                }
-            }
-
             var issues = new List<string>();
             if (counterGap) issues.Add("INCOMPLETE_LAP_COUNTER_GAP");
             if (!lapMs.HasValue) issues.Add("LAP_TIME_UNAVAILABLE");
@@ -433,8 +371,6 @@ namespace AMS2LeagueClient.Core.ActivityCapture
                 InvalidReason = state.CurrentLapInvalid
                     ? "AMS2_LAP_INVALIDATED"
                     : counterGap ? "INCOMPLETE_LAP_COUNTER_GAP" : !lapMs.HasValue ? "LAP_TIME_UNAVAILABLE" : null,
-                ClientPersonalBest = personalBest,
-                ClientSessionBest = sessionBest,
                 Issues = issues
             };
         }
@@ -449,7 +385,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             {
                 ActivityId = ActivityIds.Create("ta", state.Fingerprint, lap.LapUid),
                 ActivityType = ActivityType.TimeAttack,
-                RecordScopeHint = ActivityRecordScope.General,
+                RecordScopeHint = ActivityRecordScope.Unclassified,
                 Authority = ActivityAuthority.PlayerPersonal,
                 CompletionStatus = ActivityCompletionStatus.Finished,
                 SessionFingerprint = state.Fingerprint,
@@ -468,7 +404,6 @@ namespace AMS2LeagueClient.Core.ActivityCapture
                 Evidence = Evidence(snapshot),
                 ClientVersion = _clientVersion
             };
-            ActivityCanonicalSerializer.Seal(record);
             return record;
         }
 
@@ -504,6 +439,19 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             int next = current + 1;
             _attemptsByChain[chainKey] = next;
             return next;
+        }
+
+        private string CreateCaptureChainKey(TelemetrySnapshot snapshot, ParticipantSnapshot local)
+        {
+            string observed = _installationId + "|race-chain|"
+                + snapshot.CapturedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) + "|"
+                + snapshot.TrackLocation + "|" + snapshot.TrackVariation + "|" + Vehicle(snapshot, local);
+            return "capture-chain-" + ActivityIds.Hash(observed).Substring(0, 24);
+        }
+
+        private void ResetRaceCaptureChain()
+        {
+            _raceCaptureChainKey = null;
         }
 
         private bool IsRestart(
@@ -588,14 +536,8 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         {
             foreach (ParticipantSnapshot participant in snapshot.Participants.Where(participant => participant.IsActive))
             {
-                if (_participantRoles.IsLeagueDriver(participant))
-                {
-                    race.LeagueParticipantKeys.Add(participant.Index.ToString(CultureInfo.InvariantCulture) + ":" + participant.Name);
-                }
-                else
-                {
-                    race.NonDriverParticipantObserved = true;
-                }
+                string key = participant.Index.ToString(CultureInfo.InvariantCulture) + ":" + participant.Name;
+                race.RawParticipantKeys.Add(key);
             }
         }
 
@@ -620,13 +562,11 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             public string Fingerprint { get; set; } = string.Empty;
             public int AttemptNumber { get; set; }
             public ActivityRecordScope Scope { get; set; }
-            public string? LeagueCandidateId { get; set; }
-            public string? ScheduledEventId { get; set; }
+            public string? ScheduledEventHint { get; set; }
             public SessionMetadataAccumulator Metadata { get; set; } = null!;
             public ParticipantSnapshot Local { get; set; } = null!;
             public TelemetrySnapshot LastSnapshot { get; set; } = null!;
-            public HashSet<string> LeagueParticipantKeys { get; } = new HashSet<string>(StringComparer.Ordinal);
-            public bool NonDriverParticipantObserved { get; set; }
+            public HashSet<string> RawParticipantKeys { get; } = new HashSet<string>(StringComparer.Ordinal);
             public bool TransitionHeld { get; set; }
             public ParticipantSnapshot? TerminalLocal { get; set; }
             public TelemetrySnapshot? TerminalSnapshot { get; set; }
@@ -646,7 +586,6 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             public float? Sector1 { get; set; }
             public float? Sector2 { get; set; }
             public float? Sector3 { get; set; }
-            public int? BestValidLapMilliseconds { get; set; }
         }
     }
 

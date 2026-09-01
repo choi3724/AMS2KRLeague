@@ -176,14 +176,16 @@ namespace AMS2LeagueClient.Core.Presentation
 
     public static class AuxiliaryOverlayLayoutMetrics
     {
-        public const int SessionWidth = 280;
-        public const int SessionHeight = 150;
-        public const int WaitingWidth = 390;
-        public const int WaitingHeight = 150;
-        public const int RaceControlCompactWidth = 360;
-        public const int RaceControlExpandedWidth = 520;
-        public const int RaceControlCompactHeight = 82;
-        public const int RaceControlExpandedHeight = 190;
+        public const int SessionWidth = OverlayUiMetrics.SessionWidth;
+        public const int SessionHeight = OverlayUiMetrics.SessionHeight;
+        public const int WaitingWidth = OverlayUiMetrics.WaitingWidth;
+        public const int WaitingHeight = OverlayUiMetrics.WaitingHeight;
+        public const int RaceControlCompactWidth = OverlayUiMetrics.RaceControlCompactWidth;
+        public const int RaceControlExpandedWidth = OverlayUiMetrics.RaceControlExpandedWidth;
+        public const int RaceControlCompactHeight = OverlayUiMetrics.RaceControlCompactHeight;
+        public const int RaceControlExpandedHeight = OverlayUiMetrics.RaceControlExpandedHeight;
+        public const int EventWidth = OverlayUiMetrics.EventWidth;
+        public const int EventHeight = OverlayUiMetrics.EventHeight;
 
         public static int RaceControlTopOffset
             => SessionHeight + LeftTowerLayoutMetrics.SessionGap;
