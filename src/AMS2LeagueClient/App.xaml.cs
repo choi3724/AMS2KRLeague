@@ -2,9 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using AMS2LeagueClient.Capture;
+using AMS2LeagueClient.Core.ActivityCapture;
 using AMS2LeagueClient.Core.Diagnostics;
 using AMS2LeagueClient.Core.Events;
 using AMS2LeagueClient.Core.Presentation;
@@ -21,9 +25,14 @@ namespace AMS2LeagueClient
         private ClientStatusWindow? _statusWindow;
         private PlayerOverlayCoordinator? _coordinator;
         private MemoryDiagnosticsWriter? _memoryDiagnostics;
+        private ActivityCaptureRuntime? _activityCapture;
+        private CancellationTokenSource? _bootstrapCancellation;
+        private Task? _bootstrapTask;
         private DispatcherTimer? _autoExitTimer;
         private DispatcherTimer? _demoEventTimer;
         private bool _allowInteractiveErrors;
+        private bool _cleanupStarted;
+        private bool _exitStarted;
 
         protected override void OnStartup(StartupEventArgs eventArgs)
         {
@@ -31,8 +40,12 @@ namespace AMS2LeagueClient
             string[] args = eventArgs.Args;
             ClientStartupPolicy startupPolicy = ClientStartupPolicy.FromArguments(args);
             _allowInteractiveErrors = startupPolicy.ShowStatusWindow;
-            string logDirectory = ValueAfter(args, "--log-dir") ?? Path.Combine(AppContext.BaseDirectory, "logs");
+            string userDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "AMS2KRLeague");
+            string logDirectory = ValueAfter(args, "--log-dir") ?? Path.Combine(userDataRoot, "logs");
             _logger = new FileLogger(logDirectory);
+            _logger.Info("CLIENT_VERSION", "product=AMS2_LEAGUE_OVERLAY version=" + ClientVersion());
             DispatcherUnhandledException += HandleDispatcherException;
 
             try
@@ -48,7 +61,7 @@ namespace AMS2LeagueClient
 
                 bool demoEvents = args.Contains("--demo-events", StringComparer.OrdinalIgnoreCase);
                 bool demo = demoEvents || args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
-                var status = new ClientStatusViewModel();
+                var status = new ClientStatusViewModel(ClientVersion());
                 if (startupPolicy.ShowStatusWindow)
                 {
                     _statusWindow = new ClientStatusWindow(status)
@@ -83,8 +96,68 @@ namespace AMS2LeagueClient
                 }
                 else
                 {
-                    _coordinator = new PlayerOverlayCoordinator(_overlay, status, _logger, startupPolicy.Diagnostic);
-                    _coordinator.Start();
+                    bool networkEnabled = !args.Contains("--activity-upload-disabled", StringComparer.OrdinalIgnoreCase);
+                    string activityData = ValueAfter(args, "--activity-data")
+                        ?? Path.Combine(userDataRoot, "activity");
+                    ActivityConnectionOptions connection = ActivityConnectionOptions.Load(ValueAfter(args, "--activity-config"));
+                    status.SetAccount(connection.HasPlayerCredentials);
+                    string installationId = ValueAfter(args, "--installation-id")
+                        ?? ClientInstallationIdentity.LoadOrCreate(activityData);
+                    Cafe24ActivityUploadTransport? playerTransport = networkEnabled && connection.HasPlayerCredentials
+                        ? new Cafe24ActivityUploadTransport(connection)
+                        : null;
+                    try
+                    {
+                        _activityCapture = new ActivityCaptureRuntime(
+                            activityData,
+                            installationId,
+                            ClientVersion(),
+                            _logger,
+                            playerTransport);
+                        playerTransport = null; // ActivityCaptureRuntime owns it after a successful construction.
+                    }
+                    finally
+                    {
+                        playerTransport?.Dispose();
+                    }
+                    _logger.Info(
+                        "ACTIVITY_CONNECTION",
+                        "configPresent=" + connection.ConfigFileExists
+                        + " networkEnabled=" + networkEnabled
+                        + " playerPaired=" + connection.HasPlayerCredentials);
+
+                    // Local event data from 0.1.x is never authoritative in a public client.
+                    // Only the authenticated server bootstrap may activate a league event.
+                    _activityCapture.SetScheduledEvent(null);
+                    bool bootstrapRequired = networkEnabled && connection.HasPlayerCredentials;
+
+                    _coordinator = new PlayerOverlayCoordinator(
+                        _overlay,
+                        status,
+                        _logger,
+                        startupPolicy.Diagnostic,
+                        _activityCapture);
+                    if (bootstrapRequired)
+                    {
+                        // Do not begin session classification until the server's
+                        // current event is known (or the bounded request fails).
+                        // Otherwise a race already in progress can be permanently
+                        // classified as General before bootstrap finishes.
+                        status.SetWaiting();
+                        StartBootstrapRefresh(connection, _coordinator, status);
+                    }
+                    else
+                    {
+                        _coordinator.Start();
+                        if (networkEnabled)
+                        {
+                            StartHealthRefresh(connection, status);
+                        }
+                        else
+                        {
+                            status.SetServerOffline();
+                        }
+                    }
                 }
 
                 _logger.Info(
@@ -125,12 +198,9 @@ namespace AMS2LeagueClient
 
         private void ExitClient()
         {
-            _autoExitTimer?.Stop();
-            _demoEventTimer?.Stop();
-            _memoryDiagnostics?.Dispose();
-            _memoryDiagnostics = null;
-            _coordinator?.Dispose();
-            _coordinator = null;
+            if (_exitStarted) return;
+            _exitStarted = true;
+            CleanupRuntime();
 
             if (_overlay != null)
             {
@@ -145,6 +215,51 @@ namespace AMS2LeagueClient
 
             _statusWindow = null;
             Shutdown(0);
+        }
+
+        protected override void OnExit(ExitEventArgs eventArgs)
+        {
+            // Also covers startup exceptions, Windows logoff/shutdown and any
+            // WPF shutdown path that does not flow through ExitClient.
+            CleanupRuntime();
+            DispatcherUnhandledException -= HandleDispatcherException;
+            base.OnExit(eventArgs);
+        }
+
+        private void CleanupRuntime()
+        {
+            if (_cleanupStarted) return;
+            _cleanupStarted = true;
+
+            _autoExitTimer?.Stop();
+            _demoEventTimer?.Stop();
+            CleanupComponent("MEMORY_DIAGNOSTICS", () => _memoryDiagnostics?.Dispose());
+            _memoryDiagnostics = null;
+            CleanupComponent("BOOTSTRAP", StopBootstrapRefresh);
+            CleanupComponent("COORDINATOR", () => _coordinator?.Dispose());
+            _coordinator = null;
+            CleanupComponent("ACTIVITY_CAPTURE", () => _activityCapture?.Dispose());
+            _activityCapture = null;
+        }
+
+        private void CleanupComponent(string component, Action cleanup)
+        {
+            try
+            {
+                cleanup();
+            }
+            catch (Exception exception)
+            {
+                try
+                {
+                    _logger?.Error("CLEANUP_EXCEPTION", new InvalidOperationException(component + " cleanup failed.", exception));
+                }
+                catch
+                {
+                    // Continue releasing the remaining resources even when the
+                    // diagnostic log itself is unavailable.
+                }
+            }
         }
 
         private void HandleDispatcherException(object sender, DispatcherUnhandledExceptionEventArgs eventArgs)
@@ -173,6 +288,127 @@ namespace AMS2LeagueClient
         private static int ParseInt(string? value)
         {
             return int.TryParse(value, out int parsed) && parsed > 0 ? parsed : 0;
+        }
+
+        private void StartBootstrapRefresh(
+            ActivityConnectionOptions connection,
+            PlayerOverlayCoordinator coordinator,
+            ClientStatusViewModel status)
+        {
+            _bootstrapCancellation = new CancellationTokenSource();
+            CancellationToken token = _bootstrapCancellation.Token;
+            _bootstrapTask = Task.Run(async () =>
+            {
+                try
+                {
+                    using var transport = new Cafe24ActivityUploadTransport(connection);
+                    Cafe24BootstrapResponse bootstrap = await transport.GetBootstrapAsync(token).ConfigureAwait(false);
+                    ScheduledLeagueEvent? scheduledEvent = ToScheduledEvent(bootstrap.ScheduledEvent);
+                    _activityCapture?.SetScheduledEvent(scheduledEvent);
+                    _logger?.Info(
+                        "ACTIVITY_BOOTSTRAP",
+                        "status=OK event=" + (bootstrap.ScheduledEvent.PublicId.Length == 0 ? "none" : bootstrap.ScheduledEvent.PublicId)
+                        + " serviceVersion=" + bootstrap.ServiceVersion);
+                    _ = Dispatcher.BeginInvoke(new Action(() => status.SetServerConnected(bootstrap.ServiceVersion)));
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                }
+                catch (Exception exception)
+                {
+                    _activityCapture?.SetScheduledEvent(null);
+                    _logger?.Error("ACTIVITY_BOOTSTRAP_EXCEPTION", exception);
+                    _ = Dispatcher.BeginInvoke(new Action(status.SetServerOffline));
+                }
+                finally
+                {
+                    // Never await the dispatcher here: shutdown waits for this
+                    // task on the UI thread. A queued callback checks cancellation
+                    // and ownership before starting telemetry.
+                    _ = Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (!token.IsCancellationRequested
+                            && !_cleanupStarted
+                            && ReferenceEquals(_coordinator, coordinator))
+                        {
+                            coordinator.Start();
+                        }
+                    }));
+                }
+            }, token);
+        }
+
+        private void StartHealthRefresh(
+            ActivityConnectionOptions connection,
+            ClientStatusViewModel status)
+        {
+            _bootstrapCancellation = new CancellationTokenSource();
+            CancellationToken token = _bootstrapCancellation.Token;
+            _bootstrapTask = Task.Run(async () =>
+            {
+                try
+                {
+                    using var transport = new Cafe24ActivityUploadTransport(connection);
+                    Cafe24HealthResponse health = await transport.GetHealthAsync(token).ConfigureAwait(false);
+                    _logger?.Info(
+                        "SERVER_HEALTH",
+                        "status=" + health.Status
+                        + " serviceVersion=" + health.ServiceVersion
+                        + " schema=" + (health.SchemaVersion?.ToString() ?? "unknown"));
+                    _ = Dispatcher.BeginInvoke(new Action(() => status.SetServerConnected(health.ServiceVersion)));
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                }
+                catch (Exception exception)
+                {
+                    _logger?.Warning("SERVER_HEALTH", "status=OFFLINE reason=" + exception.GetType().Name);
+                    _ = Dispatcher.BeginInvoke(new Action(status.SetServerOffline));
+                }
+            }, token);
+        }
+
+        private void StopBootstrapRefresh()
+        {
+            _bootstrapCancellation?.Cancel();
+            if (_bootstrapTask != null)
+            {
+                try
+                {
+                    _bootstrapTask.GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+            _bootstrapCancellation?.Dispose();
+            _bootstrapCancellation = null;
+            _bootstrapTask = null;
+        }
+
+        private static ScheduledLeagueEvent? ToScheduledEvent(ActivityScheduledEventOptions? value)
+        {
+            if (value == null
+                || string.IsNullOrWhiteSpace(value.PublicId)
+                || (!value.CaptureOpensAtUtc.HasValue && !value.ScheduledAtUtc.HasValue))
+            {
+                return null;
+            }
+            return new ScheduledLeagueEvent
+            {
+                EventId = value.PublicId,
+                CaptureOpensAtUtc = value.CaptureOpensAtUtc,
+                ScheduledAtUtc = value.ScheduledAtUtc,
+                ExpectedTrack = string.IsNullOrWhiteSpace(value.Track) ? null : value.Track,
+                ExpectedVehicleClass = string.IsNullOrWhiteSpace(value.ExpectedVehicleClass) ? null : value.ExpectedVehicleClass
+            };
+        }
+
+        private static string ClientVersion()
+        {
+            AssemblyInformationalVersionAttribute? informational = typeof(App).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+            return informational?.InformationalVersion ?? typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown";
         }
     }
 }

@@ -12,7 +12,7 @@
                 <TextBlock Text="{Binding Message}" Foreground="{Binding Accent}" FontWeight="Bold" FontSize="19" />
                 <TextBlock Text="{Binding HistoryText}" Foreground="#8FA4B8" FontSize="10" Margin="0,6,0,0" LineHeight="14" />
             </StackPanel>
-            <TextBlock Text="{Binding StateLabel}" Foreground="{Binding Accent}" FontWeight="SemiBold" FontSize="11" HorizontalAlignment="Right" />
+            <TextBlock Text="{Binding StateLabel}" Foreground="{Binding Accent}" FontWeight="SemiBold" FontSize="13" Margin="0,5,0,0" HorizontalAlignment="Right" TextWrapping="Wrap" />
         </StackPanel>
     </Border>
 </UserControl>

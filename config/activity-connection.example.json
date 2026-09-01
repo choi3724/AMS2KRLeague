@@ -1,0 +1,4 @@
+{
+  "apiBaseUrl": "https://krams2.mycafe24.com/ams2",
+  "requestTimeoutSeconds": 15
+}

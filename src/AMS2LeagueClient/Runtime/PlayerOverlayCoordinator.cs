@@ -2,6 +2,8 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using AMS2LeagueClient.Core.Diagnostics;
 using AMS2LeagueClient.Core.Events;
@@ -22,6 +24,7 @@ namespace AMS2LeagueClient.Runtime
         private readonly ClientStatusViewModel _status;
         private readonly FileLogger _logger;
         private readonly bool _diagnostic;
+        private readonly ActivityCaptureRuntime? _activityCapture;
         private readonly Ams2ProcessMonitor _processMonitor = new Ams2ProcessMonitor();
         private readonly GameWindowTracker _windowTracker = new GameWindowTracker();
         private readonly SharedMemoryReader _reader = new SharedMemoryReader();
@@ -31,7 +34,11 @@ namespace AMS2LeagueClient.Runtime
         private readonly RaceControlAnalyzer _raceControlAnalyzer = new RaceControlAnalyzer(EvidenceKind.Live);
         private readonly SessionStateTracker _sessionTracker = new SessionStateTracker();
         private readonly OverlayVisibilityController _visibilityController = new OverlayVisibilityController();
+        private readonly MultiplayerWaitingOverlayController _multiplayerOverlayController = new MultiplayerWaitingOverlayController();
         private readonly object _readerGate = new object();
+        private readonly object _telemetryGate = new object();
+        private readonly Channel<TelemetryLogEntry> _telemetryLogChannel;
+        private readonly Task _telemetryLogTask;
         private readonly DispatcherTimer _processTimer;
         private readonly DispatcherTimer _uiTimer;
         private readonly Stopwatch _uiCadenceClock = Stopwatch.StartNew();
@@ -68,18 +75,27 @@ namespace AMS2LeagueClient.Runtime
         private bool _styleLogged;
         private TimeSpan _lastCpuTime;
         private DateTimeOffset _lastPerformanceAt = DateTimeOffset.UtcNow;
-        private bool _disposed;
+        private volatile bool _disposed;
 
         public PlayerOverlayCoordinator(
             OverlayWindow overlay,
             ClientStatusViewModel status,
             FileLogger logger,
-            bool diagnostic)
+            bool diagnostic,
+            ActivityCaptureRuntime? activityCapture = null)
         {
             _overlay = overlay;
             _status = status;
             _logger = logger;
             _diagnostic = diagnostic;
+            _activityCapture = activityCapture;
+            _telemetryLogChannel = Channel.CreateUnbounded<TelemetryLogEntry>(new UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            });
+            _telemetryLogTask = Task.Run(TelemetryLogLoopAsync);
             _processTimer = new DispatcherTimer(DispatcherPriority.Background)
             {
                 Interval = TimeSpan.FromSeconds(1)
@@ -145,13 +161,25 @@ namespace AMS2LeagueClient.Runtime
 
         private void ReadTelemetry(object? state)
         {
-            if (Volatile.Read(ref _processId) < 0 || _disposed)
-            {
-                return;
-            }
-
+            bool telemetryGateEntered = false;
             try
             {
+                if (Volatile.Read(ref _processId) < 0 || _disposed)
+                {
+                    return;
+                }
+                telemetryGateEntered = Monitor.TryEnter(_telemetryGate);
+                if (!telemetryGateEntered)
+                {
+                    // Shared memory is sampled as latest-state data. Dropping a
+                    // busy tick is safer than allowing out-of-order callbacks.
+                    return;
+                }
+                if (Volatile.Read(ref _processId) < 0 || _disposed)
+                {
+                    return;
+                }
+
                 TelemetryReadResult result;
                 lock (_readerGate)
                 {
@@ -167,40 +195,41 @@ namespace AMS2LeagueClient.Runtime
                     TelemetrySnapshot snapshot = result.Snapshot;
                     Interlocked.Exchange(ref _latest, snapshot);
                     Interlocked.Increment(ref _successCount);
+                    _activityCapture?.Observe(snapshot);
 
                     if (!_sharedMemoryAttached)
                     {
                         _sharedMemoryAttached = true;
-                        _logger.Info("SHM_ATTACH", "mapping=$pcars2$ access=READ version=" + snapshot.Version + " build=" + snapshot.BuildVersion);
+                        QueueTelemetryInfo("SHM_ATTACH", "mapping=$pcars2$ access=READ version=" + snapshot.Version + " build=" + snapshot.BuildVersion);
                     }
 
                     if (_sessionTracker.Observe(snapshot))
                     {
                         _lastPresentationKey = string.Empty;
-                        _logger.Info("SESSION_TRANSITION", "game=" + StateText.Game(snapshot.GameStateRaw) + " session=" + StateText.Session(snapshot.SessionStateRaw) + " cacheReset=true generation=" + _sessionTracker.Generation);
+                        QueueTelemetryInfo("SESSION_TRANSITION", "game=" + StateText.Game(snapshot.GameStateRaw) + " session=" + StateText.Session(snapshot.SessionStateRaw) + " cacheReset=true generation=" + _sessionTracker.Generation);
                     }
 
                     if (snapshot.NumParticipants != _lastParticipantCount)
                     {
                         _lastParticipantCount = snapshot.NumParticipants;
-                        _logger.Info("PARTICIPANT_COUNT", "count=" + snapshot.NumParticipants);
+                        QueueTelemetryInfo("PARTICIPANT_COUNT", "count=" + snapshot.NumParticipants);
                     }
 
                     if (snapshot.ViewedParticipantIndex != _lastViewedIndex)
                     {
                         _lastViewedIndex = snapshot.ViewedParticipantIndex;
-                        _logger.Info("VIEWED_PARTICIPANT", "index=" + snapshot.ViewedParticipantIndex);
+                        QueueTelemetryInfo("VIEWED_PARTICIPANT", "index=" + snapshot.ViewedParticipantIndex);
                     }
 
                     string invalidSplitKey = (snapshot.SplitTimeAhead < 0 ? "A" : string.Empty)
                         + (snapshot.SplitTimeBehind < 0 ? "B" : string.Empty);
                     if (invalidSplitKey.Length > 0 && invalidSplitKey != _lastInvalidSplitKey)
                     {
-                        _logger.Warning("INVALID_SPLIT", "ahead=" + FormatFloat(snapshot.SplitTimeAhead) + " behind=" + FormatFloat(snapshot.SplitTimeBehind) + " policy=UNKNOWN");
+                        QueueTelemetryWarning("INVALID_SPLIT", "ahead=" + FormatFloat(snapshot.SplitTimeAhead) + " behind=" + FormatFloat(snapshot.SplitTimeBehind) + " policy=UNKNOWN");
                     }
                     else if (invalidSplitKey.Length == 0 && _lastInvalidSplitKey.Length > 0)
                     {
-                        _logger.Info("SPLIT_VALID", "source=GAME_SPLIT");
+                        QueueTelemetryInfo("SPLIT_VALID", "source=GAME_SPLIT");
                     }
 
                     _lastInvalidSplitKey = invalidSplitKey;
@@ -211,12 +240,12 @@ namespace AMS2LeagueClient.Runtime
                     if (now - _lastInconsistentWarningAt >= TimeSpan.FromSeconds(30))
                     {
                         _lastInconsistentWarningAt = now;
-                        _logger.Warning("SHM_STATE", "status=" + result.Status + " message=" + result.Message + " rateLimit=30s");
+                        QueueTelemetryWarning("SHM_STATE", "status=" + result.Status + " message=" + result.Message + " rateLimit=30s");
                     }
                 }
                 else if (previousStatus != result.Status)
                 {
-                    _logger.Warning("SHM_STATE", "status=" + result.Status + " message=" + result.Message);
+                    QueueTelemetryWarning("SHM_STATE", "status=" + result.Status + " message=" + result.Message);
                 }
 
                 SequenceCounterSample? sequenceSample = _sequenceCounterSampler.Observe(
@@ -225,7 +254,7 @@ namespace AMS2LeagueClient.Runtime
                     _reader.SequenceDrops);
                 if (sequenceSample != null)
                 {
-                    _logger.Warning(
+                    QueueTelemetryWarning(
                         "SEQUENCE_CONSISTENCY",
                         "retries=" + sequenceSample.Retries
                         + " drops=" + sequenceSample.Drops
@@ -238,7 +267,14 @@ namespace AMS2LeagueClient.Runtime
             {
                 _lastReadStatus = TelemetryReadStatus.Error;
                 _lastReadMessage = exception.Message;
-                _logger.Error("SHM_READ_EXCEPTION", exception);
+                QueueTelemetryError("SHM_READ_EXCEPTION", exception);
+            }
+            finally
+            {
+                if (telemetryGateEntered)
+                {
+                    Monitor.Exit(_telemetryGate);
+                }
             }
         }
 
@@ -262,7 +298,7 @@ namespace AMS2LeagueClient.Runtime
                 int pid = Volatile.Read(ref _processId);
                 if (pid < 0)
                 {
-                    ApplyVisibility(new OverlayVisibilityDecision(false, "WAIT_PROCESS"), null, null, null);
+                    ApplyVisibility(new OverlayVisibilityDecision(false, "WAIT_PROCESS"), null, null, null, null);
                     return;
                 }
 
@@ -270,10 +306,16 @@ namespace AMS2LeagueClient.Runtime
                 LogWindowChanges(window);
 
                 TelemetrySnapshot? snapshot = Volatile.Read(ref _latest);
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                MultiplayerOverlayDecision? multiplayerDecision = snapshot == null
+                    ? null
+                    : _multiplayerOverlayController.Observe(snapshot, _sessionTracker.Generation, now);
                 LocalParticipantResolution? local = snapshot == null ? null : _localResolver.Resolve(snapshot);
                 bool gameplayValid = snapshot != null && local != null && local.IsValid && local.Participant != null;
-                OverlayVisibilityDecision decision = _visibilityController.Evaluate(true, window, gameplayValid);
-                ApplyVisibility(decision, window, snapshot, local);
+                bool waitingValid = multiplayerDecision?.Mode == MultiplayerOverlayMode.Waiting
+                    && multiplayerDecision.Waiting != null;
+                OverlayVisibilityDecision decision = _visibilityController.Evaluate(true, window, gameplayValid || waitingValid);
+                ApplyVisibility(decision, window, snapshot, local, multiplayerDecision);
 
                 if (_lastReadStatus == TelemetryReadStatus.MappingUnavailable)
                 {
@@ -306,15 +348,47 @@ namespace AMS2LeagueClient.Runtime
             OverlayVisibilityDecision decision,
             GameWindowSnapshot? window,
             TelemetrySnapshot? snapshot,
-            LocalParticipantResolution? local)
+            LocalParticipantResolution? local,
+            MultiplayerOverlayDecision? multiplayerDecision)
         {
-            if (decision.Reason != _lastVisibilityReason)
+            string effectiveVisibilityReason = decision.Reason;
+            if (decision.ShouldShow && multiplayerDecision != null)
             {
-                _logger.Info(decision.ShouldShow ? "OVERLAY_SHOW" : "OVERLAY_HIDE", "reason=" + decision.Reason);
-                _lastVisibilityReason = decision.Reason;
+                effectiveVisibilityReason += "/" + multiplayerDecision.Reason;
+            }
+            if (effectiveVisibilityReason != _lastVisibilityReason)
+            {
+                _logger.Info(decision.ShouldShow ? "OVERLAY_SHOW" : "OVERLAY_HIDE", "reason=" + effectiveVisibilityReason);
+                _lastVisibilityReason = effectiveVisibilityReason;
             }
 
-            if (!decision.ShouldShow || window == null || snapshot == null || local?.Participant == null)
+            if (!decision.ShouldShow || window == null || snapshot == null)
+            {
+                _overlay.HideOverlay();
+                return;
+            }
+
+            if (multiplayerDecision?.Mode == MultiplayerOverlayMode.Waiting)
+            {
+                MultiplayerWaitingOverlayViewModel? waiting = multiplayerDecision.Waiting;
+                if (waiting == null)
+                {
+                    _overlay.HideOverlay();
+                    return;
+                }
+
+                string waitingKey = "WAITING|" + waiting.SessionLabel + "|" + waiting.ParticipantCountText
+                    + "|" + waiting.RemainingLabel + "|" + waiting.RemainingValue;
+                if (waitingKey != _lastPresentationKey)
+                {
+                    _lastPresentationKey = waitingKey;
+                    Interlocked.Increment(ref _uiUpdateCount);
+                }
+                _overlay.ShowWaitingAt(window, waiting);
+                return;
+            }
+
+            if (multiplayerDecision?.Mode != MultiplayerOverlayMode.Gameplay || local?.Participant == null)
             {
                 _overlay.HideOverlay();
                 return;
@@ -394,7 +468,15 @@ namespace AMS2LeagueClient.Runtime
                 _logger.Info("RELATIVE_CHANGE", "aheadIndex=" + (league.Ahead?.Source.Index.ToString(CultureInfo.InvariantCulture) ?? "none") + " behindIndex=" + (league.Behind?.Source.Index.ToString(CultureInfo.InvariantCulture) ?? "none") + " rawCount=" + league.RawParticipantCount + " leagueCount=" + league.LeagueParticipantCount + " safetyCarsExcluded=" + league.SafetyCarsExcluded);
             }
 
-            string presentationKey = BuildPresentationKey(snapshot, local.Participant, league, eventUpdate.CurrentEvent, eventUpdate.QueuedCount, raceControlUpdate);
+            string presentationKey = BuildPresentationKey(
+                snapshot,
+                local.Participant,
+                league,
+                eventUpdate.CurrentEvent,
+                eventUpdate.QueuedCount,
+                raceControlUpdate,
+                multiplayerDecision.EffectiveRemainingSeconds,
+                multiplayerDecision.RemainingDisplayTextOverride);
             if (_diagnostic)
             {
                 presentationKey += "|rates=" + _snapshotRate.ToString("0.0", CultureInfo.InvariantCulture) + "/" + _uiRate.ToString("0.0", CultureInfo.InvariantCulture);
@@ -414,7 +496,9 @@ namespace AMS2LeagueClient.Runtime
                     eventUpdate.CurrentEvent,
                     eventUpdate.QueuedCount,
                     broadcastStates: raceControlUpdate.ParticipantStates,
-                    raceControl: raceControlUpdate);
+                    raceControl: raceControlUpdate,
+                    eventTimeRemainingOverride: multiplayerDecision.EffectiveRemainingSeconds,
+                    eventTimeRemainingTextOverride: multiplayerDecision.RemainingDisplayTextOverride);
                 _overlay.SetViewModel(OverlayShellViewModel.Build(snapshot, timing, eventUpdate.CurrentEvent, false, raceControl: raceControlUpdate));
                 Interlocked.Increment(ref _uiUpdateCount);
             }
@@ -526,22 +610,27 @@ namespace AMS2LeagueClient.Runtime
         private void Detach(string reason)
         {
             int oldPid = Interlocked.Exchange(ref _processId, -1);
-            lock (_readerGate)
+            lock (_telemetryGate)
             {
-                _reader.Reset();
-                _sessionTracker.Reset();
-            }
+                lock (_readerGate)
+                {
+                    _reader.Reset();
+                    _sessionTracker.Reset();
+                }
 
-            Interlocked.Exchange(ref _latest, null);
-            _lastReadStatus = TelemetryReadStatus.MappingUnavailable;
-            _sharedMemoryAttached = false;
-            _lastPresentationKey = string.Empty;
-            _lastWindowKey = string.Empty;
-            _lastInvalidSplitKey = string.Empty;
-            _lastEventId = string.Empty;
-            _eventEngine.Reset();
-            _raceControlAnalyzer.Reset();
-            _overlay.HideOverlay();
+                Interlocked.Exchange(ref _latest, null);
+                _lastReadStatus = TelemetryReadStatus.MappingUnavailable;
+                _sharedMemoryAttached = false;
+                _lastPresentationKey = string.Empty;
+                _lastWindowKey = string.Empty;
+                _lastInvalidSplitKey = string.Empty;
+                _lastEventId = string.Empty;
+                _eventEngine.Reset();
+                _raceControlAnalyzer.Reset();
+                _multiplayerOverlayController.Reset();
+                _overlay.HideOverlay();
+                _activityCapture?.GameDetached();
+            }
             _logger.Info("AMS2_DETACH", "pid=" + oldPid + " reason=" + reason + " reattach=WAIT");
         }
 
@@ -551,13 +640,17 @@ namespace AMS2LeagueClient.Runtime
             LeagueClassification league,
             OverlayEvent? currentEvent,
             int queuedEvents,
-            RaceControlUpdate raceControl)
+            RaceControlUpdate raceControl,
+            float? effectiveRemainingSeconds,
+            string? remainingDisplayTextOverride)
         {
             return snapshot.GameStateRaw + "|" + snapshot.SessionStateRaw + "|" + snapshot.NumParticipants + "|" + league.LeagueParticipantCount + "|" + league.SafetyCarsExcluded + "|"
                 + local.Index + "|" + local.RacePosition + "|" + local.CurrentLap + "|" + local.LapsCompleted + "|"
                 + (league.Local?.LeaguePosition ?? 0) + "|" + FormatFloat(local.LastLapTime) + "|" + FormatFloat(local.BestLapTime) + "|"
                 + FormatFloat(snapshot.CurrentTime) + "|" + FormatFloat(local.CurrentSector1Time) + "|" + FormatFloat(local.CurrentSector2Time) + "|" + FormatFloat(local.CurrentSector3Time) + "|" + local.CurrentSector + "|" + local.LapInvalidated + "|" + snapshot.LapInvalidated + "|"
-                + FormatFloat(snapshot.EventTimeRemaining) + "|" + FormatFloat(snapshot.SessionDuration) + "|" + snapshot.SessionAdditionalLaps + "|" + FormatFloat(snapshot.TrackLength) + "|" + FormatFloat(local.CurrentLapDistance) + "|"
+                + FormatFloat(snapshot.EventTimeRemaining) + "|" + (effectiveRemainingSeconds.HasValue ? FormatFloat(effectiveRemainingSeconds.Value) : "NONE") + "|"
+                + (remainingDisplayTextOverride ?? "NONE") + "|"
+                + FormatFloat(snapshot.SessionDuration) + "|" + snapshot.SessionAdditionalLaps + "|" + FormatFloat(snapshot.TrackLength) + "|" + FormatFloat(local.CurrentLapDistance) + "|"
                 + snapshot.HighestFlagColourRaw + "|" + snapshot.HighestFlagReasonRaw + "|" + raceControl.Version + "|" + raceControl.OverlayState + "|" + (raceControl.ActiveEvent?.Id ?? "-") + "|"
                 + FormatFloat(snapshot.SplitTimeAhead) + "|" + FormatFloat(snapshot.SplitTimeBehind) + "|"
                 + (league.Ahead?.Source.Index.ToString(CultureInfo.InvariantCulture) ?? "-") + "|"
@@ -572,6 +665,40 @@ namespace AMS2LeagueClient.Runtime
             return value.ToString("R", CultureInfo.InvariantCulture);
         }
 
+        private void QueueTelemetryInfo(string eventName, string details)
+            => _telemetryLogChannel.Writer.TryWrite(new TelemetryLogEntry("INFO", eventName, details, null));
+
+        private void QueueTelemetryWarning(string eventName, string details)
+            => _telemetryLogChannel.Writer.TryWrite(new TelemetryLogEntry("WARN", eventName, details, null));
+
+        private void QueueTelemetryError(string eventName, Exception exception)
+            => _telemetryLogChannel.Writer.TryWrite(new TelemetryLogEntry("ERROR", eventName, string.Empty, exception));
+
+        private async Task TelemetryLogLoopAsync()
+        {
+            await foreach (TelemetryLogEntry entry in _telemetryLogChannel.Reader.ReadAllAsync())
+            {
+                try
+                {
+                    if (entry.Exception != null)
+                    {
+                        _logger.Error(entry.EventName, entry.Exception);
+                    }
+                    else if (entry.Level == "WARN")
+                    {
+                        _logger.Warning(entry.EventName, entry.Details);
+                    }
+                    else
+                    {
+                        _logger.Info(entry.EventName, entry.Details);
+                    }
+                }
+                catch (Exception exception) when (exception is System.IO.IOException || exception is UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed)
@@ -582,13 +709,41 @@ namespace AMS2LeagueClient.Runtime
             _disposed = true;
             _processTimer.Stop();
             _uiTimer.Stop();
-            _telemetryTimer?.Dispose();
-            lock (_readerGate)
+            System.Threading.Timer? telemetryTimer = _telemetryTimer;
+            _telemetryTimer = null;
+            if (telemetryTimer != null)
             {
-                _reader.Dispose();
+                // DisposeAsync completes only after callbacks already in flight
+                // have returned, so child capture runtimes can be drained safely.
+                telemetryTimer.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
+            lock (_telemetryGate)
+            {
+                lock (_readerGate)
+                {
+                    _reader.Dispose();
+                }
+            }
+            _telemetryLogChannel.Writer.TryComplete();
+            _telemetryLogTask.GetAwaiter().GetResult();
             _overlay.HideOverlay();
             _logger.Info("CLIENT_STOP", "clean=true");
+        }
+
+        private sealed class TelemetryLogEntry
+        {
+            public TelemetryLogEntry(string level, string eventName, string details, Exception? exception)
+            {
+                Level = level;
+                EventName = eventName;
+                Details = details;
+                Exception = exception;
+            }
+
+            public string Level { get; }
+            public string EventName { get; }
+            public string Details { get; }
+            public Exception? Exception { get; }
         }
     }
 }

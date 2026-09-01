@@ -1,0 +1,24 @@
+{
+  "schema": "ams2-phase1d3-activity-fixture-v1",
+  "scenario": "GENERAL_RACE",
+  "snapshots": [
+    {
+      "capturedAtUtc": "2026-09-07T10:00:00Z",
+      "sessionState": "Race",
+      "currentTime": 300,
+      "participants": [
+        { "name": "Fixture Player", "position": 2, "lapsCompleted": 4, "currentLap": 5, "bestLapTime": 91.2, "vehicle": "GT3 Player", "vehicleClass": "GT3" },
+        { "name": "Fixture Opponent", "position": 1, "lapsCompleted": 4, "currentLap": 5, "bestLapTime": 90.5, "vehicle": "GT3 AI", "vehicleClass": "GT3" },
+        { "name": "Safety Car", "position": 3, "lapsCompleted": 0, "currentLap": 1, "vehicle": "Camaro SafetyCar", "vehicleClass": "SafetyCar" }
+      ]
+    },
+    {
+      "capturedAtUtc": "2026-09-07T10:01:00Z",
+      "gameState": "FrontEnd",
+      "sessionState": "Invalid",
+      "raceState": "Invalid",
+      "viewedParticipantIndex": -1,
+      "participants": []
+    }
+  ]
+}

@@ -7,7 +7,10 @@ namespace AMS2LeagueClient.Presentation
         public ClientStatusWindow(ClientStatusViewModel viewModel)
         {
             InitializeComponent();
+            ViewModel = viewModel;
             DataContext = viewModel;
         }
+
+        public ClientStatusViewModel ViewModel { get; }
     }
 }

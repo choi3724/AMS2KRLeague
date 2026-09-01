@@ -141,7 +141,27 @@ namespace AMS2LeagueClient.Core.Telemetry
             uint rootPitModeRaw = 0,
             uint rootPitScheduleRaw = 0,
             float sessionDuration = 0,
-            int sessionAdditionalLaps = 0)
+            int sessionAdditionalLaps = 0,
+            string rootCarName = "",
+            string rootCarClassName = "",
+            float personalFastestLapTime = -1,
+            float worldFastestLapTime = -1,
+            float personalFastestSector1Time = -1,
+            float personalFastestSector2Time = -1,
+            float personalFastestSector3Time = -1,
+            float worldFastestSector1Time = -1,
+            float worldFastestSector2Time = -1,
+            float worldFastestSector3Time = -1,
+            float ambientTemperature = 25,
+            float trackTemperature = 30,
+            float rainDensity = 0,
+            float windSpeed = 2,
+            float windDirectionX = 0,
+            float windDirectionY = 0,
+            float cloudBrightness = 0,
+            float snowDensity = 0,
+            int enforcedPitStopLap = -1,
+            bool sessionIsPrivate = false)
         {
             CapturedAt = capturedAt;
             Version = version;
@@ -176,6 +196,26 @@ namespace AMS2LeagueClient.Core.Telemetry
             RootPitScheduleRaw = rootPitScheduleRaw;
             SessionDuration = sessionDuration;
             SessionAdditionalLaps = sessionAdditionalLaps;
+            RootCarName = rootCarName ?? string.Empty;
+            RootCarClassName = rootCarClassName ?? string.Empty;
+            PersonalFastestLapTime = personalFastestLapTime;
+            WorldFastestLapTime = worldFastestLapTime;
+            PersonalFastestSector1Time = personalFastestSector1Time;
+            PersonalFastestSector2Time = personalFastestSector2Time;
+            PersonalFastestSector3Time = personalFastestSector3Time;
+            WorldFastestSector1Time = worldFastestSector1Time;
+            WorldFastestSector2Time = worldFastestSector2Time;
+            WorldFastestSector3Time = worldFastestSector3Time;
+            AmbientTemperature = ambientTemperature;
+            TrackTemperature = trackTemperature;
+            RainDensity = rainDensity;
+            WindSpeed = windSpeed;
+            WindDirectionX = windDirectionX;
+            WindDirectionY = windDirectionY;
+            CloudBrightness = cloudBrightness;
+            SnowDensity = snowDensity;
+            EnforcedPitStopLap = enforcedPitStopLap;
+            SessionIsPrivate = sessionIsPrivate;
             _participants = (ParticipantSnapshot[])(participants ?? throw new ArgumentNullException(nameof(participants))).Clone();
         }
 
@@ -212,6 +252,26 @@ namespace AMS2LeagueClient.Core.Telemetry
         public uint RootPitScheduleRaw { get; }
         public float SessionDuration { get; }
         public int SessionAdditionalLaps { get; }
+        public string RootCarName { get; }
+        public string RootCarClassName { get; }
+        public float PersonalFastestLapTime { get; }
+        public float WorldFastestLapTime { get; }
+        public float PersonalFastestSector1Time { get; }
+        public float PersonalFastestSector2Time { get; }
+        public float PersonalFastestSector3Time { get; }
+        public float WorldFastestSector1Time { get; }
+        public float WorldFastestSector2Time { get; }
+        public float WorldFastestSector3Time { get; }
+        public float AmbientTemperature { get; }
+        public float TrackTemperature { get; }
+        public float RainDensity { get; }
+        public float WindSpeed { get; }
+        public float WindDirectionX { get; }
+        public float WindDirectionY { get; }
+        public float CloudBrightness { get; }
+        public float SnowDensity { get; }
+        public int EnforcedPitStopLap { get; }
+        public bool SessionIsPrivate { get; }
         public IReadOnlyList<ParticipantSnapshot> Participants => _participants;
 
         public GameState? KnownGameState => Enum.IsDefined(typeof(GameState), GameStateRaw)

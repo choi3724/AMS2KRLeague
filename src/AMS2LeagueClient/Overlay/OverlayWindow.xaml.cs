@@ -13,15 +13,18 @@ namespace AMS2LeagueClient.Overlay
         private readonly SessionInfoView _sessionView = new SessionInfoView();
         private readonly EventCardView _eventView = new EventCardView();
         private readonly RaceControlView _raceControlView = new RaceControlView();
+        private readonly MultiplayerWaitingOverlayView _waitingView = new MultiplayerWaitingOverlayView();
         private readonly AuxiliaryOverlayWindow _sessionWindow;
         private readonly AuxiliaryOverlayWindow _eventWindow;
         private readonly AuxiliaryOverlayWindow _raceControlWindow;
+        private readonly AuxiliaryOverlayWindow _waitingWindow;
         private IntPtr _handle;
         private OverlayShellViewModel _viewModel = new OverlayShellViewModel();
         private string _lastBoundsKey = string.Empty;
         private string _lastSessionKey = string.Empty;
         private string _lastEventKey = string.Empty;
         private string _lastRaceControlKey = string.Empty;
+        private string _lastWaitingKey = string.Empty;
 
         public OverlayWindow(bool diagnostic)
         {
@@ -30,6 +33,7 @@ namespace AMS2LeagueClient.Overlay
             _sessionWindow = new AuxiliaryOverlayWindow("AMS2 Session Info", _sessionView);
             _eventWindow = new AuxiliaryOverlayWindow("AMS2 Event Card", _eventView);
             _raceControlWindow = new AuxiliaryOverlayWindow("AMS2 Race Control", _raceControlView);
+            _waitingWindow = new AuxiliaryOverlayWindow("AMS2 Multiplayer Waiting", _waitingView);
         }
 
         protected override void OnSourceInitialized(EventArgs eventArgs)
@@ -44,6 +48,7 @@ namespace AMS2LeagueClient.Overlay
             _sessionWindow.Close();
             _eventWindow.Close();
             _raceControlWindow.Close();
+            _waitingWindow.Close();
             base.OnClosed(eventArgs);
         }
 
@@ -83,9 +88,8 @@ namespace AMS2LeagueClient.Overlay
 
         public void ShowAt(GameWindowSnapshot gameWindow)
         {
+            _waitingWindow.HideOverlay();
             double scale = gameWindow.Dpi / 96.0;
-            int sideInset = (int)Math.Round(gameWindow.Width * 0.07);
-            int topInset = (int)Math.Round(gameWindow.Height * 0.07);
             int bottomInset = (int)Math.Round(gameWindow.Height * 0.09);
             int towerLeftInset = Math.Max(8, (int)Math.Round(gameWindow.Width * 0.004));
             int towerTopInset = Math.Max(8, (int)Math.Round(gameWindow.Height * 0.008));
@@ -93,16 +97,25 @@ namespace AMS2LeagueClient.Overlay
             int timingHeight = Math.Min(
                 Scale(_diagnostic ? LeftTowerLayoutMetrics.DiagnosticHeight : LeftTowerLayoutMetrics.DesiredHeight, scale),
                 Math.Max(1, gameWindow.Height - (towerTopInset * 2)));
-            int sessionWidth = Scale(280, scale);
-            int sessionHeight = Scale(150, scale);
+            int sessionWidth = Scale(AuxiliaryOverlayLayoutMetrics.SessionWidth, scale);
+            int sessionHeight = Scale(AuxiliaryOverlayLayoutMetrics.SessionHeight, scale);
             int eventWidth = Scale(650, scale);
             int eventHeight = Scale(105, scale);
-            int raceWidth = Scale(_viewModel.RaceControl.IsExpanded ? 520 : 330, scale);
-            int raceHeight = Scale(_viewModel.RaceControl.IsExpanded ? 165 : 55, scale);
+            int raceWidth = Scale(
+                _viewModel.RaceControl.IsExpanded
+                    ? AuxiliaryOverlayLayoutMetrics.RaceControlExpandedWidth
+                    : AuxiliaryOverlayLayoutMetrics.RaceControlCompactWidth,
+                scale);
+            int raceHeight = Scale(
+                _viewModel.RaceControl.IsExpanded
+                    ? AuxiliaryOverlayLayoutMetrics.RaceControlExpandedHeight
+                    : AuxiliaryOverlayLayoutMetrics.RaceControlCompactHeight,
+                scale);
+            int auxiliaryLeft = gameWindow.Left + towerLeftInset + timingWidth + Scale(LeftTowerLayoutMetrics.SessionGap, scale);
 
             EnsureShown(gameWindow.Left + towerLeftInset, gameWindow.Top + towerTopInset, timingWidth, timingHeight);
             _sessionWindow.ShowAt(
-                gameWindow.Left + towerLeftInset + timingWidth + Scale(LeftTowerLayoutMetrics.SessionGap, scale),
+                auxiliaryLeft,
                 gameWindow.Top + towerTopInset,
                 sessionWidth,
                 sessionHeight);
@@ -112,8 +125,39 @@ namespace AMS2LeagueClient.Overlay
             }
             if (_viewModel.RaceControl.IsVisible)
             {
-                _raceControlWindow.ShowAt(gameWindow.Left + (gameWindow.Width - raceWidth) / 2, gameWindow.Top + topInset, raceWidth, raceHeight);
+                _raceControlWindow.ShowAt(
+                    auxiliaryLeft,
+                    gameWindow.Top + towerTopInset + Scale(AuxiliaryOverlayLayoutMetrics.RaceControlTopOffset, scale),
+                    raceWidth,
+                    raceHeight);
             }
+        }
+
+        public void ShowWaitingAt(GameWindowSnapshot gameWindow, MultiplayerWaitingOverlayViewModel viewModel)
+        {
+            if (viewModel == null) throw new ArgumentNullException(nameof(viewModel));
+
+            if (IsVisible) Hide();
+            _sessionWindow.HideOverlay();
+            _eventWindow.HideOverlay();
+            _raceControlWindow.HideOverlay();
+
+            string waitingKey = viewModel.SessionLabel + "\u001f" + viewModel.ParticipantCountText
+                + "\u001f" + viewModel.RemainingLabel + "\u001f" + viewModel.RemainingValue;
+            if (waitingKey != _lastWaitingKey)
+            {
+                _lastWaitingKey = waitingKey;
+                _waitingView.DataContext = viewModel;
+            }
+
+            double scale = gameWindow.Dpi / 96.0;
+            int towerLeftInset = Math.Max(8, (int)Math.Round(gameWindow.Width * 0.004));
+            int towerTopInset = Math.Max(8, (int)Math.Round(gameWindow.Height * 0.008));
+            _waitingWindow.ShowAt(
+                gameWindow.Left + towerLeftInset,
+                gameWindow.Top + towerTopInset,
+                Scale(AuxiliaryOverlayLayoutMetrics.WaitingWidth, scale),
+                Scale(AuxiliaryOverlayLayoutMetrics.WaitingHeight, scale));
         }
 
         public void ShowDemoAt(int left, int top, uint dpi)
@@ -128,6 +172,7 @@ namespace AMS2LeagueClient.Overlay
             _sessionWindow.HideOverlay();
             _eventWindow.HideOverlay();
             _raceControlWindow.HideOverlay();
+            _waitingWindow.HideOverlay();
         }
 
         private void EnsureShown(int left, int top, int width, int height)

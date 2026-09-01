@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2LeagueClient.Core", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2LeagueClient", "src\AMS2LeagueClient\AMS2LeagueClient.csproj", "{00FE77A0-8879-4B59-B112-B5EE3A1978CC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2LeagueClient.Tests", "tests\AMS2LeagueClient.Tests\AMS2LeagueClient.Tests.csproj", "{7A8B9E48-DF75-452E-B152-C81809678FAF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2LeagueActivity.Tests", "tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.csproj", "{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,5 +24,13 @@ Global
 		{00FE77A0-8879-4B59-B112-B5EE3A1978CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{00FE77A0-8879-4B59-B112-B5EE3A1978CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{00FE77A0-8879-4B59-B112-B5EE3A1978CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A8B9E48-DF75-452E-B152-C81809678FAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A8B9E48-DF75-452E-B152-C81809678FAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A8B9E48-DF75-452E-B152-C81809678FAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A8B9E48-DF75-452E-B152-C81809678FAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

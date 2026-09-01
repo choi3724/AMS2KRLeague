@@ -113,7 +113,9 @@ namespace AMS2LeagueClient.Core.Presentation
             int queuedEvents = 0,
             OverlayTextCatalog? text = null,
             IReadOnlyDictionary<int, ParticipantBroadcastState>? broadcastStates = null,
-            RaceControlUpdate? raceControl = null)
+            RaceControlUpdate? raceControl = null,
+            float? eventTimeRemainingOverride = null,
+            string? eventTimeRemainingTextOverride = null)
         {
             OverlayTextCatalog catalog = text ?? OverlayTextCatalog.Korean;
             broadcastStates = broadcastStates ?? raceControl?.ParticipantStates;
@@ -144,6 +146,7 @@ namespace AMS2LeagueClient.Core.Presentation
             string noCar = catalog.CultureName == "ko-KR" ? "차량 없음" : "NO CAR";
             IReadOnlyList<RankingRowViewModel> rankingRows = BuildRankingRows(league, local.Index, broadcastStates, league.FastestLapParticipant?.Source.Index);
             bool playerPinnedAfterLeaders = league.Local?.LeaguePosition > MaxRankingRows;
+            float displayedEventTimeRemaining = eventTimeRemainingOverride ?? snapshot.EventTimeRemaining;
             string range = rankingRows.Count == 0
                 ? "순위"
                 : playerPinnedAfterLeaders && rankingRows.Count > 1
@@ -203,14 +206,15 @@ namespace AMS2LeagueClient.Core.Presentation
                 BestLabel = catalog.Get(OverlayTextKey.Best),
                 CurrentLabel = catalog.Get(OverlayTextKey.Current),
                 DiagnosticLabel = catalog.Get(OverlayTextKey.DiagnosticMode),
-                RemainingTimeText = FormatRemainingTime(snapshot.EventTimeRemaining),
+                RemainingTimeText = eventTimeRemainingTextOverride ?? FormatRemainingTime(displayedEventTimeRemaining),
                 OverallPositionText = "P" + (league.Local?.LeaguePosition ?? 0) + " / " + league.LeagueParticipantCount,
                 ClassPositionText = FormatClassPosition(league, local),
                 CurrentLapHeaderText = "LAP " + displayLap,
                 RankingRangeText = range,
                 RankingRows = rankingRows,
                 TrackLengthText = IsPositiveFinite(snapshot.TrackLength) ? snapshot.TrackLength.ToString("0", CultureInfo.InvariantCulture) + "m" : "—",
-                EventTimeRemainingText = IsNonNegativeFinite(snapshot.EventTimeRemaining) ? snapshot.EventTimeRemaining.ToString("0", CultureInfo.InvariantCulture) + "s" : "—",
+                EventTimeRemainingText = eventTimeRemainingTextOverride
+                    ?? (IsNonNegativeFinite(displayedEventTimeRemaining) ? displayedEventTimeRemaining.ToString("0", CultureInfo.InvariantCulture) + "s" : "—"),
                 DiagnosticParticipantText = "P" + (league.Local?.LeaguePosition ?? 0) + " " + local.Name + " #" + local.Index,
                 PitScheduleRawText = local.PitScheduleRaw.ToString(CultureInfo.InvariantCulture),
                 PitModeRawText = local.PitModeRaw.ToString(CultureInfo.InvariantCulture),

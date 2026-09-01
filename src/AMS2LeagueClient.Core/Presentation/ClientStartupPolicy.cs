@@ -13,13 +13,13 @@ namespace AMS2LeagueClient.Core.Presentation
 
         public bool Diagnostic { get; }
         public bool ShowStatusWindow { get; }
-        public bool ShowStatusWindowActivated => false;
+        public bool ShowStatusWindowActivated => ShowStatusWindow;
         public bool IsBackgroundStartup => !ShowStatusWindow;
 
         public static ClientStartupPolicy FromArguments(IEnumerable<string> arguments)
         {
             bool diagnostic = false;
-            bool showStatus = false;
+            bool showStatus = true;
             foreach (string argument in arguments)
             {
                 if (string.Equals(argument, "--diagnostic", StringComparison.OrdinalIgnoreCase))
@@ -30,6 +30,10 @@ namespace AMS2LeagueClient.Core.Presentation
                 else if (string.Equals(argument, "--status", StringComparison.OrdinalIgnoreCase))
                 {
                     showStatus = true;
+                }
+                else if (string.Equals(argument, "--background", StringComparison.OrdinalIgnoreCase))
+                {
+                    showStatus = false;
                 }
             }
 

@@ -11,15 +11,15 @@ namespace AMS2LeagueClient.Runtime
     {
         public static TelemetrySnapshot CreateSnapshot()
         {
-            string[] names =
+            string[] names = new string[30];
+            for (int index = 0; index < names.Length; index++)
             {
-                "김도윤", "SAFETY CAR", "이준서", "박시우", "최민재", "정현우", "강지훈", "윤서진", "한도현", "오지환",
-                "송민준", "임태윤", "조현석", "배준호", "문지후", "권성민", "ENG-IceBlasT", "마르코 보렐리", "올리 제임스", "디미트리스 보르카스",
-                "조나단 포터", "아드리안 톨레도", "티모시 크로스", "루카스 하만", "피터 홀즈", "마르셀 라이만", "안드레스 가리도", "브랜든 시몬스",
-                "필립 에거", "미론 곤차로바"
-            };
+                names[index] = "드라이버 " + (index + 1).ToString("00");
+            }
+            names[1] = "SAFETY CAR";
             var participants = new ParticipantSnapshot[names.Length];
             const int playerIndex = 16;
+            names[playerIndex] = "플레이어";
             const float playerDistance = 2500;
             for (int index = 0; index < participants.Length; index++)
             {

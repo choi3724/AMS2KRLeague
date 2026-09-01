@@ -1,0 +1,10 @@
+{
+  "schema": "ams2-phase1d3-activity-fixture-v1",
+  "scenario": "TIME_ATTACK_VALID_LAPS",
+  "snapshots": [
+    { "capturedAtUtc": "2026-09-01T01:00:00Z", "sessionState": "TimeAttack", "participants": [ { "name": "TA Driver", "position": 0, "lapsCompleted": 0, "currentLap": 1, "lastLapTime": -1, "sector1": 30, "sector2": 30, "sector3": 30, "vehicle": "Formula Ultimate", "vehicleClass": "F-Ultimate" } ] },
+    { "capturedAtUtc": "2026-09-01T01:01:30Z", "sessionState": "TimeAttack", "participants": [ { "name": "TA Driver", "position": 0, "lapsCompleted": 1, "currentLap": 2, "lastLapTime": 90, "vehicle": "Formula Ultimate", "vehicleClass": "F-Ultimate" } ] },
+    { "capturedAtUtc": "2026-09-01T01:03:02Z", "sessionState": "TimeAttack", "participants": [ { "name": "TA Driver", "position": 0, "lapsCompleted": 2, "currentLap": 3, "lastLapTime": 92, "vehicle": "Formula Ultimate", "vehicleClass": "F-Ultimate" } ] },
+    { "capturedAtUtc": "2026-09-01T01:04:31Z", "sessionState": "TimeAttack", "participants": [ { "name": "TA Driver", "position": 0, "lapsCompleted": 3, "currentLap": 4, "lastLapTime": 89, "vehicle": "Formula Ultimate", "vehicleClass": "F-Ultimate" } ] }
+  ]
+}

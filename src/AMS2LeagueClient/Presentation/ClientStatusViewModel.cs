@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -12,6 +13,13 @@ namespace AMS2LeagueClient.Presentation
         private string _processText = "AMS2 프로세스: 감지되지 않음";
         private string _sharedMemoryText = "공유 메모리: 연결되지 않음";
         private string _windowText = "게임 창: 감지되지 않음";
+        private string _serverText = "서버: 확인 중";
+        private string _accountText = "계정: 연결 안 됨";
+
+        public ClientStatusViewModel(string version = "0.2")
+        {
+            VersionText = "AMS2 League Overlay " + (string.IsNullOrWhiteSpace(version) ? "0.2" : version);
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -22,6 +30,9 @@ namespace AMS2LeagueClient.Presentation
         public string ProcessText { get => _processText; set => Set(ref _processText, value); }
         public string SharedMemoryText { get => _sharedMemoryText; set => Set(ref _sharedMemoryText, value); }
         public string WindowText { get => _windowText; set => Set(ref _windowText, value); }
+        public string ServerText { get => _serverText; set => Set(ref _serverText, value); }
+        public string AccountText { get => _accountText; set => Set(ref _accountText, value); }
+        public string VersionText { get; }
 
         public void SetWaiting()
         {
@@ -64,6 +75,24 @@ namespace AMS2LeagueClient.Presentation
             ProcessText = "AMS2 프로세스: --demo로 생략";
             SharedMemoryText = "공유 메모리: 고정 데이터 v14";
             WindowText = diagnostic ? "오버레이: 진단용 고정 데이터" : "오버레이: 기본 고정 데이터";
+        }
+
+        public void SetServerConnected(string serviceVersion)
+        {
+            string suffix = string.IsNullOrWhiteSpace(serviceVersion) ? string.Empty : " · API " + serviceVersion;
+            ServerText = "서버: 연결됨" + suffix;
+        }
+
+        public void SetServerOffline()
+        {
+            ServerText = "서버: 오프라인 · 오버레이는 계속 작동합니다";
+        }
+
+        public void SetAccount(bool paired)
+        {
+            AccountText = paired
+                ? "계정: 안전하게 연결됨"
+                : "계정: 연결 안 됨 · 개인 기록 전송은 비활성";
         }
 
         private void Set(ref string field, string value, [CallerMemberName] string? propertyName = null)

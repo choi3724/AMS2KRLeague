@@ -1,11 +1,15 @@
 <Project>
   <PropertyGroup>
-    <Version>0.1.0</Version>
-    <VersionPrefix>0.1.0</VersionPrefix>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.0</FileVersion>
-    <InformationalVersion>0.1.0</InformationalVersion>
-    <Product>AMS2 KR League Player Overlay</Product>
+    <Version>0.2.0</Version>
+    <VersionPrefix>0.2.0</VersionPrefix>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
+    <FileVersion>0.2.0.0</FileVersion>
+    <InformationalVersion>0.2</InformationalVersion>
+    <Product>AMS2 League Overlay</Product>
     <Description>Read-only Korean player overlay for Automobilista 2.</Description>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <PathMap>$(MSBuildProjectDirectory)=/_/$(MSBuildProjectName)</PathMap>
   </PropertyGroup>
 </Project>

@@ -111,7 +111,7 @@ namespace AMS2LeagueClient.Capture
                 IsExpanded = true,
                 EventId = "FIXTURE:" + towerStatus + ":" + stateLabel,
                 Title = title,
-                DriverLine = string.IsNullOrEmpty(towerStatus) ? string.Empty : "P29  ENG-IceBlasT",
+                DriverLine = string.IsNullOrEmpty(towerStatus) ? string.Empty : "P29  PLAYER",
                 Message = message,
                 StateLabel = stateLabel,
                 HistoryText = "FIXTURE 데이터 · 실제 AMS2 검출 아님",

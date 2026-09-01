@@ -81,7 +81,9 @@ namespace AMS2LeagueClient.Core.Presentation
             RaceControlEvent? item = update.ActiveEvent;
             BroadcastOverlayState displayState = update.OverlayState & ~BroadcastOverlayState.SessionTransition;
             bool stateVisible = displayState != BroadcastOverlayState.NormalRacing;
-            bool visible = item != null || update.History.Count > 0 || stateVisible;
+            // History is retained for diagnostics and for an expanded live card,
+            // but must not keep an empty compact card alive after the event ends.
+            bool visible = item != null || stateVisible;
             string accent = AccentFor(item, update.OverlayState);
             string driver = item == null || item.ParticipantIndex < 0
                 ? string.Empty

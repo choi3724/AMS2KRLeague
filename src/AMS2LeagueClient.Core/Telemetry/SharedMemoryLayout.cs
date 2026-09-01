@@ -42,16 +42,31 @@ namespace AMS2LeagueClient.Core.Telemetry
         public const int SplitTimeAhead = 6728;
         public const int SplitTimeBehind = 6732;
         public const int EventTimeRemaining = 6740;
+        public const int PersonalFastestLapTime = 6744;
+        public const int WorldFastestLapTime = 6748;
         public const int CurrentSector1Time = 6752;
         public const int CurrentSector2Time = 6756;
         public const int CurrentSector3Time = 6760;
         public const int FastestSector1Time = 6764;
         public const int FastestSector2Time = 6768;
         public const int FastestSector3Time = 6772;
+        public const int PersonalFastestSector1Time = 6776;
+        public const int PersonalFastestSector2Time = 6780;
+        public const int PersonalFastestSector3Time = 6784;
+        public const int WorldFastestSector1Time = 6788;
+        public const int WorldFastestSector2Time = 6792;
+        public const int WorldFastestSector3Time = 6796;
         public const int HighestFlagColour = 6800;
         public const int HighestFlagReason = 6804;
         public const int PitMode = 6808;
         public const int PitSchedule = 6812;
+        public const int AmbientTemperature = 7292;
+        public const int TrackTemperature = 7296;
+        public const int RainDensity = 7300;
+        public const int WindSpeed = 7304;
+        public const int WindDirectionX = 7308;
+        public const int WindDirectionY = 7312;
+        public const int CloudBrightness = 7316;
         public const int SequenceNumber = 7320;
 
         public const int CurrentSector1Times = 7408;
@@ -69,11 +84,14 @@ namespace AMS2LeagueClient.Core.Telemetry
         public const int Speeds = 10800;
         public const int CarNames = 11056;
         public const int CarClassNames = 15152;
+        public const int EnforcedPitStopLap = 19248;
         public const int PitSchedules = 19548;
         public const int HighestFlagColours = 19804;
         public const int HighestFlagReasons = 20060;
+        public const int SnowDensity = 20572;
         public const int SessionDuration = 20576;
         public const int SessionAdditionalLaps = 20580;
+        public const int SessionIsPrivate = 20692;
         public const int RequiredBytes = 20700;
 
         public static int ParticipantOffset(int index)

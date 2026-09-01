@@ -8,6 +8,7 @@
 artifacts/
 logs/
 captures/
+activity/
 
 # IDE and user-local files
 *.user
@@ -27,3 +28,4 @@ Thumbs.db
 *.secrets
 .env
 .env.*
+**/activity-connection.json

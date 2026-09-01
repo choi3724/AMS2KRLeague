@@ -1,0 +1,9 @@
+{
+  "schema": "ams2-phase1d3-activity-fixture-v1",
+  "scenario": "WEATHER_CHANGE_SEQUENCE",
+  "snapshots": [
+    { "capturedAtUtc": "2026-09-01T04:00:00Z", "sessionState": "Race", "sessionDuration": 40, "ambientTemperature": 24, "trackTemperature": 31, "rainDensity": 0, "cloudBrightness": 0.15, "participants": [ { "name": "Weather Driver", "position": 1, "lapsCompleted": 0, "currentLap": 1 } ] },
+    { "capturedAtUtc": "2026-09-01T04:00:10Z", "sessionState": "Race", "sessionDuration": 40, "ambientTemperature": 24.1, "trackTemperature": 31.1, "rainDensity": 0, "cloudBrightness": 0.16, "participants": [ { "name": "Weather Driver", "position": 1, "lapsCompleted": 0, "currentLap": 1 } ] },
+    { "capturedAtUtc": "2026-09-01T04:00:20Z", "sessionState": "Race", "sessionDuration": 40, "ambientTemperature": 23, "trackTemperature": 29, "rainDensity": 0.35, "cloudBrightness": 0.55, "participants": [ { "name": "Weather Driver", "position": 1, "lapsCompleted": 0, "currentLap": 1 } ] }
+  ]
+}

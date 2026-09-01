@@ -1,0 +1,7 @@
+{
+  "schema": "ams2-phase1d3-activity-fixture-v1",
+  "scenario": "UNRESOLVED_PARTICIPANTS",
+  "snapshots": [
+    { "capturedAtUtc": "2026-09-07T13:00:00Z", "sessionState": "Race", "viewedParticipantIndex": -1, "participants": [ { "name": "Observed Only", "position": 1, "lapsCompleted": 1, "currentLap": 2 }, { "name": "Observed Only", "position": 2, "lapsCompleted": 1, "currentLap": 2 } ] }
+  ]
+}

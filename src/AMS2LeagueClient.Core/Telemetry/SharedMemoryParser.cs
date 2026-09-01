@@ -105,7 +105,27 @@ namespace AMS2LeagueClient.Core.Telemetry
                 SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.PitMode),
                 SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.PitSchedule),
                 SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.SessionDuration),
-                SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.SessionAdditionalLaps));
+                SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.SessionAdditionalLaps),
+                SharedMemoryLayout.ReadNullTerminatedAscii(buffer, SharedMemoryLayout.CarName, SharedMemoryLayout.StringLength),
+                SharedMemoryLayout.ReadNullTerminatedAscii(buffer, SharedMemoryLayout.CarClassName, SharedMemoryLayout.StringLength),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.PersonalFastestLapTime),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WorldFastestLapTime),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.PersonalFastestSector1Time),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.PersonalFastestSector2Time),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.PersonalFastestSector3Time),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WorldFastestSector1Time),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WorldFastestSector2Time),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WorldFastestSector3Time),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.AmbientTemperature),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.TrackTemperature),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.RainDensity),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WindSpeed),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WindDirectionX),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WindDirectionY),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.CloudBrightness),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.SnowDensity),
+                SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.EnforcedPitStopLap),
+                buffer[SharedMemoryLayout.SessionIsPrivate] != 0);
 
             return TelemetryReadResult.Success(snapshot, sequenceRetries);
         }

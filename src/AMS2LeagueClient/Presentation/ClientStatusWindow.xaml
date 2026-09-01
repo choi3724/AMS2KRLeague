@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:AMS2LeagueClient.Presentation"
-        Title="AMS2 League Player Overlay PoC"
-        Width="920" Height="570"
-        MinWidth="820" MinHeight="520"
-        ShowActivated="False"
+        Title="{Binding VersionText}"
+        Width="920" Height="650"
+        MinWidth="820" MinHeight="600"
+        ShowActivated="True"
         WindowStartupLocation="CenterScreen"
         Background="#07101A">
     <Grid>
@@ -16,7 +16,7 @@
             </RadialGradientBrush>
         </Grid.Background>
         <local:ClientStatusView HorizontalAlignment="Center" VerticalAlignment="Center" />
-        <TextBlock Text="Close this window to exit the client. Overlay windows never accept input."
+        <TextBlock Text="이 창을 닫으면 오버레이가 종료됩니다. 최소화한 상태에서도 계속 작동합니다."
                    Foreground="#61758B" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18" />
     </Grid>
 </Window>
