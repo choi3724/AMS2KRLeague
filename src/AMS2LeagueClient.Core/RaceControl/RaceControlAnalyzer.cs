@@ -214,7 +214,7 @@ namespace AMS2LeagueClient.Core.RaceControl
             }
             else if (current == FlagColour.DoubleYellow)
             {
-                item = GlobalEvent(RaceControlEventType.DoubleYellow, RaceControlPriority.Penalty, now, "더블 옐로", "감속 주의", snapshot, current.Value);
+                item = GlobalEvent(RaceControlEventType.DoubleYellow, RaceControlPriority.Penalty, now, "전 코스 황색기", "감속 주의", snapshot, current.Value);
             }
             else if (current == FlagColour.Red)
             {

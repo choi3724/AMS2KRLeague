@@ -6,6 +6,7 @@
 
 - 한국어 첫 실행 상태창에서 AMS2, Shared Memory, 서버, 계정 상태 확인
 - Timing Tower, 앞차/뒤차, 세션 카드, Race Control, 동적 이벤트 및 멀티플레이어 대기 화면 제공
+- AMS2 `DoubleYellow` 상태를 사용자 화면에서 `전 코스 황색기`로 표시
 - 로그와 개인 활동 기록을 `%LOCALAPPDATA%\AMS2KRLeague`에 저장
 - Player 연결 자격을 평문 JSON이 아닌 Windows DPAPI CurrentUser로 보호
 - 0.1.x 평문 자격은 보호 저장소로 이전하며, 과거 Canary/명시적 사용자 식별 설정은 자동 신뢰하지 않고 재연결 요구

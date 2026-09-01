@@ -121,7 +121,7 @@ namespace AMS2LeagueClient.Core.Presentation
         private static string StateTextFor(BroadcastOverlayState state)
         {
             if ((state & BroadcastOverlayState.RedFlag) != 0) return "적색기";
-            if ((state & BroadcastOverlayState.DoubleYellow) != 0) return "더블 옐로";
+            if ((state & BroadcastOverlayState.DoubleYellow) != 0) return "전 코스 황색기";
             if ((state & BroadcastOverlayState.Yellow) != 0) return "황색기";
             if ((state & BroadcastOverlayState.Chequered) != 0) return "FINAL";
             if ((state & BroadcastOverlayState.FinalLap) != 0) return "마지막 랩";

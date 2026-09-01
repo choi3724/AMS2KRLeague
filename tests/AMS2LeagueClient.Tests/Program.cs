@@ -24,6 +24,7 @@ namespace AMS2LeagueClient.Tests
                 ("Official v14 pit, snow and privacy metadata parses", SessionActivityMetadataParses),
                 ("RaceControl history alone stays hidden", RaceControlHistoryAloneHidden),
                 ("RaceControl state-only card fits", RaceControlStateOnlyCardFits),
+                ("Double yellow uses full-course Korean label", DoubleYellowUsesFullCourseKoreanLabel),
                 ("RaceControl clears AMS2 top-center alert", RaceControlLeftAuxiliaryPlacement),
                 ("Multiplayer menu shows waiting overlay", MultiplayerMenuShowsWaitingOverlay),
                 ("Multiplayer qualify-end transition shows waiting", MultiplayerQualifyEndShowsWaitingOverlay),
@@ -176,6 +177,19 @@ namespace AMS2LeagueClient.Tests
             AssertEqual("황색기", view.StateLabel);
             AssertTrue(AuxiliaryOverlayLayoutMetrics.RaceControlCompactHeight >= 80);
             AssertTrue(AuxiliaryOverlayLayoutMetrics.RaceControlExpandedHeight > AuxiliaryOverlayLayoutMetrics.RaceControlCompactHeight);
+        }
+
+        private static void DoubleYellowUsesFullCourseKoreanLabel()
+        {
+            var analyzer = new RaceControlAnalyzer(EvidenceKind.Fixture);
+            DateTimeOffset t = FixedTime();
+            ObserveControl(analyzer, new RawFixtureBuilder(), t);
+            var doubleYellow = new RawFixtureBuilder().SetRootControl(FlagColour.DoubleYellow);
+            RaceControlUpdate active = ObserveControl(analyzer, doubleYellow, t.AddSeconds(1));
+            AssertEqual("전 코스 황색기", active.ActiveEvent?.Title);
+
+            RaceControlUpdate persistent = ObserveControl(analyzer, doubleYellow, t.AddSeconds(7));
+            AssertEqual("전 코스 황색기", RaceControlViewModel.FromUpdate(persistent).StateLabel);
         }
 
         private static void RaceControlLeftAuxiliaryPlacement()
