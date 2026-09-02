@@ -24,7 +24,7 @@ AMS2 League Overlay 0.2.3-beta.1 Closed Beta
 - Player가 전송하는 기록과 Session Witness는 Evidence이며 공식 승인이 아닙니다.
 - 공식 리그 기록 확정은 서버 관리자만 수행할 수 있습니다.
 - AMS2 Shared Memory에는 권위 있는 멀티플레이어 여부 값이 없어 둘 이상의 관측 참가자를 수집 자격으로 사용합니다.
-- 이 버전은 실제 멀티플레이어, 장시간 Race와 Incident 수집을 검증하는 Pre-release입니다.
+- 이 버전은 실제 멀티플레이어, 장시간 Race와 Incident 수집을 검증하는 Closed Beta이며 GitHub Latest로 배포됩니다.
 - private Driver telemetry는 로컬에만 보존되며 사용자 차량 소유권을 증명할 수 있기 전에는 서버로 전송하지 않습니다.
 - 코드 서명 인증서가 없어 Windows SmartScreen 경고가 표시될 수 있습니다.
 

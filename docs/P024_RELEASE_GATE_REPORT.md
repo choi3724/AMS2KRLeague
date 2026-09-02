@@ -6,14 +6,14 @@
 |---|---|
 | **FINAL VERDICT** | **YELLOW** |
 | **STABLE RELEASE** | **HOLD** |
-| **CLOSED BETA EXCEPTION** | **GO — explicit operator authorization, `0.2.3-beta.1` Pre-release only** |
+| **CLOSED BETA EXCEPTION** | **GO — explicit operator authorization, `0.2.3-beta.1` GitHub Latest** |
 | product size gate | **GREEN — `465,279 B <= 512 KiB`** |
 | synthetic fidelity | **GREEN — 11/11 and fidelity PASS** |
 | stable baseline | `0.2.2` (unchanged) |
 | Closed Beta candidate | `0.2.3-beta.1` |
 | local Server candidate | Application `1.6.0`, schema `15` |
 | Cafe24 beta-compatible production | Application `1.6.0`, schema `15`, release `20260902-001` |
-| commit / push / tag / GitHub Release | authorized for Pre-release only |
+| commit / push / tag / GitHub Release | published as GitHub Latest under the unified release policy |
 | Cafe24 deployment | authorized for schema-15 beta compatibility with backup, dry-run and rollback |
 
 ## Required final report snapshot

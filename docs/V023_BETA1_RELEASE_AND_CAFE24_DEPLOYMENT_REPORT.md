@@ -8,7 +8,7 @@
 - 안정 기준선: `v0.2.2` 유지
 - Server: Application `1.6.0`, schema `15`, Cafe24 release `20260902-001`
 - 안정판 P024 판정: `YELLOW / HOLD` 유지
-- Closed Beta: 명시적 운영자 승인에 따른 `GO`, GitHub `Pre-release`만 허용
+- Closed Beta: 명시적 운영자 승인에 따른 `GO`; 이후 통합 배포 정책에 따라 GitHub `Latest Release`로 전환
 
 ## 릴리즈 직전 전체 검증
 

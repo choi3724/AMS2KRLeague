@@ -1,6 +1,6 @@
 # AMS2 League Overlay 0.2.3-beta.1 — Closed Beta
 
-> 이 릴리스는 **Pre-release**입니다. 안정 기준선 `v0.2.2`는 그대로 유지됩니다.
+> 이 버전은 기능상 **Closed Beta**이지만 GitHub 배포 정책에 따라 `Latest Release`로 게시됩니다. 안정 기준선 태그 `v0.2.2`는 그대로 유지됩니다.
 
 P024 Compact Telemetry 후보를 실제 멀티플레이어, 장시간 주행, 사고(Incident) 상황에서 검증하기 위한 클로즈 베타입니다. 일반 사용자용 안정판 승격이 아니라, 실제 환경의 수집 완전성·손실·서버 저장 계약을 확인하기 위한 제한 배포입니다.
 

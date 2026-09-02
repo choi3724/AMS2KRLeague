@@ -12,7 +12,7 @@
 - P024 Compact Telemetry 실제 검증용 Closed Beta: `0.2.3-beta.1`
 - 안정판 호환성을 보장하기 시작하는 시점: `1.0.0`
 
-Git tag와 GitHub Release에는 `v` 접두사를 붙입니다. `v0.2.3-beta.1`은 반드시 GitHub Pre-release로만 배포하고, 안정 기준선 태그 `v0.2.2`는 수정하거나 이동하지 않습니다.
+Git tag와 GitHub Release에는 `v` 접두사를 붙입니다. 버전 문자열에 beta/rc 접미사가 있더라도 GitHub에서는 별도 Pre-release로 분리하지 않고, 새로 게시한 모든 릴리스를 항상 `Latest`로 지정합니다. 안정 기준선 태그 `v0.2.2` 자체는 수정하거나 이동하지 않습니다.
 
 버전을 올릴 때 다음 항목을 함께 변경합니다.
 
@@ -21,3 +21,5 @@ Git tag와 GitHub Release에는 `v` 접두사를 붙입니다. `v0.2.3-beta.1`�
 3. `CHANGELOG.md`
 4. `scripts/build-release.ps1`의 기본 버전과 CI artifact 이름
 5. Git tag와 GitHub Release
+
+게시할 때는 `scripts/publish-github-release.ps1`을 사용합니다. 이 스크립트는 beta/rc 접미사와 관계없이 `--latest`를 적용하고 GitHub Pre-release 플래그를 사용하지 않습니다.

@@ -30,7 +30,7 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 ## 실행 방법
 
-1. [Releases](https://github.com/choi3724/AMS2KRLeague/releases)에서 Closed Beta Pre-release의 `AMS2-League-Overlay-0.2.3-beta.1-Setup.exe`를 받습니다.
+1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 Closed Beta `AMS2-League-Overlay-0.2.3-beta.1-Setup.exe`를 받습니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
