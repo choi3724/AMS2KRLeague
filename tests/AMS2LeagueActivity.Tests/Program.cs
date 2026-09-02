@@ -13,6 +13,9 @@ namespace AMS2LeagueActivity.Tests
                 .Concat(UploadQueueTests.Cases())
                 .Concat(PayloadContractTests.Cases())
                 .Concat(SessionWitnessTests.Cases())
+                .Concat(FutureTelemetryArchiveTests.Cases())
+                .Concat(FutureTelemetryRuntimeAdapterTests.Cases())
+                .Concat(CompactTelemetryCodecTests.Cases())
                 .ToArray();
             int passed = 0;
             int failed = 0;

@@ -1,0 +1,5 @@
+{
+  "scenario": "LOCAL_TELEMETRY_BRAKING",
+  "sourceRateHz": 20,
+  "channels": ["speedMetersPerSecond", "brake", "unfilteredBrake", "lapDistanceMeters"]
+}

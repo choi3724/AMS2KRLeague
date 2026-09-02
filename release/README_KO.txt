@@ -1,5 +1,5 @@
-AMS2 League Overlay 0.2.2
-=======================
+AMS2 League Overlay 0.2.3-beta.1 Closed Beta
+============================================
 
 빠른 시작
 1. AMS2 옵션 → 시스템 → 공유 메모리에서 Project CARS 2를 선택합니다.
@@ -17,11 +17,15 @@ AMS2 League Overlay 0.2.2
 - 개인 General Race 및 Time Attack 기록의 로컬 저장
 - 로그인 없는 설치별 자동 등록 및 DPAPI 보호 전송
 - 전체 참가자 Session Witness의 불변 저장과 오프라인 자동 재전송
+- P024 Compact Telemetry의 public Replay/Race Story/Incident 원본 로컬 저장과 자동 재전송
+- attempt 종료 시 Loss Ledger 및 최종 ACK 보존
 
 현재 제한
 - Player가 전송하는 기록과 Session Witness는 Evidence이며 공식 승인이 아닙니다.
 - 공식 리그 기록 확정은 서버 관리자만 수행할 수 있습니다.
 - AMS2 Shared Memory에는 권위 있는 멀티플레이어 여부 값이 없어 둘 이상의 관측 참가자를 수집 자격으로 사용합니다.
+- 이 버전은 실제 멀티플레이어, 장시간 Race와 Incident 수집을 검증하는 Pre-release입니다.
+- private Driver telemetry는 로컬에만 보존되며 사용자 차량 소유권을 증명할 수 있기 전에는 서버로 전송하지 않습니다.
 - 코드 서명 인증서가 없어 Windows SmartScreen 경고가 표시될 수 있습니다.
 
 데이터 위치

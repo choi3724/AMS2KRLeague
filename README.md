@@ -2,7 +2,9 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-현재 버전 및 최신 공개 릴리스: **0.2.2**
+현재 Closed Beta: **0.2.3-beta.1**
+
+안정 기준선: **0.2.2**
 
 ## 주요 기능
 
@@ -23,15 +25,17 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 - 멀티 참가 세션의 전체 관측 결과를 불변 Session Witness로 저장·재전송
 - 3440×1440을 포함한 다중 해상도 대응
 - 게임 창에 입력을 가로채지 않는 click-through overlay
+- P024 고정 Schema A2CT Compact Telemetry의 로컬 durable archive와 public replay 업로드
+- 종료 시 Loss Ledger와 Attempt Finalize를 순서대로 보존하는 capture completeness 계약
 
 ## 실행 방법
 
-1. [Releases](https://github.com/choi3724/AMS2KRLeague/releases)에서 `AMS2-League-Overlay-0.2.2-Setup.exe`를 받습니다.
+1. [Releases](https://github.com/choi3724/AMS2KRLeague/releases)에서 Closed Beta Pre-release의 `AMS2-League-Overlay-0.2.3-beta.1-Setup.exe`를 받습니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
 
-설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.2.2-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
+설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.2.3-beta.1-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
 
 게임이 실행되지 않았거나 Shared Memory를 사용할 수 없으면 오버레이는 대기 상태로 유지됩니다. 프로그램은 게임 설정, 실행 파일, 저장 파일을 자동 변경하지 않습니다.
 
@@ -97,7 +101,7 @@ dotnet run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.c
 
 ## 버전 정책
 
-첫 공개 버전은 `0.1.0`, 현재 Player Client 제품 버전은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
+첫 공개 버전은 `0.1.0`, 현재 Closed Beta는 `0.2.3-beta.1`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
 
 ## 현재 제한사항
 
@@ -108,3 +112,4 @@ dotnet run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.c
 - Shared Memory v14에는 권위 있는 멀티플레이어 여부 필드가 없어 현재 Witness 수집 자격은 관련 세션에서 둘 이상의 참가자가 관측되었는지로 판단합니다. 이 값은 온라인 또는 공식 경기라는 주장으로 사용하지 않습니다.
 - 코드 서명 인증서가 없어 Windows SmartScreen 경고가 표시될 수 있습니다.
 - 서버의 운영·저장·승인 로직과 Host 경기 결과 수집은 이 사용자용 저장소 범위에 포함하지 않습니다.
+- Closed Beta Compact Telemetry는 실제 멀티플레이어·장시간·Incident 검증 중이며, private Driver stream은 authoritative owner attestation이 없어 서버 업로드가 차단됩니다.

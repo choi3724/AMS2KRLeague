@@ -1,0 +1,8 @@
+{
+  "scenario": "60MIN_32CAR_REPLAY",
+  "durationMs": 3600000,
+  "participants": 32,
+  "sourceRateHz": 20,
+  "expectedReplayRateHz": 5,
+  "generated": true
+}

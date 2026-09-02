@@ -14,12 +14,18 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Read release version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content -Raw -LiteralPath .\Directory.Build.props
+          "display=$($props.Project.PropertyGroup.InformationalVersion)" >> $env:GITHUB_OUTPUT
       - name: Build, test, and package
         shell: pwsh
         run: .\scripts\build-release.ps1
       - name: Upload release candidate
         uses: actions/upload-artifact@v4
         with:
-          name: AMS2-League-Overlay-0.2.1-win-x64
-          path: .\artifacts\AMS2-League-Overlay-0.2.1-win-x64.zip
+          name: AMS2-League-Overlay-${{ steps.version.outputs.display }}-win-x64
+          path: .\artifacts\AMS2-League-Overlay-${{ steps.version.outputs.display }}-win-x64.zip
           if-no-files-found: error

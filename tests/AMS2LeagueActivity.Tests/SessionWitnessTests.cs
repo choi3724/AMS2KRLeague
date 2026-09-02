@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
+using AMS2LeagueClient.Core.FutureTelemetry;
 using AMS2LeagueClient.Core.SessionWitness;
 using AMS2LeagueClient.Core.Telemetry;
 
@@ -21,6 +22,10 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Witness timeline is event driven and bounded", TimelineIsEventDrivenAndBounded);
             yield return new TestCase("Witness survives offline queue restart", WitnessSurvivesOfflineQueueRestart);
             yield return new TestCase("Witness store is immutable and quarantines conflict", WitnessStoreIsImmutable);
+            yield return new TestCase("Legacy witness payload omits archive identity", LegacyPayloadOmitsArchiveIdentity);
+            yield return new TestCase("Witness and all five telemetry streams share archive identity", ArchiveIdentityJoinsWitnessAndAllStreams);
+            yield return new TestCase("Witness restart advances only the archive attempt", ArchiveRestartAdvancesAttempt);
+            yield return new TestCase("Witness rejects archive identity changes during capture", ArchiveIdentityChangeFailsClosed);
         }
 
         private static void SingleWitnessIsRetained()
@@ -159,6 +164,125 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal("FULL_SESSION", manifest.RootElement.GetProperty("captureCompleteness").GetString());
         }
 
+        private static void LegacyPayloadOmitsArchiveIdentity()
+        {
+            SessionWitnessRecord witness = CaptureFinished("install-legacy-shape", TimeSpan.Zero);
+            byte[] payload = SessionWitnessUploadPayloadBuilder.Build(witness);
+            using JsonDocument document = JsonDocument.Parse(payload);
+
+            AssertEx.False(document.RootElement.TryGetProperty("captureSessionId", out _));
+            AssertEx.False(document.RootElement.TryGetProperty("attemptId", out _));
+            AssertEx.False(document.RootElement.TryGetProperty("attemptNumber", out _));
+            string expectedKey = "witness:" + SessionWitnessUploadPayloadBuilder.Sha256Hex(
+                System.Text.Encoding.UTF8.GetBytes(witness.WitnessId));
+            AssertEx.Equal(expectedKey, SessionWitnessUploadPayloadBuilder.CreateIdempotencyKey(witness));
+
+            using var scope = new TemporaryDirectory("witness-legacy-storage-shape");
+            SessionWitnessStoreOutcome stored = new SessionWitnessStore(scope.Root).Commit(witness, payload);
+            AssertEx.Equal(witness.WitnessId, Path.GetFileName(stored.WitnessPath));
+        }
+
+        private static void ArchiveIdentityJoinsWitnessAndAllStreams()
+        {
+            TelemetryArchiveIdentity identity = FixedArchiveIdentity("join", 1);
+            var engine = new SessionWitnessCaptureEngine("install-archive-join", "0.2.2");
+            engine.BeginArchiveIdentity(identity);
+            // Repeating the exact binding is deliberately idempotent.
+            engine.BeginArchiveIdentity(FixedArchiveIdentity("join", 1));
+            DateTimeOffset start = FixedTime();
+            engine.Observe(Snapshot(start, 0, RaceState.NotStarted, 0, 0));
+            engine.Observe(Snapshot(start.AddSeconds(2), 1, RaceState.Racing, 1, 2));
+            SessionWitnessRecord witness = Required(
+                engine.Close(start.AddSeconds(3), "TEST_END").FinalizedWitness);
+
+            AssertArchiveIdentity(identity, witness);
+            foreach (TelemetryStreamType stream in Enum.GetValues<TelemetryStreamType>())
+            {
+                var chunk = new TelemetryChunkEnvelope
+                {
+                    StreamType = stream,
+                    SessionId = identity.SessionId,
+                    SessionFingerprint = identity.SessionFingerprint,
+                    WitnessId = identity.WitnessId,
+                    AttemptId = identity.AttemptId,
+                    AttemptNumber = identity.AttemptNumber
+                };
+                AssertEx.Equal(witness.CaptureSessionId, chunk.SessionId);
+                AssertEx.Equal(witness.SessionFingerprint, chunk.SessionFingerprint);
+                AssertEx.Equal(witness.WitnessId, chunk.WitnessId);
+                AssertEx.Equal(witness.AttemptId, chunk.AttemptId);
+                AssertEx.Equal(witness.AttemptNumber, (int?)chunk.AttemptNumber);
+            }
+
+            using JsonDocument document = JsonDocument.Parse(SessionWitnessUploadPayloadBuilder.Build(witness));
+            AssertEx.Equal(identity.SessionId, document.RootElement.GetProperty("captureSessionId").GetString());
+            AssertEx.Equal(identity.AttemptId, document.RootElement.GetProperty("attemptId").GetString());
+            AssertEx.Equal(identity.AttemptNumber, document.RootElement.GetProperty("attemptNumber").GetInt32());
+            AssertEx.Null(engine.CurrentArchiveIdentity);
+        }
+
+        private static void ArchiveRestartAdvancesAttempt()
+        {
+            TelemetryArchiveIdentity firstIdentity = FixedArchiveIdentity("restart", 1);
+            var engine = new SessionWitnessCaptureEngine("install-archive-restart", "0.2.2");
+            engine.BeginArchiveIdentity(firstIdentity);
+            DateTimeOffset start = FixedTime();
+            engine.Observe(Snapshot(start, 0, RaceState.Racing, 2, 1));
+            SessionWitnessRecord first = Required(
+                engine.Observe(Snapshot(start.AddSeconds(20), 0, RaceState.NotStarted, 0, 1)).FinalizedWitness);
+
+            TelemetryArchiveIdentity secondIdentity = engine.CurrentArchiveIdentity
+                ?? throw new InvalidOperationException("Restart did not reserve the next archive attempt.");
+            AssertArchiveIdentity(firstIdentity, first);
+            AssertEx.Equal(firstIdentity.SessionId, secondIdentity.SessionId);
+            AssertEx.Equal(firstIdentity.SessionFingerprint, secondIdentity.SessionFingerprint);
+            AssertEx.Equal(firstIdentity.WitnessId, secondIdentity.WitnessId);
+            AssertEx.NotEqual(firstIdentity.AttemptId, secondIdentity.AttemptId);
+            AssertEx.Equal(2, secondIdentity.AttemptNumber);
+
+            engine.Observe(Snapshot(start.AddSeconds(21), 1, RaceState.NotStarted, 0, 1));
+            engine.Observe(Snapshot(start.AddSeconds(25), 2, RaceState.Finished, 2, 2));
+            SessionWitnessRecord second = Required(
+                engine.Close(start.AddSeconds(27), "TEST_END").FinalizedWitness);
+            AssertArchiveIdentity(secondIdentity, second);
+            AssertEx.Null(engine.CurrentArchiveIdentity);
+
+            byte[] firstPayload = SessionWitnessUploadPayloadBuilder.Build(first);
+            byte[] secondPayload = SessionWitnessUploadPayloadBuilder.Build(second);
+            AssertEx.NotEqual(
+                SessionWitnessUploadPayloadBuilder.CreateIdempotencyKey(first),
+                SessionWitnessUploadPayloadBuilder.CreateIdempotencyKey(second));
+            using var scope = new TemporaryDirectory("witness-archive-restart-storage");
+            var store = new SessionWitnessStore(scope.Root);
+            SessionWitnessStoreOutcome firstStored = store.Commit(first, firstPayload);
+            SessionWitnessStoreOutcome secondStored = store.Commit(second, secondPayload);
+            AssertEx.Equal(SessionWitnessStoreDisposition.Stored, firstStored.Disposition);
+            AssertEx.Equal(SessionWitnessStoreDisposition.Stored, secondStored.Disposition);
+            AssertEx.NotEqual(firstStored.WitnessPath, secondStored.WitnessPath);
+        }
+
+        private static void ArchiveIdentityChangeFailsClosed()
+        {
+            TelemetryArchiveIdentity identity = FixedArchiveIdentity("locked", 1);
+            var engine = new SessionWitnessCaptureEngine("install-archive-locked", "0.2.2");
+            engine.BeginArchiveIdentity(identity);
+            engine.Observe(Snapshot(FixedTime(), 0, RaceState.Racing, 1, 1));
+
+            bool rejected = false;
+            try
+            {
+                engine.BeginArchiveIdentity(FixedArchiveIdentity("different", 1));
+            }
+            catch (InvalidOperationException)
+            {
+                rejected = true;
+            }
+            AssertEx.True(rejected, "A mid-session archive identity change was accepted.");
+            TelemetryArchiveIdentity current = engine.CurrentArchiveIdentity
+                ?? throw new InvalidOperationException("The original archive identity was lost.");
+            AssertEx.Equal(identity.AttemptId, current.AttemptId);
+        }
+
         private static SessionWitnessRecord CaptureFinished(string installationId, TimeSpan clockOffset)
         {
             var engine = new SessionWitnessCaptureEngine(installationId, "0.2.1");
@@ -218,6 +342,27 @@ namespace AMS2LeagueActivity.Tests
 
         private static SessionWitnessRecord Required(SessionWitnessRecord? witness)
             => witness ?? throw new InvalidOperationException("A finalized session witness was expected.");
+
+        private static TelemetryArchiveIdentity FixedArchiveIdentity(string suffix, int attemptNumber)
+            => new TelemetryArchiveIdentity
+            {
+                SessionId = "capture-session-" + suffix,
+                SessionFingerprint = "session-fingerprint-" + suffix,
+                WitnessId = "witness-shared-" + suffix,
+                AttemptId = "attempt-" + attemptNumber + "-" + suffix,
+                AttemptNumber = attemptNumber
+            };
+
+        private static void AssertArchiveIdentity(
+            TelemetryArchiveIdentity expected,
+            SessionWitnessRecord actual)
+        {
+            AssertEx.Equal(expected.SessionId, actual.CaptureSessionId);
+            AssertEx.Equal(expected.SessionFingerprint, actual.SessionFingerprint);
+            AssertEx.Equal(expected.WitnessId, actual.WitnessId);
+            AssertEx.Equal(expected.AttemptId, actual.AttemptId);
+            AssertEx.Equal((int?)expected.AttemptNumber, actual.AttemptNumber);
+        }
 
         private static DateTimeOffset FixedTime()
             => new DateTimeOffset(2026, 9, 1, 10, 0, 0, TimeSpan.Zero);

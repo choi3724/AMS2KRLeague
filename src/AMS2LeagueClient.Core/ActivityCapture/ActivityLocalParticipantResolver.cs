@@ -27,9 +27,12 @@ namespace AMS2LeagueClient.Core.ActivityCapture
     }
 
     /// <summary>
-    /// Resolves the viewed player for activity recording without applying HUD
-    /// classification rules. In particular, Time Attack can legitimately expose
-    /// race position zero while still providing an active local participant.
+    /// Resolves the active viewed participant for activity recording without
+    /// applying HUD classification rules. This is not authoritative proof that
+    /// the viewed participant belongs to the local installation: SHM v14 exposes
+    /// no local-owner or spectator flag. Callers handling private data must apply
+    /// a separate ownership/fail-closed policy. Time Attack can legitimately
+    /// expose race position zero while still providing an active participant.
     /// </summary>
     public sealed class ActivityLocalParticipantResolver
     {

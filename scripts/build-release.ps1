@@ -1,9 +1,9 @@
 param(
     [string]$DotnetExecutable = 'dotnet',
-    [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version = '0.2.2',
-    [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$DisplayVersion = '0.2.2',
+    [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$')]
+    [string]$Version = '0.2.3-beta.1',
+    [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$')]
+    [string]$DisplayVersion = '0.2.3-beta.1',
     [string]$IsccExecutable = ''
 )
 
@@ -23,6 +23,7 @@ $auditScript = Join-Path $PSScriptRoot 'Test-PublicPackage.ps1'
 $versionProps = [xml](Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'Directory.Build.props'))
 $declaredVersion = [string]$versionProps.Project.PropertyGroup.Version
 $declaredDisplayVersion = [string]$versionProps.Project.PropertyGroup.InformationalVersion
+$numericVersion = ($Version -split '-', 2)[0]
 
 if ($declaredVersion -ne $Version) {
     throw "Requested release version $Version does not match Directory.Build.props version $declaredVersion."
@@ -114,12 +115,14 @@ $manifestAssets = foreach ($asset in $assets) {
 $manifest = [ordered]@{
     product = 'AMS2 League Overlay'
     version = $DisplayVersion
-    fileVersion = "$Version.0"
+    fileVersion = "$numericVersion.0"
+    releaseChannel = $(if ($DisplayVersion.Contains('-')) { 'closed-beta' } else { 'stable' })
+    prerelease = $DisplayVersion.Contains('-')
     platform = 'windows'
     architecture = 'win-x64'
     selfContained = $true
     minimumOs = 'Windows 10'
-    serverApiCompatibility = '>=1.4.0 for anonymous enrollment and distributed witness'
+    serverApiCompatibility = '>=1.6.0/schema15 for compact telemetry; >=1.4.0 for legacy activity and distributed witness'
     assets = $manifestAssets
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM

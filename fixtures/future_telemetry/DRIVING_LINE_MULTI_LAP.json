@@ -1,0 +1,5 @@
+{
+  "scenario": "DRIVING_LINE_MULTI_LAP",
+  "laps": 3,
+  "channels": ["lap", "lapDistanceMeters", "worldX", "worldY", "worldZ", "lapValid"]
+}

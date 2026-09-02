@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using AMS2LeagueClient.Core.ActivityCapture;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
 using AMS2LeagueClient.Core.Diagnostics;
+using AMS2LeagueClient.Core.FutureTelemetry;
 using AMS2LeagueClient.Core.SessionWitness;
 using AMS2LeagueClient.Core.Telemetry;
 
@@ -23,11 +24,14 @@ namespace AMS2LeagueClient.Runtime
         private readonly object _engineGate = new object();
         private readonly ActivityCaptureEngine _engine;
         private readonly SessionWitnessCaptureEngine _witnessEngine;
+        private readonly FutureTelemetryCaptureRuntime _futureTelemetry;
         private readonly ActivityLocalParticipantResolver _localResolver = new ActivityLocalParticipantResolver();
         private readonly ActivityRecordStore _recordStore;
         private readonly SessionWitnessStore _witnessStore;
         private readonly ActivityUploadQueue _uploadQueue;
+        private readonly TelemetryChunkUploadQueue _telemetryUploadQueue;
         private readonly ActivityUploadWorker? _uploadWorker;
+        private readonly TelemetryChunkUploadWorker? _telemetryUploadWorker;
         private readonly IDisposable? _uploadTransportDisposable;
         private readonly FileLogger _logger;
         private readonly Channel<ActivityCaptureUpdate> _persistChannel;
@@ -50,6 +54,17 @@ namespace AMS2LeagueClient.Runtime
             string root = Path.GetFullPath(dataRoot);
             _engine = new ActivityCaptureEngine(installationId, clientVersion);
             _witnessEngine = new SessionWitnessCaptureEngine(installationId, clientVersion);
+            _futureTelemetry = new FutureTelemetryCaptureRuntime(
+                Path.Combine(root, "future-telemetry"),
+                installationId,
+                clientVersion,
+                options: new TelemetryArchiveOptions
+                {
+                    ChunkDurationMs = 300_000
+                },
+                archiveFormat: TelemetryArchiveFormat.COMPACT_A2CT_V1);
+            _futureTelemetry.IdentityStarted += BindWitnessArchiveIdentity;
+            _telemetryUploadQueue = new TelemetryChunkUploadQueue(_futureTelemetry.ArchiveRoot);
             _recordStore = new ActivityRecordStore(root);
             _witnessStore = new SessionWitnessStore(Path.Combine(root, "witness"));
             _uploadQueue = new ActivityUploadQueue(Path.Combine(root, "upload-queue"));
@@ -81,14 +96,38 @@ namespace AMS2LeagueClient.Runtime
             {
                 _uploadTransportDisposable = uploadTransport as IDisposable;
                 _uploadWorker = new ActivityUploadWorker(_uploadQueue, uploadTransport);
+                if (uploadTransport is ITelemetryChunkUploadTransport telemetryTransport)
+                {
+                    _telemetryUploadWorker = new TelemetryChunkUploadWorker(
+                        _telemetryUploadQueue,
+                        telemetryTransport);
+                }
+                else
+                {
+                    _logger.Warning(
+                        "FUTURE_TELEMETRY_UPLOAD_DISABLED",
+                        "reason=TRANSPORT_NOT_SUPPORTED archive=" + _telemetryUploadQueue.Root);
+                }
             }
             _recordTask = Task.Run(PersistLoopAsync);
             _witnessTask = Task.Run(PersistWitnessLoopAsync);
-            if (_uploadWorker != null)
+            if (_uploadWorker != null || _telemetryUploadWorker != null)
             {
                 _uploadTask = Task.Run(() => UploadLoopAsync(_uploadCancellation.Token));
             }
         }
+
+        /// <summary>
+        /// The common identity is available at capture start so SessionWitness can
+        /// reuse these exact IDs. Consumers must not create a second witness ID.
+        /// </summary>
+        public event Action<TelemetryArchiveIdentity> TelemetryIdentityStarted
+        {
+            add => _futureTelemetry.IdentityStarted += value;
+            remove => _futureTelemetry.IdentityStarted -= value;
+        }
+
+        public TelemetryArchiveIdentity? CurrentTelemetryIdentity => _futureTelemetry.CurrentIdentity;
 
         public void SetScheduledEvent(ScheduledLeagueEvent? scheduledEvent)
         {
@@ -97,6 +136,7 @@ namespace AMS2LeagueClient.Runtime
                 if (_disposed) return;
                 _engine.SetScheduledEvent(scheduledEvent);
                 _witnessEngine.SetScheduledEvent(scheduledEvent);
+                _futureTelemetry.SetScheduledEventHint(scheduledEvent?.EventId);
             }
         }
 
@@ -107,8 +147,10 @@ namespace AMS2LeagueClient.Runtime
             {
                 if (_disposed) return;
                 ActivityLocalParticipantResolution local = _localResolver.Resolve(snapshot);
+                _futureTelemetry.Observe(snapshot);
                 Handle(_engine.Observe(snapshot, local.IsValid ? local.Participant : null));
                 HandleWitness(_witnessEngine.Observe(snapshot));
+                ReconcileWitnessArchiveIdentity(snapshot.CapturedAt);
             }
         }
 
@@ -117,6 +159,7 @@ namespace AMS2LeagueClient.Runtime
             lock (_engineGate)
             {
                 if (_disposed) return;
+                _futureTelemetry.GameDetached();
                 Handle(_engine.Close(DateTimeOffset.UtcNow, "GAME_DETACHED"));
                 HandleWitness(_witnessEngine.Close(DateTimeOffset.UtcNow, "GAME_DETACHED"));
             }
@@ -129,6 +172,7 @@ namespace AMS2LeagueClient.Runtime
                 if (_disposed) return;
                 Handle(_engine.Close(DateTimeOffset.UtcNow, "CLIENT_STOP"));
                 HandleWitness(_witnessEngine.Close(DateTimeOffset.UtcNow, "CLIENT_STOP"));
+                _futureTelemetry.GameDetached();
                 _disposed = true;
                 _persistChannel.Writer.TryComplete();
                 _witnessChannel.Writer.TryComplete();
@@ -143,24 +187,48 @@ namespace AMS2LeagueClient.Runtime
             }
             finally
             {
-                _uploadCancellation.Cancel();
                 try
                 {
-                    if (_uploadTask != null)
+                    try
                     {
-                        try
-                        {
-                            _uploadTask.GetAwaiter().GetResult();
-                        }
-                        catch (OperationCanceledException)
-                        {
-                        }
+                        _futureTelemetry.IdentityStarted -= BindWitnessArchiveIdentity;
+                        _futureTelemetry.Dispose();
+                        FutureTelemetryCaptureRuntimeCounters telemetryCounters = _futureTelemetry.Counters;
+                        LogInfoSafely(
+                            "FUTURE_TELEMETRY_STOP",
+                            "attempts=" + telemetryCounters.StartedAttempts
+                            + " batches=" + telemetryCounters.AcceptedBatches
+                            + " dropped=" + telemetryCounters.DroppedBatches
+                            + " chunks=" + telemetryCounters.CommittedChunks
+                            + " archiveDropped=" + telemetryCounters.ArchiveDroppedMessages
+                            + " failures=" + telemetryCounters.BackgroundFailures);
+                    }
+                    catch (Exception exception)
+                    {
+                        LogErrorSafely("FUTURE_TELEMETRY_STOP_EXCEPTION", exception);
                     }
                 }
                 finally
                 {
-                    _uploadCancellation.Dispose();
-                    _uploadTransportDisposable?.Dispose();
+                    _uploadCancellation.Cancel();
+                    try
+                    {
+                        if (_uploadTask != null)
+                        {
+                            try
+                            {
+                                _uploadTask.GetAwaiter().GetResult();
+                            }
+                            catch (OperationCanceledException)
+                            {
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        _uploadCancellation.Dispose();
+                        _uploadTransportDisposable?.Dispose();
+                    }
                 }
             }
         }
@@ -178,6 +246,50 @@ namespace AMS2LeagueClient.Runtime
                 LogErrorSafely(eventName, exception);
             }
         }
+
+        private void BindWitnessArchiveIdentity(TelemetryArchiveIdentity identity)
+            => _witnessEngine.BeginArchiveIdentity(identity);
+
+        private void ReconcileWitnessArchiveIdentity(DateTimeOffset capturedAtUtc)
+        {
+            TelemetryArchiveIdentity? pendingRestart = _futureTelemetry.PendingRestartIdentity;
+            TelemetryArchiveIdentity? witnessIdentity = _witnessEngine.CurrentArchiveIdentity;
+            if (pendingRestart != null && witnessIdentity != null)
+            {
+                if (!_futureTelemetry.SynchronizePendingRestartIdentity(witnessIdentity))
+                {
+                    // Never continue with two attempt identities. Both capture
+                    // paths are closed through their existing background queues.
+                    _futureTelemetry.GameDetached();
+                    HandleWitness(_witnessEngine.Close(capturedAtUtc, "ARCHIVE_IDENTITY_SYNC_FAILED"));
+                }
+                return;
+            }
+
+            TelemetryArchiveIdentity? current = _futureTelemetry.CurrentIdentity;
+            if (current != null && witnessIdentity != null && !SameArchiveIdentity(current, witnessIdentity))
+            {
+                _futureTelemetry.GameDetached();
+                HandleWitness(_witnessEngine.Close(capturedAtUtc, "ARCHIVE_IDENTITY_MISMATCH"));
+                return;
+            }
+
+            if (current == null && pendingRestart == null && witnessIdentity != null)
+            {
+                // Clears an identity reserved by a one-car Practice/Time Attack
+                // that ended before SessionWitness became eligible.
+                HandleWitness(_witnessEngine.Close(capturedAtUtc, "ARCHIVE_SCOPE_ENDED"));
+            }
+        }
+
+        private static bool SameArchiveIdentity(
+            TelemetryArchiveIdentity left,
+            TelemetryArchiveIdentity right)
+            => string.Equals(left.SessionId, right.SessionId, StringComparison.Ordinal)
+                && string.Equals(left.SessionFingerprint, right.SessionFingerprint, StringComparison.Ordinal)
+                && string.Equals(left.WitnessId, right.WitnessId, StringComparison.Ordinal)
+                && string.Equals(left.AttemptId, right.AttemptId, StringComparison.Ordinal)
+                && left.AttemptNumber == right.AttemptNumber;
 
         private void Handle(ActivityCaptureUpdate update)
         {
@@ -354,14 +466,31 @@ namespace AMS2LeagueClient.Runtime
             {
                 try
                 {
-                    ActivityUploadWorkerSummary summary = await _uploadWorker!.ProcessDueAsync(cancellationToken).ConfigureAwait(false);
-                    if (summary.Attempted > 0)
+                    if (_uploadWorker != null)
                     {
-                        _logger.Info(
-                            "ACTIVITY_UPLOAD_BATCH",
-                            "attempted=" + summary.Attempted + " sent=" + summary.Sent
-                            + " retryable=" + summary.Retryable + " conflict=" + summary.Conflicts
-                            + " quarantined=" + summary.Quarantined);
+                        ActivityUploadWorkerSummary summary =
+                            await _uploadWorker.ProcessDueAsync(cancellationToken).ConfigureAwait(false);
+                        if (summary.Attempted > 0)
+                        {
+                            _logger.Info(
+                                "ACTIVITY_UPLOAD_BATCH",
+                                "attempted=" + summary.Attempted + " sent=" + summary.Sent
+                                + " retryable=" + summary.Retryable + " conflict=" + summary.Conflicts
+                                + " quarantined=" + summary.Quarantined);
+                        }
+                    }
+                    if (_telemetryUploadWorker != null)
+                    {
+                        TelemetryChunkUploadBatchResult telemetry =
+                            await _telemetryUploadWorker.ProcessDueAsync(cancellationToken).ConfigureAwait(false);
+                        if (telemetry.Attempted > 0)
+                        {
+                            _logger.Info(
+                                "FUTURE_TELEMETRY_UPLOAD_BATCH",
+                                "attempted=" + telemetry.Attempted + " sent=" + telemetry.Sent
+                                + " retryable=" + telemetry.Retryable + " conflict=" + telemetry.Conflicts
+                                + " quarantined=" + telemetry.Quarantined);
+                        }
                     }
                     await Task.Delay(UploadPollInterval, cancellationToken).ConfigureAwait(false);
                 }

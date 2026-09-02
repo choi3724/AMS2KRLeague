@@ -1,0 +1,5 @@
+{
+  "scenario": "CLIENT_CRASH_RECOVERY",
+  "crashPoint": "AFTER_CHUNK_RENAME_BEFORE_UPLOAD_METADATA",
+  "expectedRecovery": "REBUILD_PENDING_METADATA"
+}

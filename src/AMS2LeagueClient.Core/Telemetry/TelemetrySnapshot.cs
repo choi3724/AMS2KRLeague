@@ -29,7 +29,11 @@ namespace AMS2LeagueClient.Core.Telemetry
             float fastestSector3Time = -1,
             uint pitScheduleRaw = 0,
             uint highestFlagColourRaw = 0,
-            uint highestFlagReasonRaw = 0)
+            uint highestFlagReasonRaw = 0,
+            TelemetryVector3 worldPosition = default,
+            TelemetryVector3 orientation = default,
+            float speedMetresPerSecond = 0,
+            uint nationalityRaw = 0)
         {
             Index = index;
             IsActive = isActive;
@@ -55,6 +59,10 @@ namespace AMS2LeagueClient.Core.Telemetry
             PitScheduleRaw = pitScheduleRaw;
             HighestFlagColourRaw = highestFlagColourRaw;
             HighestFlagReasonRaw = highestFlagReasonRaw;
+            WorldPosition = worldPosition;
+            Orientation = orientation;
+            SpeedMetresPerSecond = speedMetresPerSecond;
+            NationalityRaw = nationalityRaw;
         }
 
         public int Index { get; }
@@ -81,6 +89,10 @@ namespace AMS2LeagueClient.Core.Telemetry
         public uint PitScheduleRaw { get; }
         public uint HighestFlagColourRaw { get; }
         public uint HighestFlagReasonRaw { get; }
+        public TelemetryVector3 WorldPosition { get; }
+        public TelemetryVector3 Orientation { get; }
+        public float SpeedMetresPerSecond { get; }
+        public uint NationalityRaw { get; }
 
         public RaceState? KnownRaceState => Enum.IsDefined(typeof(RaceState), RaceStateRaw)
             ? (RaceState?)RaceStateRaw
@@ -162,7 +174,11 @@ namespace AMS2LeagueClient.Core.Telemetry
             float snowDensity = 0,
             int enforcedPitStopLap = -1,
             bool sessionIsPrivate = false,
-            int yellowFlagStateRaw = 0)
+            int yellowFlagStateRaw = 0,
+            float splitTime = 0,
+            string translatedTrackLocation = "",
+            string translatedTrackVariation = "",
+            ViewedVehicleTelemetrySnapshot? viewedVehicleTelemetry = null)
         {
             CapturedAt = capturedAt;
             Version = version;
@@ -218,6 +234,10 @@ namespace AMS2LeagueClient.Core.Telemetry
             EnforcedPitStopLap = enforcedPitStopLap;
             SessionIsPrivate = sessionIsPrivate;
             YellowFlagStateRaw = yellowFlagStateRaw;
+            SplitTime = splitTime;
+            TranslatedTrackLocation = translatedTrackLocation ?? string.Empty;
+            TranslatedTrackVariation = translatedTrackVariation ?? string.Empty;
+            ViewedVehicleTelemetry = viewedVehicleTelemetry;
             _participants = (ParticipantSnapshot[])(participants ?? throw new ArgumentNullException(nameof(participants))).Clone();
         }
 
@@ -275,6 +295,10 @@ namespace AMS2LeagueClient.Core.Telemetry
         public int EnforcedPitStopLap { get; }
         public bool SessionIsPrivate { get; }
         public int YellowFlagStateRaw { get; }
+        public float SplitTime { get; }
+        public string TranslatedTrackLocation { get; }
+        public string TranslatedTrackVariation { get; }
+        public ViewedVehicleTelemetrySnapshot? ViewedVehicleTelemetry { get; }
         public IReadOnlyList<ParticipantSnapshot> Participants => _participants;
 
         public GameState? KnownGameState => Enum.IsDefined(typeof(GameState), GameStateRaw)

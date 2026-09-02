@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using AMS2LeagueClient.Core.HostRecording;
 
 namespace AMS2LeagueClient.Core.SessionWitness
@@ -49,6 +50,14 @@ namespace AMS2LeagueClient.Core.SessionWitness
         public string Schema { get; set; } = "ams2-session-witness-v1";
         public string WitnessId { get; set; } = string.Empty;
         public string SessionFingerprint { get; set; } = string.Empty;
+        // Optional v1 additions. Legacy 0.2.1/0.2.2 witnesses leave these null,
+        // so their upload JSON and local storage identity remain unchanged.
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CaptureSessionId { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? AttemptId { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? AttemptNumber { get; set; }
         public string EventFingerprint { get; set; } = string.Empty;
         public string RosterSignature { get; set; } = string.Empty;
         public List<string> RosterNames { get; set; } = new List<string>();

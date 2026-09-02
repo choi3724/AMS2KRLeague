@@ -33,7 +33,8 @@ namespace AMS2LeagueClient.Core.SessionWitness
             string payloadHash = SessionWitnessUploadPayloadBuilder.Sha256Hex(uploadPayload);
             string sessionsRoot = Path.Combine(_root, "sessions");
             Directory.CreateDirectory(sessionsRoot);
-            string target = Path.Combine(sessionsRoot, witness.WitnessId);
+            string storageId = StorageId(witness);
+            string target = Path.Combine(sessionsRoot, storageId);
             if (Directory.Exists(target))
             {
                 string manifestPath = Path.Combine(target, "manifest.json");
@@ -54,7 +55,7 @@ namespace AMS2LeagueClient.Core.SessionWitness
 
                 string quarantineRoot = Path.Combine(_root, "quarantine");
                 Directory.CreateDirectory(quarantineRoot);
-                string conflict = Path.Combine(quarantineRoot, "witness-conflict-" + witness.WitnessId + "-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff"));
+                string conflict = Path.Combine(quarantineRoot, "witness-conflict-" + storageId + "-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff"));
                 Directory.CreateDirectory(conflict);
                 WriteJson(Path.Combine(conflict, "incoming-witness.json"), witness);
                 WriteBytes(Path.Combine(conflict, "upload-payload.json"), uploadPayload);
@@ -154,6 +155,15 @@ namespace AMS2LeagueClient.Core.SessionWitness
         private static bool SafeId(string value)
             => value.Length >= 8 && value.Length <= 128
                 && value.All(character => char.IsLetterOrDigit(character) || character == '-' || character == '_' || character == '.');
+
+        private static string StorageId(SessionWitnessRecord witness)
+        {
+            if (string.IsNullOrWhiteSpace(witness.AttemptId)) return witness.WitnessId;
+            if (!SafeId(witness.AttemptId)) throw new InvalidDataException("Witness attempt ID is unsafe.");
+            string value = witness.WitnessId + "--" + witness.AttemptId;
+            if (!SafeId(value)) throw new InvalidDataException("Combined witness attempt identity is unsafe.");
+            return value;
+        }
 
         private static string CompletenessName(SessionWitnessCompleteness value)
             => value switch

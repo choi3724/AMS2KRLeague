@@ -11,6 +11,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
+using AMS2LeagueClient.Core.CompactTelemetry;
+using AMS2LeagueClient.Core.Diagnostics;
+using AMS2LeagueClient.Core.FutureTelemetry;
 using AMS2LeagueClient.Core.Presentation;
 using AMS2LeagueClient.Core.RaceControl;
 using AMS2LeagueClient.Core.Security;
@@ -32,6 +35,8 @@ namespace AMS2LeagueClient.Tests
             var tests = new (string Name, Action Test)[]
             {
                 ("Official v14 activity metadata offsets", ActivityMetadataLayoutOffsets),
+                ("Official v14 future telemetry offsets", FutureTelemetryLayoutOffsets),
+                ("Official v14 future telemetry parses", FutureTelemetryParses),
                 ("Official v14 root vehicle parses", RootVehicleTelemetryParses),
                 ("Official v14 fastest timing parses", RootFastestTimingParses),
                 ("Official v14 weather parses", WeatherTelemetryParses),
@@ -64,6 +69,9 @@ namespace AMS2LeagueClient.Tests
                 ,("Fresh install enrolls anonymously before upload", FreshInstallEnrollsBeforeUpload)
                 ,("Two anonymous installs receive independent credentials", TwoAnonymousInstallsRemainIndependent)
                 ,("Anonymous enrollment status never claims upload is disabled", AnonymousEnrollmentStatusIsAccurate)
+                ,("Telemetry gzip HTTP contract is exact", TelemetryGzipHttpContractIsExact)
+                ,("Compact telemetry gzip HTTP contract is exact", CompactTelemetryGzipHttpContractIsExact)
+                ,("Activity runtime automatically uploads pending telemetry chunks", ActivityRuntimeUploadsPendingTelemetry)
             };
             int passed = 0;
             foreach ((string name, Action test) in tests)
@@ -134,6 +142,145 @@ namespace AMS2LeagueClient.Tests
                 new RawFixtureBuilder().SetRootVehicle("McLaren 720S GT3 Evo", "GT3 Gen2"));
             AssertEqual("McLaren 720S GT3 Evo", snapshot.RootCarName);
             AssertEqual("GT3 Gen2", snapshot.RootCarClassName);
+        }
+
+        private static void FutureTelemetryLayoutOffsets()
+        {
+            AssertEqual(68, SharedMemoryLayout.ParticipantWorldPosition);
+            AssertEqual(80, SharedMemoryLayout.ParticipantCurrentLapDistance);
+            AssertEqual(100, SharedMemoryLayout.ParticipantSize);
+            AssertEqual(6428, SharedMemoryLayout.UnfilteredThrottle);
+            AssertEqual(6440, SharedMemoryLayout.UnfilteredClutch);
+            AssertEqual(6736, SharedMemoryLayout.SplitTime);
+            AssertEqual(6816, SharedMemoryLayout.CarFlags);
+            AssertEqual(6848, SharedMemoryLayout.Speed);
+            AssertEqual(6876, SharedMemoryLayout.Gear);
+            AssertEqual(6908, SharedMemoryLayout.Orientation);
+            AssertEqual(6956, SharedMemoryLayout.LocalAcceleration);
+            AssertEqual(6992, SharedMemoryLayout.TyreFlags);
+            AssertEqual(7136, SharedMemoryLayout.TyreWear);
+            AssertEqual(7280, SharedMemoryLayout.CrashState);
+            AssertEqual(7324, SharedMemoryLayout.WheelLocalPositionY);
+            AssertEqual(7372, SharedMemoryLayout.AirPressure);
+            AssertEqual(7388, SharedMemoryLayout.EngineSpeed);
+            AssertEqual(7404, SharedMemoryLayout.HandBrake);
+            AssertEqual(10032, SharedMemoryLayout.Orientations);
+            AssertEqual(10800, SharedMemoryLayout.Speeds);
+            AssertEqual(19380, SharedMemoryLayout.BrakeBias);
+            AssertEqual(19388, SharedMemoryLayout.TyreCompound);
+            AssertEqual(20316, SharedMemoryLayout.Nationalities);
+            AssertEqual(20584, SharedMemoryLayout.TyreTempLeft);
+            AssertEqual(20632, SharedMemoryLayout.DrsState);
+            AssertEqual(20668, SharedMemoryLayout.ErsDeploymentMode);
+            AssertEqual(20676, SharedMemoryLayout.ClutchTemp);
+            AssertEqual(20684, SharedMemoryLayout.ClutchOverheated);
+            AssertEqual(20685, SharedMemoryLayout.ClutchSlipping);
+            AssertEqual(20688, SharedMemoryLayout.YellowFlagState);
+            AssertEqual(20696, SharedMemoryLayout.LaunchStage);
+            AssertEqual(20700, SharedMemoryLayout.RequiredBytes);
+        }
+
+        private static void FutureTelemetryParses()
+        {
+            TelemetrySnapshot snapshot = Parse(
+                new RawFixtureBuilder()
+                    .SetParticipantMotion(3, 101.25f, 12.5f, -44.75f, 0.01f, 1.02f, -0.03f, 66.6f)
+                    .SetExtendedTimingAndTrack(1.234f, "인터라고스", "그랑프리")
+                    .SetViewedVehicleTelemetry()
+                    .SetTyreTelemetry(0));
+
+            ParticipantSnapshot participant = snapshot.Participants[3];
+            AssertEqual(new TelemetryVector3(101.25f, 12.5f, -44.75f), participant.WorldPosition);
+            AssertEqual(new TelemetryVector3(0.01f, 1.02f, -0.03f), participant.Orientation);
+            AssertEqual(66.6f, participant.SpeedMetresPerSecond);
+            AssertEqual((uint)82, participant.NationalityRaw);
+            AssertEqual(1.234f, snapshot.SplitTime);
+            AssertEqual("인터라고스", snapshot.TranslatedTrackLocation);
+            AssertEqual("그랑프리", snapshot.TranslatedTrackVariation);
+
+            ViewedVehicleTelemetrySnapshot telemetry = snapshot.ViewedVehicleTelemetry
+                ?? throw new InvalidOperationException("Viewed vehicle telemetry was not parsed.");
+            AssertEqual(0.71f, telemetry.UnfilteredThrottle);
+            AssertEqual(0.22f, telemetry.UnfilteredBrake);
+            AssertEqual(-0.33f, telemetry.UnfilteredSteering);
+            AssertEqual(0.44f, telemetry.UnfilteredClutch);
+            AssertEqual((uint)0x25, telemetry.CarFlagsRaw);
+            AssertEqual(101.5f, telemetry.OilTemperatureCelsius);
+            AssertEqual(345.6f, telemetry.OilPressureKPa);
+            AssertEqual(91.2f, telemetry.WaterTemperatureCelsius);
+            AssertEqual(222.3f, telemetry.WaterPressureKPa);
+            AssertEqual(444.5f, telemetry.FuelPressureKPa);
+            AssertEqual(0.63f, telemetry.FuelLevel);
+            AssertEqual(110.0f, telemetry.FuelCapacityLitres);
+            AssertEqual(72.25f, telemetry.SpeedMetresPerSecond);
+            AssertEqual(7123.0f, telemetry.Rpm);
+            AssertEqual(9000.0f, telemetry.MaxRpm);
+            AssertEqual(0.24f, telemetry.Brake);
+            AssertEqual(0.69f, telemetry.Throttle);
+            AssertEqual(0.41f, telemetry.Clutch);
+            AssertEqual(-0.31f, telemetry.Steering);
+            AssertEqual(4, telemetry.Gear);
+            AssertEqual(6, telemetry.NumGears);
+            AssertEqual(123.45f, telemetry.OdometerKilometres);
+            AssertTrue(telemetry.AntiLockActive);
+            AssertEqual(9, telemetry.LastOpponentCollisionIndex);
+            AssertEqual(12.75f, telemetry.LastOpponentCollisionMagnitude);
+            AssertTrue(telemetry.BoostActive);
+            AssertEqual(56.5f, telemetry.BoostAmount);
+            AssertEqual(new TelemetryVector3(0.1f, 0.2f, 0.3f), telemetry.Orientation);
+            AssertEqual(new TelemetryVector3(1.1f, 1.2f, 1.3f), telemetry.LocalVelocity);
+            AssertEqual(new TelemetryVector3(2.1f, 2.2f, 2.3f), telemetry.WorldVelocity);
+            AssertEqual(new TelemetryVector3(3.1f, 3.2f, 3.3f), telemetry.AngularVelocity);
+            AssertEqual(new TelemetryVector3(4.1f, 4.2f, 4.3f), telemetry.LocalAcceleration);
+            AssertEqual(new TelemetryVector3(5.1f, 5.2f, 5.3f), telemetry.WorldAcceleration);
+            AssertEqual(new TelemetryVector3(6.1f, 6.2f, 6.3f), telemetry.ExtentsCentre);
+            AssertEqual(777.25f, telemetry.EngineSpeedRadiansPerSecond);
+            AssertEqual(498.5f, telemetry.EngineTorqueNewtonMetres);
+            AssertEqual(0.17f, telemetry.FrontWing);
+            AssertEqual(0.23f, telemetry.RearWing);
+            AssertEqual(0.05f, telemetry.HandBrake);
+            AssertEqual((uint)3, telemetry.CrashStateRaw);
+            AssertEqual(0.12f, telemetry.AeroDamage);
+            AssertEqual(0.08f, telemetry.EngineDamage);
+            AssertEqual(0.57f, telemetry.BrakeBias);
+            AssertEqual(1.42f, telemetry.TurboBoostPressure);
+            AssertEqual((uint)0x18, telemetry.DrsStateRaw);
+            AssertEqual(4, telemetry.AntiLockSetting);
+            AssertEqual(3, telemetry.TractionControlSetting);
+            AssertEqual(4, telemetry.ErsDeploymentModeRaw);
+            AssertTrue(telemetry.ErsAutoModeEnabled);
+            AssertEqual(355.5f, telemetry.ClutchTemperatureKelvin);
+            AssertEqual(0.18f, telemetry.ClutchWear);
+            AssertTrue(telemetry.ClutchOverheated);
+            AssertTrue(telemetry.ClutchSlipping);
+            AssertEqual(2, telemetry.LaunchStageRaw);
+            AssertEqual(4, telemetry.Tyres.Count);
+
+            TyreTelemetrySnapshot tyre = telemetry.Tyres[0];
+            AssertEqual((uint)7, tyre.FlagsRaw);
+            AssertEqual((uint)10, tyre.TerrainRaw);
+            AssertEqual(0.11f, tyre.LocalY);
+            AssertEqual(22.2f, tyre.RevolutionsPerSecond);
+            AssertEqual(83.3f, tyre.TemperatureCelsius);
+            AssertEqual(0.04f, tyre.HeightAboveGround);
+            AssertEqual(0.81f, tyre.Wear);
+            AssertEqual(0.02f, tyre.BrakeDamage);
+            AssertEqual(0.03f, tyre.SuspensionDamage);
+            AssertEqual(612.5f, tyre.BrakeTemperatureCelsius);
+            AssertEqual(355.1f, tyre.TreadTemperatureKelvin);
+            AssertEqual(354.2f, tyre.LayerTemperatureKelvin);
+            AssertEqual(353.3f, tyre.CarcassTemperatureKelvin);
+            AssertEqual(352.4f, tyre.RimTemperatureKelvin);
+            AssertEqual(351.5f, tyre.InternalAirTemperatureKelvin);
+            AssertEqual(-0.21f, tyre.WheelLocalPositionY);
+            AssertEqual(0.06f, tyre.SuspensionTravelMetres);
+            AssertEqual(-0.7f, tyre.SuspensionVelocity);
+            AssertEqual(27.8f, tyre.AirPressurePsi);
+            AssertEqual("Soft Slick", tyre.Compound);
+            AssertEqual(80.1f, tyre.LeftTemperatureCelsius);
+            AssertEqual(81.2f, tyre.CenterTemperatureCelsius);
+            AssertEqual(82.3f, tyre.RightTemperatureCelsius);
+            AssertEqual(7.4f, tyre.RideHeightCentimetres);
         }
 
         private static void RootFastestTimingParses()
@@ -664,6 +811,227 @@ namespace AMS2LeagueClient.Tests
             AssertTrue(status.AccountText.Contains("기록 전송 활성", StringComparison.Ordinal));
         }
 
+        private static void TelemetryGzipHttpContractIsExact()
+        {
+            WithTemporaryDirectory(directory =>
+            {
+                const string installationId = "client-telemetry-http-fixture-0001";
+                const string token = "telemetry_fixture_token_00000001";
+                string telemetryRoot = Path.Combine(directory, "future-telemetry");
+                string metadataPath = CreatePendingTelemetryChunk(telemetryRoot);
+                var queue = new TelemetryChunkUploadQueue(telemetryRoot);
+                TelemetryChunkUploadItem item = queue.GetDueBatch(1, DateTimeOffset.UtcNow).Single();
+                ActivityConnectionOptions options = ActivityConnectionOptions.Load(
+                    Path.Combine(directory, ActivityConnectionOptions.DefaultFileName));
+                options.ApiBaseUrl = "https://fixture.invalid/ams2";
+                var handler = new EnrollmentFixtureHandler(installationId, token);
+                using var http = new HttpClient(handler);
+                using var transport = new Cafe24ActivityUploadTransport(
+                    options,
+                    installationId,
+                    "0.2.2",
+                    http);
+
+                TelemetryChunkUploadTransportResult result = transport
+                    .SendTelemetryChunkAsync(item, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+
+                AssertTrue(result.Success);
+                AssertEqual(201, result.HttpStatus);
+                AssertEqual(1, handler.EnrollmentCalls);
+                AssertEqual(1, handler.TelemetryCalls);
+                AssertEqual("Bearer " + token, handler.TelemetryAuthorization);
+                AssertEqual("Bearer " + token, handler.TelemetryCompatibilityAuthorization);
+                AssertEqual("gzip", handler.TelemetryContentEncoding);
+                AssertEqual("application/json", handler.TelemetryContentType);
+                AssertEqual("telemetry:" + item.Metadata.ChunkId, handler.TelemetryIdempotencyKey);
+                AssertEqual(item.Metadata.PayloadSha256, handler.TelemetryPayloadSha256);
+                AssertEqual(item.Metadata.CompressedSha256, handler.TelemetryCompressedSha256);
+                AssertTrue(handler.TelemetryBody.Length > 2);
+                AssertEqual((byte)0x1f, handler.TelemetryBody[0]);
+                AssertEqual((byte)0x8b, handler.TelemetryBody[1]);
+                byte[] decoded;
+                using (var source = new MemoryStream(handler.TelemetryBody, false))
+                {
+                    decoded = TelemetryChunkSerializer.Gunzip(source, 4 * 1024 * 1024);
+                }
+                TelemetryChunkEnvelope envelope = TelemetryChunkSerializer.Deserialize(decoded);
+                AssertEqual(item.Metadata.ChunkId, envelope.ChunkId);
+                AssertTrue(File.Exists(metadataPath));
+            });
+        }
+
+        private static void ActivityRuntimeUploadsPendingTelemetry()
+        {
+            WithTemporaryDirectory(directory =>
+            {
+                string telemetryRoot = Path.Combine(directory, "future-telemetry");
+                string metadataPath = CreatePendingTelemetryChunk(telemetryRoot);
+                var transport = new DualUploadFixtureTransport();
+                var logger = new FileLogger(Path.Combine(directory, "logs"));
+                using (var runtime = new ActivityCaptureRuntime(
+                    directory,
+                    "client-runtime-upload-fixture-0001",
+                    "0.2.2",
+                    logger,
+                    transport))
+                {
+                    bool sent = SpinWait.SpinUntil(
+                        () => ReadTelemetryStatus(metadataPath) == TelemetryUploadStatus.SENT,
+                        TimeSpan.FromSeconds(5));
+                    AssertTrue(sent);
+                }
+                AssertEqual(1, transport.TelemetryCalls);
+                AssertTrue(File.ReadAllText(logger.FilePath).Contains(
+                    "FUTURE_TELEMETRY_UPLOAD_BATCH attempted=1 sent=1",
+                    StringComparison.Ordinal));
+            });
+        }
+
+        private static void CompactTelemetryGzipHttpContractIsExact()
+        {
+            WithTemporaryDirectory(directory =>
+            {
+                const string installationId = "client-compact-http-fixture-0001";
+                const string token = "compact_fixture_token_0000000001";
+                string telemetryRoot = Path.Combine(directory, "future-telemetry");
+                CreatePendingCompactTelemetryChunk(telemetryRoot);
+                var queue = new TelemetryChunkUploadQueue(telemetryRoot);
+                TelemetryChunkUploadItem item = queue.GetDueBatch(1, DateTimeOffset.UtcNow).Single();
+                ActivityConnectionOptions options = ActivityConnectionOptions.Load(
+                    Path.Combine(directory, ActivityConnectionOptions.DefaultFileName));
+                options.ApiBaseUrl = "https://fixture.invalid/ams2";
+                var handler = new EnrollmentFixtureHandler(installationId, token);
+                using var http = new HttpClient(handler);
+                using var transport = new Cafe24ActivityUploadTransport(options, installationId, "0.2.3-beta.1", http);
+
+                TelemetryChunkUploadTransportResult result = transport
+                    .SendTelemetryChunkAsync(item, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+
+                AssertTrue(result.Success);
+                AssertEqual(Cafe24ActivityUploadTransport.CompactTelemetryContentType, handler.TelemetryContentType);
+                AssertEqual(item.Metadata.ChunkId, handler.TelemetryChunkId);
+                AssertEqual(item.Metadata.SessionId, handler.TelemetrySessionId);
+                AssertEqual(item.Metadata.AttemptId, handler.TelemetryAttemptId);
+                AssertEqual(item.Metadata.Visibility.ToString(), handler.TelemetryVisibility);
+                AssertEqual("0.2.3-beta.1", handler.TelemetryClientVersion);
+                using var source = new MemoryStream(handler.TelemetryBody, false);
+                CompactTelemetryEnvelope decoded = CompactTelemetryCodec.Decode(
+                    TelemetryChunkSerializer.Gunzip(source, 4 * 1024 * 1024));
+                AssertEqual(CompactTelemetrySchemaId.RaceEventV1, decoded.Block.SchemaId);
+            });
+        }
+
+        private static void CreatePendingCompactTelemetryChunk(string telemetryRoot)
+        {
+            string directory = Path.Combine(telemetryRoot, "sessions", "fixture", "chunks", "compact", "story");
+            Directory.CreateDirectory(directory);
+            CompactTelemetrySchema schema = CompactTelemetrySchemaRegistry.Get(CompactTelemetrySchemaId.RaceEventV1);
+            var values = new double?[schema.Fields.Count];
+            values[schema.Fields.First(value => value.Name == "eventTypeRef").Ordinal] = 0;
+            var strings = new[]
+            {
+                new CompactStringDictionaryEntry(CompactStringDictionaryId.EventType, 0, "SESSION_START")
+            };
+            byte[] payload = CompactTelemetryCodec.Encode(new CompactTelemetryEnvelope(
+                11,
+                22,
+                33,
+                new CompactTelemetryBlock(
+                    CompactTelemetrySchemaId.RaceEventV1,
+                    0,
+                    0,
+                    new[] { new CompactTelemetrySample(0, values) }),
+                null,
+                strings));
+            byte[] compressed = TelemetryChunkSerializer.Gzip(payload);
+            string chunkPath = Path.Combine(directory, "00000033-0010.a2ct.gz");
+            File.WriteAllBytes(chunkPath, compressed);
+            DateTimeOffset capturedAt = DateTimeOffset.UtcNow;
+            var metadata = new TelemetryPendingUploadMetadata
+            {
+                Schema = "ams2-compact-upload-metadata-v1",
+                Endpoint = Cafe24ActivityUploadTransport.TelemetryChunksEndpoint,
+                Protocol = "AMS2_COMPACT_TELEMETRY_V1",
+                CompactSchemaId = (ushort)CompactTelemetrySchemaId.RaceEventV1,
+                SessionLocalId = 11,
+                AttemptLocalId = 22,
+                ChunkId = "a2ct-client-fixture-00000033",
+                StreamType = TelemetryStreamType.RACE_STORY,
+                Visibility = TelemetryVisibility.PUBLIC_REPLAY,
+                SessionId = "capture-client-fixture",
+                SessionFingerprint = "session-fingerprint-client-fixture",
+                WitnessId = "witness-client-fixture",
+                AttemptId = "attempt-client-fixture",
+                AttemptNumber = 1,
+                ChunkIndex = 33,
+                StartElapsedMs = 0,
+                EndElapsedMs = 0,
+                FirstCapturedAtUtc = capturedAt,
+                LastCapturedAtUtc = capturedAt,
+                RelativeChunkPath = Path.GetRelativePath(telemetryRoot, chunkPath),
+                ContentType = Cafe24ActivityUploadTransport.CompactTelemetryContentType,
+                ContentEncoding = "gzip",
+                PayloadSha256 = TelemetryChunkSerializer.Sha256(payload),
+                CompressedSha256 = TelemetryChunkSerializer.Sha256(compressed),
+                UncompressedBytes = payload.Length,
+                CompressedBytes = compressed.Length,
+                Status = TelemetryUploadStatus.PENDING,
+                CreatedAtUtc = capturedAt,
+                UpdatedAtUtc = capturedAt
+            };
+            File.WriteAllBytes(
+                Path.Combine(directory, "00000033-0010.upload.json"),
+                TelemetryChunkSerializer.SerializeMetadata(metadata));
+        }
+
+        private static string CreatePendingTelemetryChunk(string telemetryRoot)
+        {
+            TelemetryArchiveIdentity identity = TelemetryArchiveIdentityFactory.StartSession(
+                "client-test-telemetry-session-fingerprint",
+                "client-test-telemetry-witness");
+            var archive = new LocalDurableTelemetryArchive(telemetryRoot, identity);
+            try
+            {
+                AssertTrue(archive.TryCaptureSessionMetadata(new SessionMetadataSample
+                {
+                    CapturedAtUtc = DateTimeOffset.UtcNow,
+                    SessionElapsedMs = 0,
+                    GameBuild = 3398,
+                    SharedMemoryVersion = 14,
+                    ClientVersion = "0.2.2",
+                    ParserVersion = "AMS2_SHM_V14",
+                    Track = "Monza",
+                    Layout = "Monza_2020",
+                    TrackLengthMeters = 5793,
+                    SessionType = "RACE",
+                    ClockSource = "MONOTONIC_CAPTURE_CLOCK",
+                    ObservedParticipants = 2,
+                    CaptureStarted = true,
+                    CaptureCompleteness = "COMPLETE"
+                }));
+                archive.FlushAsync().GetAwaiter().GetResult();
+            }
+            finally
+            {
+                archive.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            return Directory.EnumerateFiles(telemetryRoot, "*.upload.json", SearchOption.AllDirectories).Single();
+        }
+
+        private static TelemetryUploadStatus? ReadTelemetryStatus(string metadataPath)
+        {
+            try
+            {
+                return TelemetryChunkSerializer.DeserializeMetadata(File.ReadAllBytes(metadataPath)).Status;
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+        }
+
         private static string EnrollOnly(string installationId, string token)
         {
             string captured = string.Empty;
@@ -728,8 +1096,22 @@ namespace AMS2LeagueClient.Tests
 
             public int EnrollmentCalls { get; private set; }
             public int UploadCalls { get; private set; }
+            public int TelemetryCalls { get; private set; }
             public string UploadAuthorization { get; private set; } = string.Empty;
             public string UploadCompatibilityAuthorization { get; private set; } = string.Empty;
+            public string TelemetryAuthorization { get; private set; } = string.Empty;
+            public string TelemetryCompatibilityAuthorization { get; private set; } = string.Empty;
+            public string TelemetryContentEncoding { get; private set; } = string.Empty;
+            public string TelemetryContentType { get; private set; } = string.Empty;
+            public string TelemetryIdempotencyKey { get; private set; } = string.Empty;
+            public string TelemetryPayloadSha256 { get; private set; } = string.Empty;
+            public string TelemetryCompressedSha256 { get; private set; } = string.Empty;
+            public string TelemetryChunkId { get; private set; } = string.Empty;
+            public string TelemetrySessionId { get; private set; } = string.Empty;
+            public string TelemetryAttemptId { get; private set; } = string.Empty;
+            public string TelemetryVisibility { get; private set; } = string.Empty;
+            public string TelemetryClientVersion { get; private set; } = string.Empty;
+            public byte[] TelemetryBody { get; private set; } = Array.Empty<byte>();
 
             protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
@@ -740,7 +1122,40 @@ namespace AMS2LeagueClient.Tests
                     EnrollmentCalls++;
                     string json = "{\"installationToken\":\"" + _token
                         + "\",\"installationId\":\"" + _installationId
-                        + "\",\"scopes\":[\"presence:write\",\"activities:write\",\"witnesses:write\"],\"duplicate\":false}";
+                        + "\",\"scopes\":[\"presence:write\",\"activities:write\",\"witnesses:write\",\"telemetry:write\"],\"duplicate\":false}";
+                    return Task.FromResult(Response(HttpStatusCode.Created, json));
+                }
+
+                if (query.Contains(Cafe24ActivityUploadTransport.TelemetryChunksEndpoint, StringComparison.Ordinal))
+                {
+                    TelemetryCalls++;
+                    TelemetryAuthorization = request.Headers.Authorization?.ToString() ?? string.Empty;
+                    TelemetryCompatibilityAuthorization = request.Headers.TryGetValues("X-AMS2-Authorization", out var authValues)
+                        ? authValues.SingleOrDefault() ?? string.Empty
+                        : string.Empty;
+                    TelemetryContentEncoding = request.Content?.Headers.ContentEncoding.SingleOrDefault() ?? string.Empty;
+                    TelemetryContentType = request.Content?.Headers.ContentType?.MediaType ?? string.Empty;
+                    TelemetryIdempotencyKey = request.Headers.TryGetValues("Idempotency-Key", out var idempotencyValues)
+                        ? idempotencyValues.SingleOrDefault() ?? string.Empty
+                        : string.Empty;
+                    TelemetryPayloadSha256 = request.Headers.TryGetValues("X-AMS2-Payload-SHA256", out var payloadValues)
+                        ? payloadValues.SingleOrDefault() ?? string.Empty
+                        : string.Empty;
+                    TelemetryCompressedSha256 = request.Headers.TryGetValues("X-AMS2-Compressed-SHA256", out var compressedValues)
+                        ? compressedValues.SingleOrDefault() ?? string.Empty
+                        : string.Empty;
+                    TelemetryChunkId = Header(request, "X-AMS2-Chunk-Id");
+                    TelemetrySessionId = Header(request, "X-AMS2-Session-Id");
+                    TelemetryAttemptId = Header(request, "X-AMS2-Attempt-Id");
+                    TelemetryVisibility = Header(request, "X-AMS2-Visibility");
+                    TelemetryClientVersion = Header(request, "X-AMS2-Client-Version");
+                    TelemetryBody = request.Content?.ReadAsByteArrayAsync(cancellationToken).GetAwaiter().GetResult()
+                        ?? Array.Empty<byte>();
+                    string chunkId = TelemetryIdempotencyKey.StartsWith("telemetry:", StringComparison.Ordinal)
+                        ? TelemetryIdempotencyKey.Substring("telemetry:".Length)
+                        : string.Empty;
+                    string json = "{\"status\":\"stored\",\"duplicate\":false,\"chunkId\":\""
+                        + chunkId + "\",\"contentSha256\":\"" + TelemetryPayloadSha256 + "\"}";
                     return Task.FromResult(Response(HttpStatusCode.Created, json));
                 }
 
@@ -762,6 +1177,30 @@ namespace AMS2LeagueClient.Tests
                 {
                     Content = new StringContent(json, Encoding.UTF8, "application/json")
                 };
+
+            private static string Header(HttpRequestMessage request, string name)
+                => request.Headers.TryGetValues(name, out IEnumerable<string>? values)
+                    ? values.SingleOrDefault() ?? string.Empty
+                    : string.Empty;
+        }
+
+        private sealed class DualUploadFixtureTransport : IActivityUploadTransport, ITelemetryChunkUploadTransport
+        {
+            public int TelemetryCalls { get; private set; }
+
+            public Task<ActivityUploadTransportResult> SendAsync(
+                ActivityUploadItem item,
+                CancellationToken cancellationToken)
+                => Task.FromResult(ActivityUploadTransportResult.Http(201, false, "STORED"));
+
+            public Task<TelemetryChunkUploadTransportResult> SendTelemetryChunkAsync(
+                TelemetryChunkUploadItem item,
+                CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                TelemetryCalls++;
+                return Task.FromResult(TelemetryChunkUploadTransportResult.Stored(201, false));
+            }
         }
 
         private static TelemetrySnapshot Parse(RawFixtureBuilder fixture)

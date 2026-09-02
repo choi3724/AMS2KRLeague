@@ -1,0 +1,8 @@
+{
+  "scenario": "INCIDENT_HIGH_RATE",
+  "sourceRateHz": 20,
+  "triggerElapsedMs": 125,
+  "preRollMs": 100,
+  "postRollMs": 100,
+  "relatedParticipantRefs": [1]
+}

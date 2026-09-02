@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
+using AMS2LeagueClient.Core.FutureTelemetry;
 using AMS2LeagueClient.Core.Security;
 
 namespace AMS2LeagueClient.Runtime
@@ -37,10 +38,12 @@ namespace AMS2LeagueClient.Runtime
         public bool Duplicate { get; set; }
     }
 
-    public sealed class Cafe24ActivityUploadTransport : IActivityUploadTransport, IDisposable
+    public sealed class Cafe24ActivityUploadTransport : IActivityUploadTransport, ITelemetryChunkUploadTransport, IDisposable
     {
         public const string PlayerActivitiesEndpoint = "v1/player/activities";
         public const string SessionWitnessEndpoint = "v1/session/witness";
+        public const string TelemetryChunksEndpoint = "v1/telemetry/chunks";
+        public const string CompactTelemetryContentType = "application/vnd.ams2.compact-telemetry-v1";
         public const string EnrollmentEndpoint = "v1/player/enroll";
         public const string BootstrapEndpoint = "v1/bootstrap";
         public const string HealthEndpoint = "v1/health";
@@ -188,6 +191,139 @@ namespace AMS2LeagueClient.Runtime
             catch (IOException)
             {
                 return ActivityUploadTransportResult.NetworkFailure("NETWORK_IO_FAILURE");
+            }
+        }
+
+        public async Task<TelemetryChunkUploadTransportResult> SendTelemetryChunkAsync(
+            TelemetryChunkUploadItem item,
+            CancellationToken cancellationToken)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            ThrowIfDisposed();
+            TelemetryPendingUploadMetadata metadata = item.Metadata;
+            if (!string.Equals(NormalizeEndpoint(metadata.Endpoint), TelemetryChunksEndpoint, StringComparison.Ordinal))
+            {
+                return TelemetryChunkUploadTransportResult.Failure(400, "ENDPOINT_NOT_ALLOWED", false);
+            }
+            if (!TryBuildRouteUri(TelemetryChunksEndpoint, out Uri? requestUri) || requestUri == null)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(400, "HTTPS_API_BASE_URL_REQUIRED", false);
+            }
+            string idempotencyKey = "telemetry:" + metadata.ChunkId;
+            bool supportedContentType = string.Equals(
+                    metadata.ContentType,
+                    "application/json",
+                    StringComparison.OrdinalIgnoreCase)
+                || string.Equals(
+                    metadata.ContentType,
+                    CompactTelemetryContentType,
+                    StringComparison.OrdinalIgnoreCase);
+            if (!IsIdempotencyKeyValid(idempotencyKey)
+                || !supportedContentType
+                || !string.Equals(metadata.ContentEncoding, "gzip", StringComparison.OrdinalIgnoreCase))
+            {
+                return TelemetryChunkUploadTransportResult.Failure(422, "LOCAL_TELEMETRY_METADATA_INVALID", false);
+            }
+
+            byte[] compressedPayload = item.CompressedPayload.ToArray();
+            if (!string.Equals(Sha256Hex(compressedPayload), metadata.CompressedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return TelemetryChunkUploadTransportResult.Failure(422, "LOCAL_COMPRESSED_HASH_MISMATCH", false);
+            }
+
+            try
+            {
+                await EnsureAnonymousEnrollmentAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(null, "ENROLLMENT_TIMEOUT", true);
+            }
+            catch (Exception exception) when (exception is HttpRequestException
+                || exception is IOException
+                || exception is InvalidOperationException)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(null, "ENROLLMENT_UNAVAILABLE", true);
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Payload-SHA256", metadata.PayloadSha256);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Compressed-SHA256", metadata.CompressedSha256);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Chunk-Id", metadata.ChunkId);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Session-Id", metadata.SessionId);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Session-Fingerprint", metadata.SessionFingerprint);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Witness-Id", metadata.WitnessId);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Attempt-Id", metadata.AttemptId);
+            request.Headers.TryAddWithoutValidation(
+                "X-AMS2-Attempt-Number",
+                metadata.AttemptNumber.ToString(CultureInfo.InvariantCulture));
+            request.Headers.TryAddWithoutValidation("X-AMS2-Visibility", metadata.Visibility.ToString());
+            if (metadata.FirstCapturedAtUtc.HasValue)
+            {
+                request.Headers.TryAddWithoutValidation(
+                    "X-AMS2-Captured-At-Start",
+                    metadata.FirstCapturedAtUtc.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+            }
+            if (metadata.LastCapturedAtUtc.HasValue)
+            {
+                request.Headers.TryAddWithoutValidation(
+                    "X-AMS2-Captured-At-End",
+                    metadata.LastCapturedAtUtc.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+            }
+            if (metadata.CompactSchemaId.HasValue)
+            {
+                request.Headers.TryAddWithoutValidation(
+                    "X-AMS2-Compact-Schema-Id",
+                    metadata.CompactSchemaId.Value.ToString(CultureInfo.InvariantCulture));
+            }
+            if (_clientVersion.Length > 0)
+            {
+                request.Headers.TryAddWithoutValidation("X-AMS2-Client-Version", _clientVersion);
+            }
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.BearerToken);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Authorization", "Bearer " + _options.BearerToken);
+            request.Content = new ByteArrayContent(compressedPayload);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue(metadata.ContentType);
+            request.Content.Headers.ContentEncoding.Add("gzip");
+
+            using CancellationTokenSource timeout = CreateTimeout(cancellationToken);
+            try
+            {
+                using HttpResponseMessage response = await _httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    timeout.Token).ConfigureAwait(false);
+                int statusCode = (int)response.StatusCode;
+                byte[]? responseBytes = await ReadLimitedAsync(
+                    response.Content,
+                    MaximumResponseBytes,
+                    timeout.Token).ConfigureAwait(false);
+                if (responseBytes == null)
+                {
+                    return TelemetryChunkUploadTransportResult.Failure(
+                        statusCode,
+                        "RESPONSE_TOO_LARGE",
+                        IsTelemetryRetryableStatus(statusCode));
+                }
+                return ParseTelemetryUploadResponse(
+                    statusCode,
+                    responseBytes,
+                    metadata.ChunkId,
+                    metadata.PayloadSha256);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(null, "UPLOAD_TIMEOUT", true);
+            }
+            catch (HttpRequestException)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(null, "NETWORK_UNAVAILABLE", true);
+            }
+            catch (IOException)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(null, "NETWORK_IO_FAILURE", true);
             }
         }
 
@@ -518,6 +654,84 @@ namespace AMS2LeagueClient.Runtime
             {
                 return InvalidResponse(statusCode);
             }
+        }
+
+        private static TelemetryChunkUploadTransportResult ParseTelemetryUploadResponse(
+            int statusCode,
+            byte[] responseBytes,
+            string expectedChunkId,
+            string expectedPayloadSha256)
+        {
+            if (responseBytes.Length == 0)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(
+                    statusCode,
+                    "RESPONSE_EMPTY",
+                    IsTelemetryRetryableStatus(statusCode));
+            }
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(responseBytes);
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    return TelemetryChunkUploadTransportResult.Failure(
+                        statusCode,
+                        "RESPONSE_JSON_INVALID",
+                        IsTelemetryRetryableStatus(statusCode));
+                }
+                JsonElement root = document.RootElement;
+                bool duplicate = BooleanValue(root, "duplicate") || BooleanValue(root, "duplicateChunk");
+                string status = NormalizeResultCode(StringValue(root, "status"));
+                string error = NormalizeResultCode(StringValue(root, "error"));
+                if (IsSuccessStatus(statusCode)
+                    && (duplicate || status == "STORED" || status == "DUPLICATE"))
+                {
+                    string returnedChunkId = StringValue(root, "chunkId");
+                    string contentSha256 = StringValue(root, "contentSha256");
+                    if (!string.Equals(returnedChunkId, expectedChunkId, StringComparison.Ordinal)
+                        || !string.Equals(contentSha256, expectedPayloadSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return TelemetryChunkUploadTransportResult.Failure(
+                            statusCode,
+                            "RESPONSE_INTEGRITY_MISMATCH",
+                            true);
+                    }
+                    return TelemetryChunkUploadTransportResult.Stored(statusCode, duplicate || status == "DUPLICATE");
+                }
+                string code = error.Length > 0 && error != "UNKNOWN" ? error
+                    : status.Length > 0 && status != "UNKNOWN" ? status
+                    : "HTTP_" + statusCode.ToString(CultureInfo.InvariantCulture);
+                return TelemetryChunkUploadTransportResult.Failure(
+                    statusCode,
+                    code,
+                    IsTelemetryRetryableStatus(statusCode));
+            }
+            catch (JsonException)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(
+                    statusCode,
+                    "RESPONSE_JSON_INVALID",
+                    IsTelemetryRetryableStatus(statusCode));
+            }
+        }
+
+        private static bool IsTelemetryRetryableStatus(int statusCode)
+            => statusCode == 401
+                || statusCode == 403
+                || statusCode == 404
+                || statusCode == 405
+                || statusCode == 408
+                || statusCode == 425
+                || statusCode == 429
+                || statusCode >= 500;
+
+        private static bool BooleanValue(JsonElement parent, string name)
+        {
+            if (!parent.TryGetProperty(name, out JsonElement value)) return false;
+            if (value.ValueKind == JsonValueKind.True) return true;
+            return value.ValueKind == JsonValueKind.String
+                && bool.TryParse(value.GetString(), out bool parsed)
+                && parsed;
         }
 
         private static ActivityUploadTransportResult InvalidResponse(int statusCode)

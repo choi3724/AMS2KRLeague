@@ -6,6 +6,7 @@
 
 # Local release output and runtime data
 artifacts/
+work/
 logs/
 captures/
 activity/

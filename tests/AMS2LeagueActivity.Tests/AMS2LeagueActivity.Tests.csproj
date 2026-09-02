@@ -15,5 +15,8 @@
     <None Include="..\..\fixtures\phase1d3_activity\*.json"
           Link="fixtures\phase1d3_activity\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\fixtures\future_telemetry\*.json"
+          Link="fixtures\future_telemetry\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

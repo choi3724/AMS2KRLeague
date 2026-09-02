@@ -25,6 +25,9 @@ namespace AMS2LeagueClient.Core.SessionWitness
                 payloadVersion = 1,
                 witness.WitnessId,
                 witness.SessionFingerprint,
+                witness.CaptureSessionId,
+                witness.AttemptId,
+                witness.AttemptNumber,
                 witness.EventFingerprint,
                 witness.RosterSignature,
                 witness.RosterNames,
@@ -84,7 +87,10 @@ namespace AMS2LeagueClient.Core.SessionWitness
             {
                 throw new ArgumentException("Witness identity is required.", nameof(witness));
             }
-            return "witness:" + Sha256Hex(Encoding.UTF8.GetBytes(witness.WitnessId));
+            string identity = string.IsNullOrWhiteSpace(witness.AttemptId)
+                ? witness.WitnessId
+                : witness.WitnessId + "\u001f" + witness.AttemptId;
+            return "witness:" + Sha256Hex(Encoding.UTF8.GetBytes(identity));
         }
 
         public static string Sha256Hex(byte[] value)

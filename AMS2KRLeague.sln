@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2LeagueClient.Tests", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2LeagueActivity.Tests", "tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.csproj", "{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AMS2TelemetryProof", "tools\AMS2TelemetryProof\AMS2TelemetryProof.csproj", "{D3B7B111-7C61-4EBA-93C3-8A0D7C8E0230}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,5 +34,9 @@ Global
 		{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C9C4E8A2-7A0E-4F1A-9E8E-21991D3D0001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D3B7B111-7C61-4EBA-93C3-8A0D7C8E0230}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D3B7B111-7C61-4EBA-93C3-8A0D7C8E0230}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D3B7B111-7C61-4EBA-93C3-8A0D7C8E0230}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D3B7B111-7C61-4EBA-93C3-8A0D7C8E0230}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

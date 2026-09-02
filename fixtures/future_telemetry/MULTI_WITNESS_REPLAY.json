@@ -1,0 +1,5 @@
+{
+  "scenario": "MULTI_WITNESS_REPLAY",
+  "witnesses": ["witness-a", "witness-b"],
+  "canonicalMergeInClient": false
+}

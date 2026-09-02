@@ -1,0 +1,5 @@
+{
+  "scenario": "LOCAL_TELEMETRY_THROTTLE",
+  "sourceRateHz": 20,
+  "channels": ["speedMetersPerSecond", "throttle", "unfilteredThrottle", "lapDistanceMeters"]
+}

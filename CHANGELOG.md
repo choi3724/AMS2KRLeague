@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.3-beta.1 — 2026-09-02
+
+- 실제 멀티플레이어·장시간 Race·Incident 검증을 위한 P024 Compact Telemetry Closed Beta
+- 고주기 JSON 대신 immutable fixed-schema `A2CT V1` binary와 gzip 전송/저장을 적용
+- Replay adaptive cadence, Driver Fast/Motion/Slow/Change, Race Story, Track Geometry, Incident stream 추가
+- `LOSS_LEDGER_V1` 뒤에 `ATTEMPT_FINALIZE_V1`을 마지막으로 기록하는 acknowledged close 경로 추가
+- outer queue, worker, serialization, disk, cadence, finalize 손실을 attempt ledger에 보존하고 손실 시 `PARTIAL` 처리
+- Shared Memory useful field `161/161` lineage와 binary ordinal/scale/privacy 계약 문서화
+- private Driver analytics는 local durable archive에만 남기고 owner authority 확보 전 서버 업로드 차단
+- 60분/32대 fixture에서 `465,279 B` wire, 11/11 offline reprocessing과 coaching fidelity 통과
+- Cafe24 Application `1.6.0` / schema `15`와 public Compact 원본 `.a2ct.gz` 저장 계약 대응
+
 ## 0.2.2 — 2026-09-02
 
 - 순위 타워, 전후방 거리, 현재/섹터 타임을 독립 overlay window로 분리

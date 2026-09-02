@@ -1,0 +1,6 @@
+{
+  "scenario": "TIME_ATTACK_COACHING",
+  "sessionType": "TIME_ATTACK",
+  "sourceRateHz": 20,
+  "visibility": "PRIVATE_DRIVER_ANALYTICS"
+}

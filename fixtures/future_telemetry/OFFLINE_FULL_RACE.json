@@ -1,0 +1,5 @@
+{
+  "scenario": "OFFLINE_FULL_RACE",
+  "networkAvailable": false,
+  "expectedChunkState": "PENDING"
+}

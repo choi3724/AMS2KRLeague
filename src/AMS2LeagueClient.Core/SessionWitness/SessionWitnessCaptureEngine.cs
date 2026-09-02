@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using AMS2LeagueClient.Core.ActivityCapture;
+using AMS2LeagueClient.Core.FutureTelemetry;
 using AMS2LeagueClient.Core.HostRecording;
 using AMS2LeagueClient.Core.Telemetry;
 
@@ -32,6 +33,7 @@ namespace AMS2LeagueClient.Core.SessionWitness
         private uint? _lastSessionState;
         private uint? _lastRaceState;
         private ScheduledLeagueEvent? _scheduledEvent;
+        private TelemetryArchiveIdentity? _archiveIdentity;
 
         public SessionWitnessCaptureEngine(
             string sourceClientId,
@@ -49,6 +51,40 @@ namespace AMS2LeagueClient.Core.SessionWitness
             _scheduledEvent = scheduledEvent;
             _capture.SetScheduledEvent(scheduledEvent);
         }
+
+        /// <summary>
+        /// Binds a future-telemetry archive identity before witness capture starts.
+        /// Repeating the exact same binding is harmless; changing it after binding
+        /// or while a capture is active fails closed rather than splitting evidence.
+        /// </summary>
+        public void BeginArchiveIdentity(TelemetryArchiveIdentity identity)
+        {
+            TelemetryArchiveIdentity candidate =
+                (identity ?? throw new ArgumentNullException(nameof(identity))).ValidatedCopy();
+            if (_archiveIdentity != null)
+            {
+                if (SameArchiveIdentity(_archiveIdentity, candidate)) return;
+                throw new InvalidOperationException(
+                    _captureStartedAt.HasValue
+                        ? "The archive identity cannot change while session witness capture is active."
+                        : "A different archive identity is already pending for the next session witness.");
+            }
+
+            if (_captureStartedAt.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "An archive identity must be bound before session witness capture starts.");
+            }
+
+            _archiveIdentity = candidate;
+        }
+
+        /// <summary>
+        /// Returns a defensive copy of the identity reserved for the active or next
+        /// restart attempt. A normal close clears this value.
+        /// </summary>
+        public TelemetryArchiveIdentity? CurrentArchiveIdentity
+            => _archiveIdentity?.ValidatedCopy();
 
         public SessionWitnessUpdate Observe(TelemetrySnapshot snapshot)
         {
@@ -85,7 +121,17 @@ namespace AMS2LeagueClient.Core.SessionWitness
         public SessionWitnessUpdate Close(DateTimeOffset atUtc, string reason)
         {
             var result = new SessionWitnessUpdate();
-            return Wrap(_capture.Close(atUtc, string.IsNullOrWhiteSpace(reason) ? "WITNESS_CLOSED" : reason), result);
+            SessionWitnessUpdate wrapped = Wrap(
+                _capture.Close(atUtc, string.IsNullOrWhiteSpace(reason) ? "WITNESS_CLOSED" : reason),
+                result);
+            if (wrapped.FinalizedWitness == null)
+            {
+                // Explicit close also cancels an identity that was reserved before
+                // witness eligibility was reached (for example, a one-car session).
+                ResetTimeline();
+                _archiveIdentity = null;
+            }
+            return wrapped;
         }
 
         private SessionWitnessUpdate Wrap(HostRecorderUpdate update, SessionWitnessUpdate result)
@@ -109,11 +155,15 @@ namespace AMS2LeagueClient.Core.SessionWitness
                 session,
                 vehicleClass,
                 scheduledEventHint);
+            TelemetryArchiveIdentity? archiveIdentity = _archiveIdentity;
             SessionWitnessCompleteness completeness = Completeness(session);
             var witness = new SessionWitnessRecord
             {
-                WitnessId = "witness-" + Guid.NewGuid().ToString("N"),
-                SessionFingerprint = fingerprint,
+                WitnessId = archiveIdentity?.WitnessId ?? "witness-" + Guid.NewGuid().ToString("N"),
+                SessionFingerprint = archiveIdentity?.SessionFingerprint ?? fingerprint,
+                CaptureSessionId = archiveIdentity?.SessionId,
+                AttemptId = archiveIdentity?.AttemptId,
+                AttemptNumber = archiveIdentity?.AttemptNumber,
                 EventFingerprint = SessionWitnessFingerprint.CreateEvent(session, vehicleClass, scheduledEventHint),
                 RosterSignature = SessionWitnessFingerprint.CreateRosterSignature(roster),
                 RosterNames = roster,
@@ -137,8 +187,22 @@ namespace AMS2LeagueClient.Core.SessionWitness
                 + " fingerprint=" + witness.SessionFingerprint
                 + " completeness=" + witness.CaptureCompleteness.ToString().ToUpperInvariant());
             ResetTimeline();
+            _archiveIdentity = archiveIdentity != null
+                && string.Equals(session.ClosingReason, "RACE_RESTART", StringComparison.Ordinal)
+                    ? TelemetryArchiveIdentityFactory.NextAttempt(archiveIdentity)
+                    : null;
             return result;
         }
+
+        private static bool SameArchiveIdentity(
+            TelemetryArchiveIdentity left,
+            TelemetryArchiveIdentity right)
+            => string.Equals(left.SessionId, right.SessionId, StringComparison.Ordinal)
+                && string.Equals(left.SessionFingerprint, right.SessionFingerprint, StringComparison.Ordinal)
+                && string.Equals(left.WitnessId, right.WitnessId, StringComparison.Ordinal)
+                && string.Equals(left.AttemptId, right.AttemptId, StringComparison.Ordinal)
+                && left.AttemptNumber == right.AttemptNumber
+                && string.Equals(left.ScheduledEventHint, right.ScheduledEventHint, StringComparison.Ordinal);
 
         private void Track(TelemetrySnapshot snapshot)
         {

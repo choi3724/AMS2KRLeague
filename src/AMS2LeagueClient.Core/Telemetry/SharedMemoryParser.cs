@@ -68,8 +68,18 @@ namespace AMS2LeagueClient.Core.Telemetry
                     SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.FastestSector3Times + (index * sizeof(float))),
                     SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.PitSchedules + (index * sizeof(uint))),
                     SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.HighestFlagColours + (index * sizeof(uint))),
-                    SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.HighestFlagReasons + (index * sizeof(uint))));
+                    SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.HighestFlagReasons + (index * sizeof(uint))),
+                    SharedMemoryLayout.ReadVector3(
+                        buffer,
+                        participantOffset + SharedMemoryLayout.ParticipantWorldPosition),
+                    SharedMemoryLayout.ReadVector3(
+                        buffer,
+                        SharedMemoryLayout.Orientations + (index * SharedMemoryLayout.VectorLength * sizeof(float))),
+                    SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Speeds + (index * sizeof(float))),
+                    SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.Nationalities + (index * sizeof(uint))));
             }
+
+            ViewedVehicleTelemetrySnapshot viewedVehicleTelemetry = ParseViewedVehicleTelemetry(buffer);
 
             var snapshot = new TelemetrySnapshot(
                 capturedAt,
@@ -126,9 +136,130 @@ namespace AMS2LeagueClient.Core.Telemetry
                 SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.SnowDensity),
                 SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.EnforcedPitStopLap),
                 buffer[SharedMemoryLayout.SessionIsPrivate] != 0,
-                SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.YellowFlagState));
+                SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.YellowFlagState),
+                SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.SplitTime),
+                SharedMemoryLayout.ReadNullTerminatedAscii(
+                    buffer,
+                    SharedMemoryLayout.TranslatedTrackLocation,
+                    SharedMemoryLayout.StringLength),
+                SharedMemoryLayout.ReadNullTerminatedAscii(
+                    buffer,
+                    SharedMemoryLayout.TranslatedTrackVariation,
+                    SharedMemoryLayout.StringLength),
+                viewedVehicleTelemetry);
 
             return TelemetryReadResult.Success(snapshot, sequenceRetries);
         }
+
+        private static ViewedVehicleTelemetrySnapshot ParseViewedVehicleTelemetry(byte[] buffer)
+        {
+            var telemetry = new ViewedVehicleTelemetrySnapshot
+            {
+                UnfilteredThrottle = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.UnfilteredThrottle),
+                UnfilteredBrake = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.UnfilteredBrake),
+                UnfilteredSteering = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.UnfilteredSteering),
+                UnfilteredClutch = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.UnfilteredClutch),
+                CarFlagsRaw = SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.CarFlags),
+                OilTemperatureCelsius = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.OilTempCelsius),
+                OilPressureKPa = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.OilPressureKPa),
+                WaterTemperatureCelsius = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WaterTempCelsius),
+                WaterPressureKPa = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.WaterPressureKPa),
+                FuelPressureKPa = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.FuelPressureKPa),
+                FuelLevel = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.FuelLevel),
+                FuelCapacityLitres = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.FuelCapacity),
+                SpeedMetresPerSecond = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Speed),
+                Rpm = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Rpm),
+                MaxRpm = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.MaxRpm),
+                Brake = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Brake),
+                Throttle = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Throttle),
+                Clutch = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Clutch),
+                Steering = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Steering),
+                Gear = SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.Gear),
+                NumGears = SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.NumGears),
+                OdometerKilometres = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.OdometerKm),
+                AntiLockActive = buffer[SharedMemoryLayout.AntiLockActive] != 0,
+                LastOpponentCollisionIndex = SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.LastOpponentCollisionIndex),
+                LastOpponentCollisionMagnitude = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.LastOpponentCollisionMagnitude),
+                BoostActive = buffer[SharedMemoryLayout.BoostActive] != 0,
+                BoostAmount = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.BoostAmount),
+                Orientation = SharedMemoryLayout.ReadVector3(buffer, SharedMemoryLayout.Orientation),
+                LocalVelocity = SharedMemoryLayout.ReadVector3(buffer, SharedMemoryLayout.LocalVelocity),
+                WorldVelocity = SharedMemoryLayout.ReadVector3(buffer, SharedMemoryLayout.WorldVelocity),
+                AngularVelocity = SharedMemoryLayout.ReadVector3(buffer, SharedMemoryLayout.AngularVelocity),
+                LocalAcceleration = SharedMemoryLayout.ReadVector3(buffer, SharedMemoryLayout.LocalAcceleration),
+                WorldAcceleration = SharedMemoryLayout.ReadVector3(buffer, SharedMemoryLayout.WorldAcceleration),
+                ExtentsCentre = SharedMemoryLayout.ReadVector3(buffer, SharedMemoryLayout.ExtentsCentre),
+                EngineSpeedRadiansPerSecond = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.EngineSpeed),
+                EngineTorqueNewtonMetres = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.EngineTorque),
+                FrontWing = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Wings),
+                RearWing = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.Wings + sizeof(float)),
+                HandBrake = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.HandBrake),
+                CrashStateRaw = SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.CrashState),
+                AeroDamage = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.AeroDamage),
+                EngineDamage = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.EngineDamage),
+                BrakeBias = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.BrakeBias),
+                TurboBoostPressure = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.TurboBoostPressure),
+                DrsStateRaw = SharedMemoryLayout.ReadUInt32(buffer, SharedMemoryLayout.DrsState),
+                AntiLockSetting = SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.AntiLockSetting),
+                TractionControlSetting = SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.TractionControlSetting),
+                ErsDeploymentModeRaw = SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.ErsDeploymentMode),
+                ErsAutoModeEnabled = buffer[SharedMemoryLayout.ErsAutoModeEnabled] != 0,
+                ClutchTemperatureKelvin = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.ClutchTemp),
+                ClutchWear = SharedMemoryLayout.ReadSingle(buffer, SharedMemoryLayout.ClutchWear),
+                ClutchOverheated = buffer[SharedMemoryLayout.ClutchOverheated] != 0,
+                ClutchSlipping = buffer[SharedMemoryLayout.ClutchSlipping] != 0,
+                LaunchStageRaw = SharedMemoryLayout.ReadInt32(buffer, SharedMemoryLayout.LaunchStage)
+            };
+
+            telemetry.SetTyres(ParseTyres(buffer));
+            return telemetry;
+        }
+
+        private static TyreTelemetrySnapshot[] ParseTyres(byte[] buffer)
+        {
+            var tyres = new TyreTelemetrySnapshot[SharedMemoryLayout.TyreCount];
+            for (int index = 0; index < tyres.Length; index++)
+            {
+                tyres[index] = new TyreTelemetrySnapshot
+                {
+                    Index = index,
+                    FlagsRaw = ReadTyreUInt32(buffer, SharedMemoryLayout.TyreFlags, index),
+                    TerrainRaw = ReadTyreUInt32(buffer, SharedMemoryLayout.Terrain, index),
+                    LocalY = ReadTyreSingle(buffer, SharedMemoryLayout.TyreY, index),
+                    RevolutionsPerSecond = ReadTyreSingle(buffer, SharedMemoryLayout.TyreRps, index),
+                    TemperatureCelsius = ReadTyreSingle(buffer, SharedMemoryLayout.TyreTemp, index),
+                    HeightAboveGround = ReadTyreSingle(buffer, SharedMemoryLayout.TyreHeightAboveGround, index),
+                    Wear = ReadTyreSingle(buffer, SharedMemoryLayout.TyreWear, index),
+                    BrakeDamage = ReadTyreSingle(buffer, SharedMemoryLayout.BrakeDamage, index),
+                    SuspensionDamage = ReadTyreSingle(buffer, SharedMemoryLayout.SuspensionDamage, index),
+                    BrakeTemperatureCelsius = ReadTyreSingle(buffer, SharedMemoryLayout.BrakeTempCelsius, index),
+                    TreadTemperatureKelvin = ReadTyreSingle(buffer, SharedMemoryLayout.TyreTreadTemp, index),
+                    LayerTemperatureKelvin = ReadTyreSingle(buffer, SharedMemoryLayout.TyreLayerTemp, index),
+                    CarcassTemperatureKelvin = ReadTyreSingle(buffer, SharedMemoryLayout.TyreCarcassTemp, index),
+                    RimTemperatureKelvin = ReadTyreSingle(buffer, SharedMemoryLayout.TyreRimTemp, index),
+                    InternalAirTemperatureKelvin = ReadTyreSingle(buffer, SharedMemoryLayout.TyreInternalAirTemp, index),
+                    WheelLocalPositionY = ReadTyreSingle(buffer, SharedMemoryLayout.WheelLocalPositionY, index),
+                    SuspensionTravelMetres = ReadTyreSingle(buffer, SharedMemoryLayout.SuspensionTravel, index),
+                    SuspensionVelocity = ReadTyreSingle(buffer, SharedMemoryLayout.SuspensionVelocity, index),
+                    AirPressurePsi = ReadTyreSingle(buffer, SharedMemoryLayout.AirPressure, index),
+                    Compound = SharedMemoryLayout.ReadNullTerminatedAscii(
+                        buffer,
+                        SharedMemoryLayout.TyreCompound + (index * SharedMemoryLayout.TyreCompoundLength),
+                        SharedMemoryLayout.TyreCompoundLength),
+                    LeftTemperatureCelsius = ReadTyreSingle(buffer, SharedMemoryLayout.TyreTempLeft, index),
+                    CenterTemperatureCelsius = ReadTyreSingle(buffer, SharedMemoryLayout.TyreTempCenter, index),
+                    RightTemperatureCelsius = ReadTyreSingle(buffer, SharedMemoryLayout.TyreTempRight, index),
+                    RideHeightCentimetres = ReadTyreSingle(buffer, SharedMemoryLayout.RideHeight, index)
+                };
+            }
+
+            return tyres;
+        }
+
+        private static float ReadTyreSingle(byte[] buffer, int arrayOffset, int index)
+            => SharedMemoryLayout.ReadSingle(buffer, arrayOffset + (index * sizeof(float)));
+
+        private static uint ReadTyreUInt32(byte[] buffer, int arrayOffset, int index)
+            => SharedMemoryLayout.ReadUInt32(buffer, arrayOffset + (index * sizeof(uint)));
     }
 }
