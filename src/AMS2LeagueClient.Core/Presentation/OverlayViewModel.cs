@@ -22,6 +22,11 @@ namespace AMS2LeagueClient.Core.Presentation
         public string Background { get; set; } = OverlayUiPalette.NormalRowBackground;
         public string Accent { get; set; } = "Transparent";
         public string Foreground { get; set; } = "#DDE7F1";
+        public string ClassBackground { get; set; } = ClassBadgePalette.FallbackBackground;
+        public string ClassForeground { get; set; } = ClassBadgePalette.FallbackForeground;
+        public string TimeForeground { get; set; } = OverlayUiPalette.ActiveTime;
+        public ParticipantRowDisplayState DisplayState { get; set; } = ParticipantRowDisplayState.Active;
+        public bool IsDimmed { get; set; }
         public string Status { get; set; } = string.Empty;
         public string StatusColor { get; set; } = "#91A5B8";
     }
@@ -42,6 +47,10 @@ namespace AMS2LeagueClient.Core.Presentation
         public string BehindPosition { get; set; } = "P—";
         public string BehindName { get; set; } = "뒤차 없음";
         public string BehindGap { get; set; } = "—";
+        public int? AheadLapGapCandidate { get; set; }
+        public int? BehindLapGapCandidate { get; set; }
+        public string AheadParticipantKey { get; set; } = string.Empty;
+        public string BehindParticipantKey { get; set; } = string.Empty;
         public string AheadDistance { get; set; } = "—";
         public string BehindDistance { get; set; } = "—";
         public int AheadParticipantIndex { get; set; } = -1;
@@ -144,11 +153,14 @@ namespace AMS2LeagueClient.Core.Presentation
                 && league.Behind?.Source.Index == behind.Index
                 && league.CanUseBehindGameSplit;
             GapDisplay aheadGap = aheadMatchesGameSplit
-                ? gapPresenter.Present(snapshot.SplitTimeAhead, local, ahead)
+                ? gapPresenter.Present(snapshot.SplitTimeAhead, ahead)
                 : new GapDisplay("—", GapSource.Unknown);
             GapDisplay behindGap = behindMatchesGameSplit
-                ? gapPresenter.Present(snapshot.SplitTimeBehind, local, behind)
+                ? gapPresenter.Present(snapshot.SplitTimeBehind, behind)
                 : new GapDisplay("—", GapSource.Unknown);
+            var progressDistance = new TrackProgressDistanceResolver();
+            TrackProgressDistance aheadProgress = progressDistance.Resolve(snapshot.TrackLength, local, ahead);
+            TrackProgressDistance behindProgress = progressDistance.Resolve(snapshot.TrackLength, local, behind);
             float last = local.LastLapTime > 0 ? local.LastLapTime : snapshot.LastLapTime;
             float best = local.BestLapTime > 0 ? local.BestLapTime : snapshot.BestLapTime;
             uint displayLap = local.CurrentLap > 0 ? local.CurrentLap : local.LapsCompleted + 1;
@@ -177,6 +189,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 AheadPosition = PositionOf(aheadLeague),
                 AheadName = NameOf(ahead, noCar),
                 AheadGap = aheadGap.Text,
+                AheadLapGapCandidate = aheadProgress.LapGap,
+                AheadParticipantKey = ParticipantKey(ahead),
                 AheadDistance = proximity.AheadDistance.Text,
                 AheadParticipantIndex = ahead?.Index ?? -1,
                 AheadDistanceMeters = DisplayedMeters(proximity.AheadDistance),
@@ -185,6 +199,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 BehindPosition = PositionOf(behindLeague),
                 BehindName = NameOf(behind, noCar),
                 BehindGap = behindGap.Text,
+                BehindLapGapCandidate = behindProgress.LapGap,
+                BehindParticipantKey = ParticipantKey(behind),
                 BehindDistance = proximity.BehindDistance.Text,
                 BehindParticipantIndex = behind?.Index ?? -1,
                 BehindDistanceMeters = DisplayedMeters(proximity.BehindDistance),
@@ -293,28 +309,73 @@ namespace AMS2LeagueClient.Core.Presentation
             }
 
             return selected
-                .Select(item => new RankingRowViewModel
+                .Select(item =>
                 {
-                    ParticipantIndex = item.Source.Index,
-                    Position = "P" + item.LeaguePosition,
-                    Name = string.IsNullOrWhiteSpace(item.Source.Name) ? "—" : item.Source.Name,
-                    Class = CompactClass(item.Source.VehicleClass),
-                    Lap = "L" + (item.Source.CurrentLap > 0 ? item.Source.CurrentLap : item.Source.LapsCompleted + 1),
-                    CurrentTime = FormatParticipantCurrentTime(
-                        item.Source,
-                        item.Source.Index == localIndex ? snapshot.CurrentTime : (float?)null),
-                    IsPlayer = item.Source.Index == localIndex,
-                    Background = item.Source.Index == localIndex ? OverlayUiPalette.PlayerRowBackground : OverlayUiPalette.NormalRowBackground,
-                    Accent = item.Source.Index == localIndex ? "#82F1D0" : "Transparent",
-                    Foreground = item.Source.Index == localIndex ? "#FFFFFF" : "#DDE7F1",
-                    Status = StatusOf(item.Source.Index, broadcastStates, fastestIndex),
-                    StatusColor = StatusColorOf(item.Source.Index, broadcastStates, fastestIndex)
+                    ParticipantRowDisplayState displayState = ParticipantRowStateResolver.Resolve(item.Source);
+                    bool dimmed = ParticipantRowStateResolver.ShouldDim(displayState);
+                    bool player = item.Source.Index == localIndex;
+                    ClassBadgeStyle classBadge = ClassBadgePalette.Resolve(item.Source.VehicleClass);
+                    return new RankingRowViewModel
+                    {
+                        ParticipantIndex = item.Source.Index,
+                        Position = "P" + item.LeaguePosition,
+                        Name = string.IsNullOrWhiteSpace(item.Source.Name) ? "—" : item.Source.Name,
+                        Class = CompactClass(item.Source.VehicleClass),
+                        Lap = "L" + (item.Source.CurrentLap > 0 ? item.Source.CurrentLap : item.Source.LapsCompleted + 1),
+                        CurrentTime = FormatParticipantCurrentTime(
+                            snapshot.KnownSessionState,
+                            item.Source,
+                            player ? snapshot.CurrentTime : (float?)null),
+                        IsPlayer = player,
+                        DisplayState = displayState,
+                        IsDimmed = dimmed,
+                        Background = dimmed
+                            ? OverlayUiPalette.InactiveRowBackground
+                            : player ? OverlayUiPalette.PlayerRowBackground : OverlayUiPalette.NormalRowBackground,
+                        Accent = dimmed ? "#5D6A76" : player ? "#82F1D0" : "Transparent",
+                        Foreground = dimmed
+                            ? OverlayUiPalette.InactiveText
+                            : player ? "#FFFFFF" : OverlayUiPalette.ActiveText,
+                        ClassBackground = dimmed ? "#394652" : classBadge.Background,
+                        ClassForeground = dimmed ? "#AAB4BE" : classBadge.Foreground,
+                        TimeForeground = dimmed ? OverlayUiPalette.InactiveTime : OverlayUiPalette.ActiveTime,
+                        Status = StatusOf(item.Source.Index, broadcastStates, fastestIndex),
+                        StatusColor = StatusColorOf(item.Source.Index, broadcastStates, fastestIndex)
+                    };
                 })
                 .ToArray();
         }
 
-        private static string FormatParticipantCurrentTime(ParticipantSnapshot participant, float? localCurrentTime)
+        internal static string FormatParticipantCurrentTime(
+            SessionState? sessionState,
+            ParticipantSnapshot participant,
+            float? localCurrentTime)
         {
+            switch (participant.KnownRaceState)
+            {
+                case RaceState.Disqualified:
+                    return "DSQ";
+                case RaceState.Retired:
+                    return "RET";
+                case RaceState.Dnf:
+                    return "DNF";
+                case RaceState.Finished:
+                    if (sessionState == AMS2LeagueClient.Core.Telemetry.SessionState.Practice
+                        || sessionState == AMS2LeagueClient.Core.Telemetry.SessionState.Qualify
+                        || sessionState == AMS2LeagueClient.Core.Telemetry.SessionState.Test
+                        || sessionState == AMS2LeagueClient.Core.Telemetry.SessionState.TimeAttack)
+                    {
+                        return IsPositiveFinite(participant.BestLapTime)
+                            ? FormatLapTime(participant.BestLapTime)
+                            : "--";
+                    }
+
+                    // AMS2 does not expose a reliable official per-driver race
+                    // time here. Never present the retained partial-sector sum
+                    // as a final time after this participant has finished.
+                    return "FIN";
+            }
+
             if (localCurrentTime.HasValue && IsPositiveFinite(localCurrentTime.Value))
             {
                 return FormatLapTime(localCurrentTime.Value);
@@ -334,7 +395,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 observed = true;
             }
 
-            return observed ? FormatLapTime(elapsed) : "—";
+            return observed ? FormatLapTime(elapsed) : "--";
         }
 
         private static string StatusOf(
@@ -420,6 +481,11 @@ namespace AMS2LeagueClient.Core.Presentation
 
         private static string NameOf(ParticipantSnapshot? participant, string none)
             => participant == null || string.IsNullOrWhiteSpace(participant.Name) ? none : participant.Name;
+
+        private static string ParticipantKey(ParticipantSnapshot? participant)
+            => participant == null
+                ? string.Empty
+                : participant.Index + "|" + participant.Name + "|" + participant.VehicleName + "|" + participant.VehicleClass;
 
         private static string IndexOf(ParticipantSnapshot? participant)
             => participant == null ? "—" : participant.Index.ToString(CultureInfo.InvariantCulture);

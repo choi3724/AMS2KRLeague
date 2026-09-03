@@ -18,18 +18,11 @@ namespace AMS2LeagueClient.Core.Presentation
 
     public sealed class GapPresenter
     {
-        public GapDisplay Present(float directSplitSeconds, ParticipantSnapshot local, ParticipantSnapshot? relative)
+        public GapDisplay Present(float directSplitSeconds, ParticipantSnapshot? relative)
         {
             if (relative == null)
             {
                 return new GapDisplay("—", GapSource.Unknown);
-            }
-
-            long lapDelta = (long)relative.LapsCompleted - local.LapsCompleted;
-            if (lapDelta != 0)
-            {
-                string sign = lapDelta > 0 ? "+" : string.Empty;
-                return new GapDisplay(sign + lapDelta.ToString(CultureInfo.InvariantCulture) + " LAP", GapSource.LapDelta);
             }
 
             if (!float.IsNaN(directSplitSeconds) && !float.IsInfinity(directSplitSeconds) && directSplitSeconds >= 0.0f)

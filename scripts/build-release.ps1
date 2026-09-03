@@ -1,9 +1,9 @@
 param(
     [string]$DotnetExecutable = 'dotnet',
     [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$')]
-    [string]$Version = '0.2.3-beta.1',
+    [string]$Version = '0.2.3-beta.3',
     [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$')]
-    [string]$DisplayVersion = '0.2.3-beta.1',
+    [string]$DisplayVersion = '0.2.3-beta.3',
     [string]$IsccExecutable = ''
 )
 
@@ -59,6 +59,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     -r win-x64 `
     --self-contained true `
     --no-restore `
+    -t:Rebuild `
     -p:Version=$Version `
     -p:DebugSymbols=false `
     -p:DebugType=None `
@@ -67,7 +68,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Copy-Item -LiteralPath (Join-Path $projectRoot 'release\README_KO.txt') -Destination (Join-Path $publishRoot 'README_KO.txt')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'release\RELEASE_NOTES_KO.md') -Destination (Join-Path $publishRoot 'RELEASE_NOTES_KO.md')
-Get-ChildItem -LiteralPath $publishRoot -Recurse -File -Include *.pdb | Remove-Item -Force
+Get-ChildItem -LiteralPath $publishRoot -Recurse -File -Filter '*.pdb' | Remove-Item -Force
 
 & $auditScript -PackagePath $publishRoot
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -102,7 +103,8 @@ $checksumLines = foreach ($asset in $assets) {
     $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $asset
     "$($hash.Hash.ToLowerInvariant()) *$(Split-Path -Leaf $asset)"
 }
-Set-Content -LiteralPath $checksumPath -Value $checksumLines -Encoding utf8NoBOM
+$utf8NoBom = [Text.UTF8Encoding]::new($false)
+[IO.File]::WriteAllLines($checksumPath, [string[]]$checksumLines, $utf8NoBom)
 
 $manifestAssets = foreach ($asset in $assets) {
     $item = Get-Item -LiteralPath $asset
@@ -125,7 +127,7 @@ $manifest = [ordered]@{
     serverApiCompatibility = '>=1.6.0/schema15 for compact telemetry; >=1.4.0 for legacy activity and distributed witness'
     assets = $manifestAssets
 }
-$manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
+[IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 5), $utf8NoBom)
 
 Write-Output "Portable: $zipPath"
 Write-Output "Installer: $(if (Test-Path -LiteralPath $installerPath) { $installerPath } else { 'NOT BUILT - Inno Setup 6 not found' })"

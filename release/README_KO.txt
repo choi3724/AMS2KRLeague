@@ -1,4 +1,4 @@
-AMS2 League Overlay 0.2.3-beta.1 Closed Beta
+AMS2 League Overlay 0.2.3-beta.3 Closed Beta Hotfix Candidate
 ============================================
 
 빠른 시작

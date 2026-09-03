@@ -57,10 +57,10 @@ try {
         }
 
         [byte[]]$bytes = [IO.File]::ReadAllBytes($file.FullName)
-        [string]$hex = [Convert]::ToHexString($bytes)
+        [string]$hex = [BitConverter]::ToString($bytes).Replace('-', '')
         foreach ($needle in $forbiddenStrings) {
-            $asciiHex = [Convert]::ToHexString([Text.Encoding]::UTF8.GetBytes($needle))
-            $unicodeHex = [Convert]::ToHexString([Text.Encoding]::Unicode.GetBytes($needle))
+            $asciiHex = [BitConverter]::ToString([Text.Encoding]::UTF8.GetBytes($needle)).Replace('-', '')
+            $unicodeHex = [BitConverter]::ToString([Text.Encoding]::Unicode.GetBytes($needle)).Replace('-', '')
             if ($hex.IndexOf($asciiHex, [StringComparison]::OrdinalIgnoreCase) -ge 0 `
                 -or $hex.IndexOf($unicodeHex, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
                 $issues.Add("FORBIDDEN_STRING:${needle}:$relative")

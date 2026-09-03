@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.3-beta.3 — 2026-09-03
+
+- GT3 등 주요 차량 클래스에 AMS2 HUD 계열의 고정 배지 색상과 명시적 fallback 색상 적용
+- Timing Tower의 클래스·타임 글꼴, 행 높이와 열 폭을 함께 조정해 가독성과 잘림 방지 개선
+- 상태 변경 애니메이션이 행 전체를 35% opacity로 낮추던 원인을 제거해 주행 중 참가자의 잘못된 회색 표시 수정
+- `RET`/`DNF`/`DSQ`/연결 끊김만 비활성 스타일로 표시하고 Pit·일시적 timing 지연·완주는 밝기 유지
+- 앞차·뒷차 거리 변화 색상을 RED=불리, BLUE=유리 규칙으로 통일하고 2 m hysteresis 적용
+- 단순 `lapsCompleted` 차이로 즉시 `LAP 1`을 표시하던 오류를 누적 Race Progress 및 연속 2회 확인 방식으로 수정
+- Track Length 또는 유효 진행 거리가 없으면 Lap Gap을 추정하지 않고 meter/gap 표시로 fallback
+
+## 0.2.3-beta.2 — 2026-09-02
+
+- 멀티플레이 대기 화면 설계 높이·여백을 보정하고 실제 WPF 배치 경계 검증을 추가
+- Timing Tower가 20 Hz 값 갱신마다 행 컨테이너를 교체해 순위 이동 애니메이션이 즉시 끊기던 회귀 수정
+- Practice/Qualifying 참가자 완료 시 AMS2 participant Best Lap을 표시하고 유효 기록이 없으면 `--` 표시
+- Race 참가자별 `FIN` 전환을 적용해 선두 완주 뒤 주행 중인 후속 차량은 계속 갱신하고, 개별 완주 시 즉시 고정
+- `DNF`/`RET`/`DSQ` 이후 남은 sector 합계를 임의 시간처럼 표시하지 않도록 수정
+- 실제 멀티플레이 2회, Compact public chunk 72개의 Client→Cafe24→GET 원본 해시·바이트·decode를 대조
+- 서버 저장 원본만으로 14명 참가자, Lap, Position History, Race Story와 2D movement 재처리 검증
+- 실제 수집의 CadenceMissed 손실은 숨기지 않고 `PARTIAL`로 유지하며 beta 안정화 판단 자료로 기록
+
 ## 0.2.3-beta.1 — 2026-09-02
 
 - 실제 멀티플레이어·장시간 Race·Incident 검증을 위한 P024 Compact Telemetry Closed Beta

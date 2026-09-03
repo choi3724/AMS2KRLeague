@@ -33,6 +33,8 @@ namespace AMS2LeagueClient.Capture
             files.Add(CaptureOverlay(outputDirectory, "DEMO_overlay_diagnostic.png", true, 1920, 1080, null));
             files.Add(CaptureOverlay(outputDirectory, "DEMO_overlay_2560x1440.png", false, 2560, 1440, OverlayEventType.RaceFastestLap));
             files.Add(CaptureOverlay(outputDirectory, "DEMO_overlay_3440x1440.png", false, 3440, 1440, OverlayEventType.PositionGained));
+            files.Add(CaptureWaitingOverlay(outputDirectory, "FIXTURE_multiplayer_waiting.png"));
+            files.Add(CaptureClassAndParticipantStates(outputDirectory, "FIXTURE_class_palette_participant_states.png"));
             files.AddRange(CaptureBroadcastFixtures(outputDirectory));
 
             var unavailable = new ClientStatusViewModel();
@@ -76,6 +78,32 @@ namespace AMS2LeagueClient.Capture
             return path;
         }
 
+        private static string CaptureWaitingOverlay(string outputDirectory, string fileName)
+        {
+            const int width = 720;
+            const int height = 320;
+            var root = CreateSurface(width, height, "FIXTURE / SIMULATION • NOT REAL AMS2", "대기 화면 clipping 실측");
+            var waiting = new MultiplayerWaitingOverlayView
+            {
+                Width = OverlayUiMetrics.WaitingWidth,
+                Height = OverlayUiMetrics.WaitingHeight,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                DataContext = new MultiplayerWaitingOverlayViewModel
+                {
+                    Title = "멀티플레이어 세션 대기",
+                    SessionLabel = "예선 결과 확정 및 다음 세션 준비",
+                    ParticipantCountText = "리그 120 / 원본 128",
+                    RemainingLabel = "남은 시간",
+                    RemainingValue = "세션 종료 대기"
+                }
+            };
+            root.Children.Add(waiting);
+            string path = Path.Combine(outputDirectory, fileName);
+            SavePng(root, width, height, path);
+            return path;
+        }
+
         private static IReadOnlyList<string> CaptureBroadcastFixtures(string outputDirectory)
         {
             var files = new List<string>
@@ -86,6 +114,39 @@ namespace AMS2LeagueClient.Capture
             };
             files.AddRange(CaptureTowerReorder(outputDirectory));
             return files;
+        }
+
+        private static string CaptureClassAndParticipantStates(string outputDirectory, string fileName)
+        {
+            OverlayShellViewModel shell = DemoSnapshotFactory.CreateShell(false);
+            string[] classes =
+            {
+                "GT3 G2", "GT4", "GTE", "DPI", "LMP2", "F-Hitech", "Stock", "UNKNOWN",
+                "GT3", "LMP3", "Touring", "Formula", "Group C", "Kart", "GT3 G2"
+            };
+            List<RankingRowViewModel> rows = shell.Timing.RankingRows.Take(classes.Length).Select(CloneRow).ToList();
+            for (int index = 0; index < rows.Count; index++)
+            {
+                ClassBadgeStyle badge = ClassBadgePalette.Resolve(classes[index]);
+                rows[index].Class = classes[index];
+                rows[index].ClassBackground = badge.Background;
+                rows[index].ClassForeground = badge.Foreground;
+                rows[index].CurrentTime = index == 7 || index == 14 ? "12:34.567" : "1:40." + (100 + index).ToString();
+                rows[index].DisplayState = index == 6 ? ParticipantRowDisplayState.TerminalInactive : ParticipantRowDisplayState.Active;
+                rows[index].IsDimmed = index == 6;
+                if (rows[index].IsDimmed)
+                {
+                    rows[index].Foreground = OverlayUiPalette.InactiveText;
+                    rows[index].TimeForeground = OverlayUiPalette.InactiveTime;
+                    rows[index].ClassBackground = "#394652";
+                    rows[index].ClassForeground = "#AAB4BE";
+                    rows[index].Status = "RET";
+                    rows[index].StatusColor = "#FF7777";
+                }
+            }
+            shell.Timing.RankingRows = rows;
+            shell.Timing.EnvironmentLabel = "FIXTURE · 클래스 팔레트 / 참가자 상태";
+            return CaptureShell(outputDirectory, fileName, shell, "FIXTURE / SIMULATION • NOT REAL AMS2", "클래스 색상 · 확대 폰트 · active/terminal 스타일 검증");
         }
 
         private static string CaptureBroadcastState(
@@ -180,6 +241,11 @@ namespace AMS2LeagueClient.Capture
                 Background = row.Background,
                 Accent = row.Accent,
                 Foreground = row.Foreground,
+                ClassBackground = row.ClassBackground,
+                ClassForeground = row.ClassForeground,
+                TimeForeground = row.TimeForeground,
+                DisplayState = row.DisplayState,
+                IsDimmed = row.IsDimmed,
                 Status = row.Status,
                 StatusColor = row.StatusColor
             };

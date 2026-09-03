@@ -25,20 +25,20 @@ namespace AMS2LeagueClient.Core.Presentation
         public const int BaselineEventHeight = 105;
 
         public const int TowerWidth = 520;
-        public const int TowerHeight = 570;
+        public const int TowerHeight = 586;
         public const int DiagnosticTowerHeight = 690;
-        public const int RowPitch = 37;
-        public const int HeaderAndFooterHeight = 15;
+        public const int RowPitch = 38;
+        public const int HeaderAndFooterHeight = 16;
         public const int ComponentGap = 10;
 
         public const int RelativeWidth = 520;
-        public const int RelativeHeight = 110;
+        public const int RelativeHeight = 104;
         public const int LapTimingWidth = 380;
         public const int LapTimingHeight = 112;
         public const int SessionWidth = 250;
         public const int SessionHeight = 140;
-        public const int WaitingWidth = 312;
-        public const int WaitingHeight = 120;
+        public const int WaitingWidth = 336;
+        public const int WaitingHeight = 140;
         public const int RaceControlCompactWidth = 288;
         public const int RaceControlExpandedWidth = 416;
         public const int RaceControlCompactHeight = 66;
@@ -53,6 +53,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public const double FontTitle = 18;
         public const double FontEmphasis = 20;
         public const double FontDriverName = 24;
+        public const double FontClass = 17;
+        public const double FontTiming = 18;
         public const double FontValue = 24;
         public const double FontHero = 30;
 
@@ -68,6 +70,11 @@ namespace AMS2LeagueClient.Core.Presentation
         public const string TertiaryPanelBackground = "#86121D2B";
         public const string NormalRowBackground = "#78121D2A";
         public const string PlayerRowBackground = "#A82A554F";
+        public const string InactiveRowBackground = "#70141B24";
+        public const string ActiveText = "#F4F7FB";
+        public const string InactiveText = "#8C9AA8";
+        public const string ActiveTime = "#FFFFFF";
+        public const string InactiveTime = "#9AA6B2";
     }
 
     public readonly struct OverlayBounds

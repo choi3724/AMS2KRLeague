@@ -22,6 +22,8 @@ namespace AMS2LeagueClient.Core.Presentation
     {
         private readonly TrendState _ahead = new TrendState();
         private readonly TrendState _behind = new TrendState();
+        private readonly LapGapState _aheadLap = new LapGapState();
+        private readonly LapGapState _behindLap = new LapGapState();
         private int _sessionGeneration = int.MinValue;
 
         public void Apply(OverlayViewModel viewModel, int sessionGeneration)
@@ -32,16 +34,22 @@ namespace AMS2LeagueClient.Core.Presentation
                 _sessionGeneration = sessionGeneration;
                 _ahead.Reset();
                 _behind.Reset();
+                _aheadLap.Reset();
+                _behindLap.Reset();
             }
 
             RelativeDistanceTrend ahead = _ahead.Observe(viewModel.AheadParticipantIndex, viewModel.AheadDistanceMeters);
             RelativeDistanceTrend behind = _behind.Observe(viewModel.BehindParticipantIndex, viewModel.BehindDistanceMeters);
-            ApplyVisual(ahead, out string aheadArrow, out string aheadColor);
-            ApplyVisual(behind, out string behindArrow, out string behindColor);
+            ApplyVisual(ahead, true, out string aheadArrow, out string aheadColor);
+            ApplyVisual(behind, false, out string behindArrow, out string behindColor);
             viewModel.AheadDistanceTrendArrow = aheadArrow;
             viewModel.AheadDistanceColor = aheadColor;
             viewModel.BehindDistanceTrendArrow = behindArrow;
             viewModel.BehindDistanceColor = behindColor;
+            int aheadLaps = _aheadLap.Observe(viewModel.AheadParticipantKey, viewModel.AheadLapGapCandidate);
+            int behindLaps = _behindLap.Observe(viewModel.BehindParticipantKey, viewModel.BehindLapGapCandidate);
+            if (aheadLaps > 0) viewModel.AheadGap = "LAP " + aheadLaps.ToString(CultureInfo.InvariantCulture);
+            if (behindLaps > 0) viewModel.BehindGap = "LAP " + behindLaps.ToString(CultureInfo.InvariantCulture);
         }
 
         public void Reset()
@@ -49,19 +57,21 @@ namespace AMS2LeagueClient.Core.Presentation
             _sessionGeneration = int.MinValue;
             _ahead.Reset();
             _behind.Reset();
+            _aheadLap.Reset();
+            _behindLap.Reset();
         }
 
-        private static void ApplyVisual(RelativeDistanceTrend trend, out string arrow, out string color)
+        private static void ApplyVisual(RelativeDistanceTrend trend, bool ahead, out string arrow, out string color)
         {
             switch (trend)
             {
                 case RelativeDistanceTrend.Increasing:
                     arrow = "▲";
-                    color = "#57D5FF";
+                    color = ahead ? "#FF7777" : "#57D5FF";
                     return;
                 case RelativeDistanceTrend.Decreasing:
                     arrow = "▼";
-                    color = "#FF7777";
+                    color = ahead ? "#57D5FF" : "#FF7777";
                     return;
                 default:
                     arrow = string.Empty;
@@ -72,6 +82,7 @@ namespace AMS2LeagueClient.Core.Presentation
 
         private sealed class TrendState
         {
+            private const int DeadbandMeters = 2;
             private int _participantIndex = -1;
             private int? _meters;
             private RelativeDistanceTrend _trend;
@@ -91,8 +102,9 @@ namespace AMS2LeagueClient.Core.Presentation
                     return _trend;
                 }
 
-                if (meters.Value > _meters.Value) _trend = RelativeDistanceTrend.Increasing;
-                else if (meters.Value < _meters.Value) _trend = RelativeDistanceTrend.Decreasing;
+                int delta = meters.Value - _meters.Value;
+                if (Math.Abs(delta) <= DeadbandMeters) return _trend;
+                _trend = delta > 0 ? RelativeDistanceTrend.Increasing : RelativeDistanceTrend.Decreasing;
                 _meters = meters;
                 return _trend;
             }
@@ -104,37 +116,90 @@ namespace AMS2LeagueClient.Core.Presentation
                 _trend = RelativeDistanceTrend.None;
             }
         }
+
+        private sealed class LapGapState
+        {
+            private const int RequiredSnapshots = 2;
+            private string _participantKey = string.Empty;
+            private int _confirmed;
+            private int _candidate;
+            private int _candidateCount;
+
+            public int Observe(string participantKey, int? laps)
+            {
+                if (string.IsNullOrEmpty(participantKey) || !laps.HasValue)
+                {
+                    Reset();
+                    return 0;
+                }
+                if (!string.Equals(_participantKey, participantKey, StringComparison.Ordinal))
+                {
+                    Reset();
+                    _participantKey = participantKey;
+                }
+
+                int observed = Math.Max(0, laps.Value);
+                if (observed == _confirmed)
+                {
+                    _candidateCount = 0;
+                    return _confirmed;
+                }
+                if (observed != _candidate)
+                {
+                    _candidate = observed;
+                    _candidateCount = 1;
+                    return _confirmed;
+                }
+                if (++_candidateCount >= RequiredSnapshots)
+                {
+                    _confirmed = observed;
+                    _candidateCount = 0;
+                }
+                return _confirmed;
+            }
+
+            public void Reset()
+            {
+                _participantKey = string.Empty;
+                _confirmed = 0;
+                _candidate = 0;
+                _candidateCount = 0;
+            }
+        }
     }
 
     public sealed class TrackProgressDistance
     {
-        private TrackProgressDistance(bool isAvailable, double signedMeters, string text)
+        private TrackProgressDistance(bool isAvailable, double signedMeters, string text, int? lapGap)
         {
             IsAvailable = isAvailable;
             SignedMeters = signedMeters;
             Text = text;
+            LapGap = lapGap;
         }
 
         public bool IsAvailable { get; }
         public double SignedMeters { get; }
         public string Text { get; }
+        public int? LapGap { get; }
 
         public static TrackProgressDistance Unknown()
-            => new TrackProgressDistance(false, 0, "—");
+            => new TrackProgressDistance(false, 0, "—", null);
 
         public static TrackProgressDistance FromMeters(double signedMeters, float trackLength)
         {
             double absoluteMeters = Math.Abs(signedMeters);
             if (absoluteMeters >= trackLength)
             {
-                int laps = Math.Max(1, (int)Math.Floor((absoluteMeters + 0.5) / trackLength));
-                return new TrackProgressDistance(true, signedMeters, "+" + laps.ToString(CultureInfo.InvariantCulture) + " LAP");
+                int laps = Math.Max(1, (int)Math.Floor(absoluteMeters / trackLength));
+                return new TrackProgressDistance(true, signedMeters, "LAP " + laps.ToString(CultureInfo.InvariantCulture), laps);
             }
 
             return new TrackProgressDistance(
                 true,
                 signedMeters,
-                Math.Round(absoluteMeters, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture) + "m");
+                Math.Round(absoluteMeters, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture) + "m",
+                0);
         }
     }
 
@@ -169,7 +234,7 @@ namespace AMS2LeagueClient.Core.Presentation
         }
 
         private static bool IsValidLapDistance(float value, float trackLength)
-            => IsFinite(value) && value >= 0 && value <= trackLength * 1.05f;
+            => IsFinite(value) && value >= 0 && value <= trackLength;
 
         private static bool IsFinite(float value)
             => !float.IsNaN(value) && !float.IsInfinity(value);
@@ -258,7 +323,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 && trackLength > 0
                 && IsFinite(value)
                 && value >= 0
-                && value <= trackLength * 1.05f;
+                && value <= trackLength;
 
         private static bool IsFinite(float value)
             => !float.IsNaN(value) && !float.IsInfinity(value);

@@ -93,7 +93,7 @@ namespace AMS2LeagueClient.Runtime
                 item,
                 eventType.HasValue ? 2 : 0);
             timing.AheadDistanceTrendArrow = "▲";
-            timing.AheadDistanceColor = "#57D5FF";
+            timing.AheadDistanceColor = "#FF7777";
             timing.BehindDistanceTrendArrow = "▼";
             timing.BehindDistanceColor = "#FF7777";
             return OverlayShellViewModel.Build(snapshot, timing, item, true);

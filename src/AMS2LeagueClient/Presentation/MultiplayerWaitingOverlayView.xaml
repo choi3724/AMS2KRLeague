@@ -3,8 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:core="clr-namespace:AMS2LeagueClient.Core.Presentation;assembly=AMS2LeagueClient.Core"
              FontFamily="{DynamicResource HudFontFamily}"
+             ClipToBounds="False"
              IsHitTestVisible="False">
-    <Border CornerRadius="10" Background="{StaticResource MainPanelBackgroundBrush}" BorderBrush="#8257D5FF" BorderThickness="1.5" Padding="14,11">
+    <Border CornerRadius="10" Background="{StaticResource MainPanelBackgroundBrush}" BorderBrush="#8257D5FF" BorderThickness="1.5" Padding="16,13">
         <StackPanel>
             <TextBlock Text="{Binding Title}" Foreground="#57D5FF" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" />
             <TextBlock Text="{Binding SessionLabel}" Foreground="White" FontWeight="SemiBold" FontSize="18" Margin="0,5,0,0" />
