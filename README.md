@@ -2,7 +2,7 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-현재 Closed Beta 후보: **0.2.3-beta.3**
+현재 릴리스: **0.3.0**
 
 안정 기준선: **0.2.2**
 
@@ -10,6 +10,8 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 - League Classification 기준 Timing Tower와 크게 확장한 드라이버명
 - 타워 행의 차량 클래스와 현재 랩 진행 시간
+- F1 중계 그래픽 스타일 전환: 타워 빌드, 추월/피추월 플래시와 순위 숫자 롤, 최속 랩 퍼플 스윕, 카드 슬라이드 인/아웃
+- 상태창에서 언제든 각 오버레이 화면을 켜고 끄기(즉시 저장, 재시작 후 복원)
 - Safety Car를 순위와 참가자 수에서 제외
 - 현재 플레이어 강조
 - 물리적 트랙 진행거리 기준 앞차·뒤차 표시
@@ -30,12 +32,12 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 ## 실행 방법
 
-1. 게시 후 [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 Closed Beta `AMS2-League-Overlay-0.2.3-beta.3-Setup.exe`를 받습니다.
+1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 `AMS2-League-Overlay-0.3.0-Setup.exe`를 받습니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
 
-설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.2.3-beta.3-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
+설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.3.0-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
 
 게임이 실행되지 않았거나 Shared Memory를 사용할 수 없으면 오버레이는 대기 상태로 유지됩니다. 프로그램은 게임 설정, 실행 파일, 저장 파일을 자동 변경하지 않습니다.
 
@@ -45,9 +47,9 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 상태창에서 **레이아웃 편집**을 누르면 각 UI가 독립된 청록색 편집 테두리로 표시됩니다. 각 UI 상단 바를 드래그해 이동하고 오른쪽 아래 손잡이로 크기를 조절합니다. **저장 후 잠금**을 누르면 `%LOCALAPPDATA%\AMS2KRLeague\overlay-layout.json`에 현재 게임 해상도 대비 비율로 저장되고 다시 click-through 상태가 됩니다. **기본 위치 복원**은 저장된 배치를 삭제하고 기본 배치를 즉시 적용합니다.
 
-순위 타워와 전후방 거리, 현재/섹터 타임은 서로 독립된 창이므로 각각 다른 위치와 크기를 사용할 수 있습니다. 레이아웃 편집 중에는 평소 조건에 따라 숨겨지는 이벤트 및 Race Control UI도 함께 배치할 수 있습니다. 상태창의 **표시할 UI** 체크박스를 해제하면 필요 없는 구성 요소를 끌 수 있으며, 다시 체크하면 저장된 위치로 복원됩니다.
+순위 타워와 전후방 거리, 현재/섹터 타임은 서로 독립된 창이므로 각각 다른 위치와 크기를 사용할 수 있습니다. 레이아웃 편집 중에는 평소 조건에 따라 숨겨지는 이벤트 및 Race Control UI도 함께 배치할 수 있습니다. 상태창의 **표시할 오버레이** 체크박스는 편집 모드와 무관하게 언제든 사용할 수 있으며, 해제하면 해당 화면이 즉시 꺼지고 설정이 저장되어 다음 실행에도 유지됩니다. **모두 켜기**/**모두 끄기**로 한 번에 바꿀 수 있습니다.
 
-전후방 거리 값은 동일 차량을 연속 관찰했을 때 이전 표시값보다 멀어지면 파란색 `▲`, 가까워지면 빨간색 `▼`로 표시합니다. 일반 황색기·이중 황색기는 플래그 색상으로 구분하고, 전 코스 황색기는 AMS2 Shared Memory의 별도 FCY 진행 상태로 판정합니다.
+전후방 거리 값의 색상은 사용자에게 불리한 변화(앞차와 멀어짐, 뒷차가 가까워짐)를 빨간색, 유리한 변화를 파란색으로 표시하며 2 m 이내의 미세한 진동은 무시합니다. 일반 황색기·이중 황색기는 플래그 색상으로 구분하고, 전 코스 황색기는 AMS2 Shared Memory의 별도 FCY 진행 상태로 판정합니다.
 
 ## 상태와 Player 활동 기록
 
@@ -101,7 +103,7 @@ dotnet run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.c
 
 ## 버전 정책
 
-첫 공개 버전은 `0.1.0`, 현재 Closed Beta 후보는 `0.2.3-beta.3`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
+첫 공개 버전은 `0.1.0`, 현재 릴리스는 `0.3.0`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
 
 ## 현재 제한사항
 

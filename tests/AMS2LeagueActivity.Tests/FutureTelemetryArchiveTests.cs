@@ -29,6 +29,85 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Telemetry upload worker retries without losing durable chunk", UploadWorkerRetriesThenSends);
             yield return new TestCase("Private driver upload defaults to LOCAL_PENDING_OWNER while public upload remains available", PrivateUploadDefaultsToDenied);
             yield return new TestCase("Archive fault ledger distinguishes serialization disk and finalize failures", ArchiveFailureStagesAreDistinct);
+            yield return new TestCase("Compact replay world cadence option changes world row density only", ReplayWorldCadenceOption);
+        }
+
+        private static void ReplayWorldCadenceOption()
+        {
+            using var temporary = new TemporaryDirectory("replay-cadence");
+            var identity = new TelemetryArchiveIdentity
+            {
+                SessionId = "capture-cadence",
+                SessionFingerprint = "fingerprint-cadence",
+                WitnessId = "witness-cadence",
+                AttemptId = "attempt-cadence",
+                AttemptNumber = 1
+            };
+
+            long CountRows(int? worldIntervalMs, out long progressRows)
+            {
+                string root = Path.Combine(temporary.Root, "world-" + (worldIntervalMs?.ToString() ?? "default"));
+                var accumulator = new TelemetryChunkAccumulator(identity, TelemetryStreamType.PARTICIPANT_REPLAY, 0, 5);
+                for (int elapsed = 0; elapsed < 30_000; elapsed += 200)
+                {
+                    accumulator.AddReplay(Frame(elapsed, 3, true), 1, 64);
+                }
+                var options = worldIntervalMs is int interval
+                    ? new TelemetryArchiveOptions { ReplayWorldIntervalMs = interval }
+                    : new TelemetryArchiveOptions();
+                new CompactTelemetryChunkStore(root, identity, options).Commit(accumulator.Build());
+
+                long world = 0;
+                long progress = 0;
+                foreach (string path in Directory.GetFiles(root, "*.a2ct.gz", SearchOption.AllDirectories))
+                {
+                    AMS2LeagueClient.Core.CompactTelemetry.CompactTelemetryEnvelope envelope;
+                    using (FileStream stream = File.OpenRead(path))
+                    {
+                        envelope = AMS2LeagueClient.Core.CompactTelemetry.CompactTelemetryCodec.Decode(TelemetryChunkSerializer.Gunzip(stream));
+                    }
+                    if (envelope.Block.SchemaId != AMS2LeagueClient.Core.CompactTelemetry.CompactTelemetrySchemaId.ParticipantReplayV1) continue;
+                    AMS2LeagueClient.Core.CompactTelemetry.CompactTelemetrySchema schema =
+                        AMS2LeagueClient.Core.CompactTelemetry.CompactTelemetrySchemaRegistry.Get(envelope.Block.SchemaId);
+                    int worldX = schema.Fields.ToList().FindIndex(field => field.Name == "worldX");
+                    int position = schema.Fields.ToList().FindIndex(field => field.Name == "racePosition");
+                    foreach (AMS2LeagueClient.Core.CompactTelemetry.CompactTelemetrySample sample in envelope.Block.Samples)
+                    {
+                        if (sample.Values[worldX].HasValue) world++;
+                        if (sample.Values[position].HasValue) progress++;
+                    }
+                }
+                progressRows = progress;
+                return world;
+            }
+
+            // 3 cars x 30 s at 5 Hz: the first 10 s are a start burst (50 world rows per car),
+            // afterwards world rows follow the configured cadence only.
+            long sparse = CountRows(5_000, out long sparseProgress);
+            long dense = CountRows(500, out long denseProgress);
+            AssertEx.Equal(3L * (50 + 4), sparse, "5,000 ms world cadence: 4 world ticks after the start burst.");
+            AssertEx.Equal(3L * (50 + 40), dense, "500 ms world cadence: 40 world ticks after the start burst.");
+            AssertEx.Equal(sparseProgress, denseProgress, "Progress cadence must not change with the world cadence.");
+
+            // The shipped default is what actually reaches the server, so pin it here.
+            AssertEx.Equal(500, TelemetryArchiveOptions.DefaultReplayWorldIntervalMs, "Shipped world cadence default is 500 ms.");
+            long shipped = CountRows(null, out long shippedProgress);
+            AssertEx.Equal(dense, shipped, "Stock options must produce the 500 ms world density.");
+            AssertEx.Equal(denseProgress, shippedProgress, "Stock options must keep the 2,000 ms progress cadence.");
+
+            bool rejected = false;
+            try
+            {
+                new CompactTelemetryChunkStore(
+                    Path.Combine(temporary.Root, "invalid"),
+                    identity,
+                    new TelemetryArchiveOptions { ReplayWorldIntervalMs = 100 });
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejected = true;
+            }
+            AssertEx.True(rejected, "A world cadence faster than the 5 Hz archive gate must be rejected.");
         }
 
         private static void FixedFixtureInventory()

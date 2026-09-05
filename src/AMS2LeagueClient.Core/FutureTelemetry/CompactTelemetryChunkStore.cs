@@ -34,12 +34,26 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         private long? _nextReplayWorldMs;
         private long? _nextReplayExtensionMs;
         private long? _nextReplayBattleMs;
+        private readonly long _replayProgressIntervalMs;
+        private readonly long _replayWorldIntervalMs;
+        private readonly long _replayExtensionIntervalMs;
+        private readonly long _replayBattleIntervalMs;
         private int _participantDictionaryRevision;
         private int _participantDictionaryEmittedRevision;
 
         public CompactTelemetryChunkStore(string root, TelemetryArchiveIdentity identity)
+            : this(root, identity, null)
+        {
+        }
+
+        public CompactTelemetryChunkStore(string root, TelemetryArchiveIdentity identity, TelemetryArchiveOptions? options)
         {
             if (string.IsNullOrWhiteSpace(root)) throw new ArgumentException("Archive root is required.", nameof(root));
+            TelemetryArchiveOptions resolvedOptions = (options ?? new TelemetryArchiveOptions()).ValidatedCopy();
+            _replayProgressIntervalMs = resolvedOptions.ReplayProgressIntervalMs;
+            _replayWorldIntervalMs = resolvedOptions.ReplayWorldIntervalMs;
+            _replayExtensionIntervalMs = resolvedOptions.ReplayExtensionIntervalMs;
+            _replayBattleIntervalMs = resolvedOptions.ReplayBattleIntervalMs;
             _root = Path.GetFullPath(root);
             _identity = (identity ?? throw new ArgumentNullException(nameof(identity))).ValidatedCopy();
             _legacyStore = new TelemetryChunkStore(_root, _identity);
@@ -356,10 +370,10 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             {
                 double?[][] rows = group.ToArray();
                 long elapsed = group.Key;
-                bool baseDue = TakeDue(ref _nextReplayBaseMs, elapsed, 2_000);
-                bool worldDue = TakeDue(ref _nextReplayWorldMs, elapsed, 5_000);
-                bool extensionDue = TakeDue(ref _nextReplayExtensionMs, elapsed, 20_000);
-                bool battleDue = TakeDue(ref _nextReplayBattleMs, elapsed, 500);
+                bool baseDue = TakeDue(ref _nextReplayBaseMs, elapsed, _replayProgressIntervalMs);
+                bool worldDue = TakeDue(ref _nextReplayWorldMs, elapsed, _replayWorldIntervalMs);
+                bool extensionDue = TakeDue(ref _nextReplayExtensionMs, elapsed, _replayExtensionIntervalMs);
+                bool battleDue = TakeDue(ref _nextReplayBattleMs, elapsed, _replayBattleIntervalMs);
                 bool startBurst = elapsed < 10_000;
                 var changed = new HashSet<int>();
                 foreach (double?[] row in rows)

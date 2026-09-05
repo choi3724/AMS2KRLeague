@@ -75,6 +75,12 @@ namespace AMS2LeagueClient
                 _overlay = new OverlayWindow(startupPolicy.Diagnostic);
                 if (_statusWindow != null)
                 {
+                    // Per-overlay toggles work at any time; reflect the saved state now.
+                    OverlayWindow overlay = _overlay;
+                    _statusWindow.SetLayoutComponentStates(OverlayComponentKeys.All.ToDictionary(
+                        key => key,
+                        key => overlay.IsComponentEnabled(key),
+                        StringComparer.OrdinalIgnoreCase));
                     _statusWindow.LayoutEditRequested += (sender, layoutArgs) =>
                     {
                         if (_overlay == null) return;

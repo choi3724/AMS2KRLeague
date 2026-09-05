@@ -10,7 +10,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
+using AMS2LeagueClient.Core.Events;
 using AMS2LeagueClient.Core.CompactTelemetry;
 using AMS2LeagueClient.Core.Diagnostics;
 using AMS2LeagueClient.Core.FutureTelemetry;
@@ -88,6 +91,16 @@ namespace AMS2LeagueClient.Tests
                 ,("Telemetry gzip HTTP contract is exact", TelemetryGzipHttpContractIsExact)
                 ,("Compact telemetry gzip HTTP contract is exact", CompactTelemetryGzipHttpContractIsExact)
                 ,("Activity runtime automatically uploads pending telemetry chunks", ActivityRuntimeUploadsPendingTelemetry)
+                ,("Transition tracker reports position direction and fastest lap", TransitionTrackerReportsPositionDirection)
+                ,("Position change flashes row and rolls number", PositionChangeFlashesRowAndRollsNumber)
+                ,("Fastest lap status sweeps purple without dimming", FastestLapStatusSweepsPurple)
+                ,("Tower rows build in when shown", TowerRowsBuildInWhenShown)
+                ,("Component toggle persists without layout edit", ComponentToggleWithoutEditPersists)
+                ,("Status window toggles are always enabled", StatusWindowTogglesAlwaysEnabled)
+                ,("Relative participant change animates", RelativeParticipantChangeAnimates)
+                ,("Session lap counter rolls", SessionLapCounterRolls)
+                ,("Event card exit keeps surface for animation", EventCardExitKeepsSurfaceForAnimation)
+                ,("Lap timing best lap pops", LapTimingBestLapPops)
             };
             int passed = 0;
             foreach ((string name, Action test) in tests)
@@ -1677,6 +1690,323 @@ namespace AMS2LeagueClient.Tests
 
         private static LeagueClassification Classify(TelemetrySnapshot snapshot)
             => new LeagueClassificationResolver().Resolve(snapshot, ResolveLocal(snapshot));
+
+        private static void TransitionTrackerReportsPositionDirection()
+        {
+            var tracker = new TimingTowerTransitionTracker();
+            tracker.Observe(new[] { Row(1, "P1", "ALPHA", "0:20.000"), Row(2, "P2", "BRAVO", "0:21.000") });
+
+            RankingRowViewModel bravo = Row(2, "P1", "BRAVO", "0:22.000");
+            bravo.Status = "BEST";
+            IReadOnlyList<TimingTowerTransition> transitions = tracker.Observe(new[] { bravo, Row(1, "P2", "ALPHA", "0:23.000") });
+            TimingTowerTransition gained = transitions.Single(item => item.ParticipantIndex == 2);
+            TimingTowerTransition lost = transitions.Single(item => item.ParticipantIndex == 1);
+            AssertTrue(gained.IsReorder);
+            AssertTrue(gained.PositionGained);
+            AssertFalse(gained.PositionLost);
+            AssertEqual(2, gained.PreviousPosition);
+            AssertEqual(1, gained.Position);
+            AssertTrue(gained.StatusChanged);
+            AssertTrue(gained.BecameFastestLap);
+            AssertTrue(lost.PositionLost);
+            AssertFalse(lost.PositionGained);
+            AssertFalse(lost.StatusChanged);
+            AssertFalse(lost.BecameFastestLap);
+
+            // A participant entering the visible window is new: no reorder, no gain/loss flash.
+            transitions = tracker.Observe(new[] { bravo, Row(1, "P2", "ALPHA", "0:23.000"), Row(7, "P3", "CHARLIE", "0:24.000") });
+            TimingTowerTransition entered = transitions.Single(item => item.ParticipantIndex == 7);
+            AssertTrue(entered.IsNew);
+            AssertFalse(entered.IsReorder);
+            AssertFalse(entered.PositionGained);
+            AssertFalse(entered.StatusChanged);
+            AssertEqual(12, TimingTowerTransitionTracker.ParsePosition("P12"));
+            AssertEqual(0, TimingTowerTransitionTracker.ParsePosition("P—"));
+        }
+
+        private static void PositionChangeFlashesRowAndRollsNumber()
+        {
+            var view = new OverlayHudView();
+            view.SetViewModel(TimingRows(Row(1, "P1", "ALPHA", "0:20.000"), Row(2, "P2", "BRAVO", "0:21.000")));
+            LayoutTower(view);
+
+            view.SetViewModel(TimingRows(Row(2, "P1", "BRAVO", "0:22.000"), Row(1, "P2", "ALPHA", "0:23.000")));
+            ItemsControl items = FindDescendant<ItemsControl>(view) ?? throw new InvalidOperationException("Ranking items missing.");
+            ContentPresenter gained = Container(items, 0);
+            ContentPresenter lost = Container(items, 1);
+            Border gainedFlash = Named<Border>(gained, "FlashLayer");
+            Border lostFlash = Named<Border>(lost, "FlashLayer");
+            AssertColor(OverlayHudView.PositionGainFlashColor, gainedFlash.Background);
+            AssertColor(OverlayHudView.PositionLossFlashColor, lostFlash.Background);
+            // Animated values only update on the next time-manager tick, so the
+            // tests assert clock attachment: the flash layer (and only the flash
+            // layer) carries an opacity animation whose base value is fully hidden.
+            AssertTrue(gainedFlash.HasAnimatedProperties);
+            AssertTrue(lostFlash.HasAnimatedProperties);
+            AssertEqual(0.0, gainedFlash.GetAnimationBaseValue(UIElement.OpacityProperty));
+            TextBlock number = Named<TextBlock>(gained, "PositionText");
+            AssertTrue(number.RenderTransform is TranslateTransform roll && roll.HasAnimatedProperties);
+            AssertTrue(gained.RenderTransform is TranslateTransform slide && slide.HasAnimatedProperties);
+
+            // The rows themselves never dim, whatever accent is playing.
+            AssertEqual(1.0, gained.Opacity);
+            AssertEqual(1.0, lost.Opacity);
+            AssertFalse(gained.HasAnimatedProperties);
+            AssertFalse(lost.HasAnimatedProperties);
+            AssertFalse(DependencyPropertyHelper.GetValueSource(gained, UIElement.OpacityProperty).IsAnimated);
+            AssertFalse(DependencyPropertyHelper.GetValueSource(lost, UIElement.OpacityProperty).IsAnimated);
+        }
+
+        private static void FastestLapStatusSweepsPurple()
+        {
+            var view = new OverlayHudView();
+            view.SetViewModel(TimingRows(Row(1, "P1", "ALPHA", "0:20.000")));
+            LayoutTower(view);
+
+            RankingRowViewModel best = Row(1, "P1", "ALPHA", "0:20.050");
+            best.Status = "BEST";
+            view.SetViewModel(TimingRows(best));
+            ItemsControl items = FindDescendant<ItemsControl>(view) ?? throw new InvalidOperationException("Ranking items missing.");
+            ContentPresenter presenter = Container(items, 0);
+            Border flash = Named<Border>(presenter, "FlashLayer");
+            AssertColor(OverlayHudView.FastestLapFlashColor, flash.Background);
+            AssertTrue(flash.RenderTransform is ScaleTransform sweep && sweep.HasAnimatedProperties);
+            AssertTrue(flash.HasAnimatedProperties);
+            AssertEqual(0.0, flash.GetAnimationBaseValue(UIElement.OpacityProperty));
+            TextBlock status = Named<TextBlock>(presenter, "StatusText");
+            AssertTrue(status.RenderTransform is ScaleTransform pop && pop.HasAnimatedProperties);
+            AssertEqual(1.0, presenter.Opacity);
+            AssertFalse(presenter.HasAnimatedProperties);
+            AssertFalse(DependencyPropertyHelper.GetValueSource(presenter, UIElement.OpacityProperty).IsAnimated);
+        }
+
+        private static void TowerRowsBuildInWhenShown()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "ams2-tower-entry-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var window = new OverlayWindow(false, Path.Combine(root, "overlay-layout.json"));
+            try
+            {
+                window.SetViewModel(DemoSnapshotFactory.CreateShell(false), false);
+                window.ShowDemoAt(-5000, -5000, 96);
+                PumpDispatcher();
+                ItemsControl items = FindDescendant<ItemsControl>(window) ?? throw new InvalidOperationException("Ranking items missing.");
+                AssertTrue(items.Items.Count >= 2);
+                ContentPresenter first = Container(items, 0);
+                ContentPresenter last = Container(items, items.Items.Count - 1);
+                AssertTrue(first.RenderTransform is TranslateTransform firstSlide && firstSlide.HasAnimatedProperties);
+                AssertTrue(last.RenderTransform is TranslateTransform lastSlide && lastSlide.HasAnimatedProperties);
+                AssertEqual(1.0, first.Opacity);
+                AssertFalse(DependencyPropertyHelper.GetValueSource(first, UIElement.OpacityProperty).IsAnimated);
+            }
+            finally
+            {
+                window.Close();
+                Directory.Delete(root, true);
+            }
+        }
+
+        private static void ComponentToggleWithoutEditPersists()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "ams2-toggle-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string layoutPath = Path.Combine(root, "overlay-layout.json");
+            var window = new OverlayWindow(false, layoutPath);
+            try
+            {
+                AssertFalse(window.IsLayoutEditing);
+                window.SetComponentEnabled(OverlayComponentKeys.LapTiming, false);
+                AssertFalse(window.IsComponentEnabled(OverlayComponentKeys.LapTiming));
+                AssertTrue(File.Exists(layoutPath));
+                AssertTrue(File.ReadAllText(layoutPath).Contains("\"lapTiming\": false", StringComparison.Ordinal));
+
+                var reloaded = new OverlayWindow(false, layoutPath);
+                try
+                {
+                    AssertFalse(reloaded.IsComponentEnabled(OverlayComponentKeys.LapTiming));
+                    AssertTrue(reloaded.IsComponentEnabled(OverlayComponentKeys.TimingTower));
+                    reloaded.SetComponentEnabled(OverlayComponentKeys.LapTiming, true);
+                    AssertTrue(File.ReadAllText(layoutPath).Contains("\"lapTiming\": true", StringComparison.Ordinal));
+                }
+                finally
+                {
+                    reloaded.Close();
+                }
+            }
+            finally
+            {
+                window.Close();
+                Directory.Delete(root, true);
+            }
+        }
+
+        private static void StatusWindowTogglesAlwaysEnabled()
+        {
+            var window = new ClientStatusWindow(new ClientStatusViewModel());
+            try
+            {
+                var toggles = new List<LayoutComponentToggleEventArgs>();
+                window.LayoutComponentToggled += (sender, args) => toggles.Add(args);
+                AssertTrue(window.AreComponentTogglesEnabled);
+                window.SetLayoutEditState(false, "레이아웃이 잠겼습니다.");
+                AssertTrue(window.AreComponentTogglesEnabled);
+
+                // Programmatic synchronisation never echoes back as a user toggle.
+                window.SetLayoutComponentStates(new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [OverlayComponentKeys.LapTiming] = false
+                });
+                AssertEqual(0, toggles.Count);
+                AssertFalse(window.GetLayoutComponentStates()[OverlayComponentKeys.LapTiming]);
+
+                CheckBox lapTiming = LogicalDescendants<CheckBox>(window)
+                    .Single(item => string.Equals(item.Tag as string, OverlayComponentKeys.LapTiming, StringComparison.OrdinalIgnoreCase));
+                lapTiming.IsChecked = true;
+                AssertEqual(1, toggles.Count);
+                AssertEqual(OverlayComponentKeys.LapTiming, toggles[0].Component);
+                AssertTrue(toggles[0].Enabled);
+
+                window.SetAllComponents(false);
+                AssertTrue(toggles.Count >= 1 + OverlayComponentKeys.All.Length);
+                AssertTrue(OverlayComponentKeys.All.All(key => !window.GetLayoutComponentStates()[key]));
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static void RelativeParticipantChangeAnimates()
+        {
+            var view = new RelativeDriversView();
+            OverlayViewModel first = DemoSnapshotFactory.CreateViewModel(false);
+            view.SetViewModel(first);
+            var size = new Size(OverlayUiMetrics.RelativeWidth, OverlayUiMetrics.RelativeHeight);
+            view.Measure(size);
+            view.Arrange(new Rect(size));
+            view.UpdateLayout();
+
+            OverlayViewModel changed = DemoSnapshotFactory.CreateViewModel(false);
+            changed.AheadParticipantKey = first.AheadParticipantKey + "|swap";
+            changed.AheadDistanceColor = "#57D5FF";
+            view.SetViewModel(changed);
+            Grid aheadRow = Named<Grid>(view, "AheadRow");
+            StackPanel aheadDistance = Named<StackPanel>(view, "AheadDistancePanel");
+            AssertTrue(aheadRow.RenderTransform is TranslateTransform slide && slide.HasAnimatedProperties);
+            AssertTrue(aheadDistance.RenderTransform is ScaleTransform pop && pop.HasAnimatedProperties);
+            AssertTrue(ReferenceEquals(view.DataContext, changed));
+        }
+
+        private static void SessionLapCounterRolls()
+        {
+            var view = new SessionInfoView();
+            view.SetViewModel(new SessionInfoViewModel { LapValue = "3", PositionValue = "P5 / 20", PrimaryValue = "12:00" });
+            var size = new Size(OverlayUiMetrics.SessionWidth, OverlayUiMetrics.SessionHeight);
+            view.Measure(size);
+            view.Arrange(new Rect(size));
+            view.UpdateLayout();
+
+            view.SetViewModel(new SessionInfoViewModel { LapValue = "4", PositionValue = "P4 / 20", PrimaryValue = "11:59" });
+            TextBlock lap = Named<TextBlock>(view, "LapValueText");
+            TextBlock position = Named<TextBlock>(view, "PositionValueText");
+            TextBlock primary = Named<TextBlock>(view, "PrimaryValueText");
+            AssertTrue(lap.RenderTransform is TranslateTransform lapRoll && lapRoll.HasAnimatedProperties);
+            AssertTrue(position.RenderTransform is TranslateTransform positionRoll && positionRoll.HasAnimatedProperties);
+            AssertFalse(DependencyPropertyHelper.GetValueSource(primary, UIElement.OpacityProperty).IsAnimated);
+        }
+
+        private static void EventCardExitKeepsSurfaceForAnimation()
+        {
+            var view = new EventCardView();
+            EventCardViewModel shown = EventCardViewModel.FromEvent(DemoSnapshotFactory.CreateEvent(OverlayEventType.PositionGained), true);
+            AssertEqual(TimeSpan.Zero, view.SetViewModel(shown, true));
+            AssertEqual(EventCardView.ExitDuration, view.SetViewModel(new EventCardViewModel(), true));
+            AssertTrue(ReferenceEquals(view.DataContext, shown));
+            AssertEqual(TimeSpan.Zero, view.SetViewModel(new EventCardViewModel(), true));
+
+            string root = Path.Combine(Path.GetTempPath(), "ams2-event-exit-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var window = new OverlayWindow(false, Path.Combine(root, "overlay-layout.json"));
+            try
+            {
+                window.SetViewModel(DemoSnapshotFactory.CreateShell(false, OverlayEventType.PositionGained), false);
+                window.ShowDemoAt(-5000, -5000, 96);
+                AssertTrue(window.IsEventCardSurfaceVisible);
+
+                window.SetViewModel(DemoSnapshotFactory.CreateShell(false), true);
+                window.ShowDemoAt(-5000, -5000, 96);
+                AssertTrue(window.IsEventCardSurfaceVisible);
+
+                Thread.Sleep(EventCardView.ExitDuration + TimeSpan.FromMilliseconds(120));
+                window.ShowDemoAt(-5000, -5000, 96);
+                AssertFalse(window.IsEventCardSurfaceVisible);
+            }
+            finally
+            {
+                window.Close();
+                Directory.Delete(root, true);
+            }
+        }
+
+        private static void LapTimingBestLapPops()
+        {
+            var view = new LapTimingView();
+            view.SetViewModel(DemoSnapshotFactory.CreateViewModel(false));
+            var size = new Size(OverlayUiMetrics.LapTimingWidth, OverlayUiMetrics.LapTimingHeight);
+            view.Measure(size);
+            view.Arrange(new Rect(size));
+            view.UpdateLayout();
+
+            OverlayViewModel next = DemoSnapshotFactory.CreateViewModel(false);
+            // The demo player is in sector 2: S1/S2 already show times, S3 is still "—".
+            next.LastLapText = "1:40.111";
+            next.BestLapText = "1:40.111";
+            next.Sector3Text = "0:31.004";
+            view.SetViewModel(next);
+            AssertTrue(Named<TextBlock>(view, "LastLapValue").RenderTransform is ScaleTransform last && last.HasAnimatedProperties);
+            AssertTrue(Named<TextBlock>(view, "BestLapValue").RenderTransform is ScaleTransform best && best.HasAnimatedProperties);
+            AssertTrue(Named<TextBlock>(view, "Sector3Value").RenderTransform is ScaleTransform sector && sector.HasAnimatedProperties);
+            AssertFalse(Named<TextBlock>(view, "Sector2Value").RenderTransform is ScaleTransform idle && idle.HasAnimatedProperties);
+        }
+
+        private static void LayoutTower(FrameworkElement view)
+        {
+            view.Measure(new Size(OverlayUiMetrics.TowerWidth, OverlayUiMetrics.TowerHeight));
+            view.Arrange(new Rect(0, 0, OverlayUiMetrics.TowerWidth, OverlayUiMetrics.TowerHeight));
+            view.UpdateLayout();
+        }
+
+        private static ContentPresenter Container(ItemsControl items, int index)
+            => items.ItemContainerGenerator.ContainerFromIndex(index) as ContentPresenter
+                ?? throw new InvalidOperationException("Ranking row container " + index + " missing.");
+
+        private static T Named<T>(DependencyObject root, string name) where T : FrameworkElement
+            => Descendants<T>(root).FirstOrDefault(item => item.Name == name)
+                ?? throw new InvalidOperationException("Element '" + name + "' missing.");
+
+        private static IEnumerable<T> LogicalDescendants<T>(DependencyObject root) where T : DependencyObject
+        {
+            foreach (object child in LogicalTreeHelper.GetChildren(root))
+            {
+                if (!(child is DependencyObject dependency)) continue;
+                if (dependency is T typed) yield return typed;
+                foreach (T descendant in LogicalDescendants<T>(dependency)) yield return descendant;
+            }
+        }
+
+        private static void AssertColor(string expectedHex, Brush brush)
+        {
+            var expected = (Color)ColorConverter.ConvertFromString(expectedHex);
+            Color actual = brush is SolidColorBrush solid ? solid.Color : Colors.Transparent;
+            AssertEqual(expected.ToString(), actual.ToString());
+        }
+
+        private static void PumpDispatcher()
+        {
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => frame.Continue = false));
+            Dispatcher.PushFrame(frame);
+        }
 
         private static void AssertTrue(bool value)
         {

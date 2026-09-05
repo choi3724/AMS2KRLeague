@@ -9,25 +9,37 @@
              IsHitTestVisible="False">
     <Border CornerRadius="8" Background="{StaticResource MainPanelBackgroundBrush}" BorderBrush="#8A4DE3B1" BorderThickness="1" Padding="8,7">
         <StackPanel>
-            <ItemsControl x:Name="RankingItems">
+            <!-- ClipToBounds keeps the broadcast-style row slide-in inside the tower panel. -->
+            <ItemsControl x:Name="RankingItems" ClipToBounds="True">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Height="36" Margin="0,1" Background="{Binding Background}" BorderBrush="{Binding Accent}" BorderThickness="3,0,0,0" Padding="7,0">
+                        <Border Height="36" Margin="0,1" Background="{Binding Background}" BorderBrush="{Binding Accent}" BorderThickness="3,0,0,0" Padding="7,0" ClipToBounds="True" Loaded="RankingRow_Loaded">
                             <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="100"/>
-                                    <ColumnDefinition Width="104"/>
-                                    <ColumnDefinition Width="48"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding Position}" Foreground="{Binding Foreground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontBody}" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{Binding Foreground}" FontWeight="SemiBold" FontSize="{x:Static core:OverlayUiMetrics.FontDriverName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0,7,0" />
-                                <Border Grid.Column="2" Background="{Binding ClassBackground}" CornerRadius="3" Padding="4,1" Margin="4,4,5,4" HorizontalAlignment="Right" VerticalAlignment="Stretch" MinWidth="55" MaxWidth="95">
-                                    <TextBlock Text="{Binding Class}" Foreground="{Binding ClassForeground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontClass}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" />
+                                <!-- Broadcast flash layer: position gain/loss and fastest-lap sweeps.
+                                     Only this layer animates its opacity; the row itself never dims. -->
+                                <Border x:Name="FlashLayer" Margin="-7,0" Opacity="0" IsHitTestVisible="False" Background="#82F1D0" RenderTransformOrigin="0,0.5">
+                                    <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></Border.RenderTransform>
                                 </Border>
-                                <TextBlock Grid.Column="3" Text="{Binding CurrentTime}" Foreground="{Binding TimeForeground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontTiming}" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="4" Text="{Binding Status}" Foreground="{Binding StatusColor}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="46"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="104"/>
+                                        <ColumnDefinition Width="48"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="PositionText" Text="{Binding Position}" Foreground="{Binding Foreground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontBody}" Style="{StaticResource HudNumericText}" VerticalAlignment="Center">
+                                        <TextBlock.RenderTransform><TranslateTransform /></TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{Binding Foreground}" FontWeight="SemiBold" FontSize="{x:Static core:OverlayUiMetrics.FontDriverName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0,7,0" />
+                                    <Border Grid.Column="2" Background="{Binding ClassBackground}" CornerRadius="3" Padding="4,1" Margin="4,4,5,4" HorizontalAlignment="Right" VerticalAlignment="Stretch" MinWidth="55" MaxWidth="95">
+                                        <TextBlock Text="{Binding Class}" Foreground="{Binding ClassForeground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontClass}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Grid.Column="3" Text="{Binding CurrentTime}" Foreground="{Binding TimeForeground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontTiming}" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="StatusText" Grid.Column="4" Text="{Binding Status}" Foreground="{Binding StatusColor}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" HorizontalAlignment="Right" RenderTransformOrigin="1,0.5">
+                                        <TextBlock.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></TextBlock.RenderTransform>
+                                    </TextBlock>
+                                </Grid>
                             </Grid>
                         </Border>
                     </DataTemplate>

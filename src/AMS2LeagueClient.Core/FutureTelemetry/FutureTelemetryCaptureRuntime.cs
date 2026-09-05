@@ -117,7 +117,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             }
             return (root, identity, archiveOptions) =>
             {
-                var compactStore = new CompactTelemetryChunkStore(root, identity);
+                var compactStore = new CompactTelemetryChunkStore(root, identity, archiveOptions);
                 return new LocalDurableTelemetryArchive(
                     root,
                     identity,

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 — 2026-09-05
+
+- Timing Tower에 F1 중계 그래픽 스타일 전환 추가: 순위 획득/상실 시 행 플래시(민트/레드)와 순위 숫자 롤, 세션 최속 랩 `BEST` 시 보라색 스윕, 상태 배지 팝, 타워 최초 표시·참가자 진입 시 좌측에서 순차 슬라이드 인
+- 전후방 패널은 앞차/뒷차 교체 시 각 방향에서 슬라이드 인, 거리 유불리 색상 반전 시 팝
+- 세션 카드의 랩 카운터와 순위 값 롤, 현재·섹터 타임 패널의 완주 랩·개인 최고·섹터 완료 팝
+- 이벤트 카드와 Race Control 배너를 슬라이드 인/아웃과 액센트 바·플래그 스윕으로 교체하고, 종료 애니메이션이 끝날 때까지 창을 유지
+- 행 opacity는 계속 애니메이션하지 않으며 주행 중 참가자는 절대 dim 처리하지 않음
+- 오버레이별 켜기/끄기 체크박스를 레이아웃 편집 모드와 무관하게 항상 사용 가능하게 하고, 변경 즉시 `overlay-layout.json`에 저장. 시작 시 저장된 상태를 체크박스에 반영하고 `모두 켜기`/`모두 끄기` 추가
+- 서버 저장 원본 기준 리플레이 전송 밀도 실측 도구(`work/replay-cadence-audit`)와 보고서 추가
+- Compact 리플레이 downsampling 상수 4종(progress/world/extension/battle)을 `TelemetryArchiveOptions`로 옵션화하고 `CompactTelemetryChunkStore`·runtime archive factory에 전달. 범위는 archive 5 Hz gate 이상. 단위 테스트 추가
+- cadence별 전송량 실측 도구(`work/replay-cadence-cost`) 추가: 60분/32대 fixture에서 world 5,000→500 ms 시 리플레이 wire 302,317→860,539 B(+184.6 %), 실제 리그 세션 약 +53 %
+- Compact 리플레이 world cadence 기본값을 5,000 ms에서 500 ms로 변경해 2D 트랙 리플레이용 위치 밀도를 확보. 리플레이 업로드는 fixture 기준 +184.6 %, 실제 리그 세션 약 +53 % 증가하며 P024 512 KiB fixture 목표는 넘고 1 MiB 한계 안에 있음
+- 서버로 전송하는 프로토콜/스키마와 Cafe24 API/DB 계약은 변경 없음(irregular-time block으로 기존 decoder 호환)
+
 ## 0.2.3-beta.3 — 2026-09-03
 
 - GT3 등 주요 차량 클래스에 AMS2 HUD 계열의 고정 배지 색상과 명시적 fallback 색상 적용

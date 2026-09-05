@@ -45,6 +45,8 @@ namespace AMS2LeagueClient.Overlay
         private string _lastEventKey = string.Empty;
         private string _lastRaceControlKey = string.Empty;
         private string _lastWaitingKey = string.Empty;
+        private DateTime _eventExitDeadline = DateTime.MinValue;
+        private DateTime _raceControlExitDeadline = DateTime.MinValue;
         private bool _layoutEditing;
         private bool _closing;
 
@@ -102,9 +104,14 @@ namespace AMS2LeagueClient.Overlay
         public bool IsComponentEnabled(string component)
             => _layoutProfile.IsEnabled(component);
 
+        /// <summary>
+        /// Turns one overlay surface on or off. The choice is persisted
+        /// immediately so it survives restarts without entering layout edit mode.
+        /// </summary>
         public void SetComponentEnabled(string component, bool enabled)
         {
             _layoutProfile.SetEnabled(component, enabled);
+            _layoutStore.Save(_layoutProfile);
             if (_lastGameWindow == null) return;
             InvalidateBounds();
             if (_displayMode == DisplayMode.Waiting)
@@ -149,22 +156,23 @@ namespace AMS2LeagueClient.Overlay
         {
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             TimingHud.SetViewModel(viewModel.Timing);
-            _relativeView.DataContext = viewModel.Timing;
-            _lapTimingView.DataContext = viewModel.Timing;
+            _relativeView.SetViewModel(viewModel.Timing);
+            _lapTimingView.SetViewModel(viewModel.Timing);
 
             string sessionKey = viewModel.Session.PrimaryLabel + "\u001f" + viewModel.Session.PrimaryValue + "\u001f"
                 + viewModel.Session.PositionValue + "\u001f" + viewModel.Session.LapValue;
             if (sessionKey != _lastSessionKey)
             {
                 _lastSessionKey = sessionKey;
-                _sessionView.DataContext = viewModel.Session;
+                _sessionView.SetViewModel(viewModel.Session);
             }
 
             string eventKey = viewModel.EventCard.EventId + "\u001f" + viewModel.EventCard.IsVisible + "\u001f" + viewModel.EventCard.SecondaryText;
             if (eventKey != _lastEventKey)
             {
                 _lastEventKey = eventKey;
-                _eventView.SetViewModel(viewModel.EventCard, animate);
+                TimeSpan exit = _eventView.SetViewModel(viewModel.EventCard, animate);
+                _eventExitDeadline = exit > TimeSpan.Zero ? DateTime.UtcNow + exit : DateTime.MinValue;
             }
 
             string raceControlKey = viewModel.RaceControl.EventId + "\u001f" + viewModel.RaceControl.IsVisible + "\u001f"
@@ -172,16 +180,29 @@ namespace AMS2LeagueClient.Overlay
             if (raceControlKey != _lastRaceControlKey)
             {
                 _lastRaceControlKey = raceControlKey;
-                _raceControlView.SetViewModel(viewModel.RaceControl, animate);
+                TimeSpan exit = _raceControlView.SetViewModel(viewModel.RaceControl, animate);
+                _raceControlExitDeadline = exit > TimeSpan.Zero ? DateTime.UtcNow + exit : DateTime.MinValue;
             }
 
             if (!_layoutEditing)
             {
                 if (!viewModel.Timing.IsBottomGapPanelVisible) _relativeWindow.HideOverlay();
-                if (!viewModel.EventCard.IsVisible) _eventWindow.HideOverlay();
-                if (!viewModel.RaceControl.IsVisible) _raceControlWindow.HideOverlay();
+                if (!IsEventCardPresentable) _eventWindow.HideOverlay();
+                if (!IsRaceControlPresentable) _raceControlWindow.HideOverlay();
             }
         }
+
+        /// <summary>The event card surface is currently shown (including its exit animation).</summary>
+        public bool IsEventCardSurfaceVisible => _eventWindow.IsVisible;
+
+        // A dismissed card keeps its surface only for the length of the exit
+        // animation returned by the view, so the slide-out is not cut short by
+        // the next 20 Hz tick.
+        private bool IsEventCardPresentable
+            => _viewModel.EventCard.IsVisible || DateTime.UtcNow < _eventExitDeadline;
+
+        private bool IsRaceControlPresentable
+            => _viewModel.RaceControl.IsVisible || DateTime.UtcNow < _raceControlExitDeadline;
 
         public OverlayStyleState GetStyleState()
             => _handle == IntPtr.Zero ? new OverlayStyleState() : OverlayWindowInterop.ReadStyleState(_handle);
@@ -326,7 +347,7 @@ namespace AMS2LeagueClient.Overlay
             else
                 _sessionWindow.HideOverlay();
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.EventCard)
-                && (includeInactive || _viewModel.EventCard.IsVisible))
+                && (includeInactive || IsEventCardPresentable))
             {
                 _eventWindow.ShowAt(gameWindow, Resolve(OverlayComponentKeys.EventCard, defaults.EventCard, gameWindow));
             }
@@ -335,7 +356,7 @@ namespace AMS2LeagueClient.Overlay
                 _eventWindow.HideOverlay();
             }
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.RaceControl)
-                && (includeInactive || _viewModel.RaceControl.IsVisible))
+                && (includeInactive || IsRaceControlPresentable))
             {
                 _raceControlWindow.ShowAt(gameWindow, Resolve(OverlayComponentKeys.RaceControl, defaults.RaceControl, gameWindow));
             }
