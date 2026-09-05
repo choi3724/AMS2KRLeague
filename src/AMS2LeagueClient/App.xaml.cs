@@ -20,6 +20,15 @@ namespace AMS2LeagueClient
 {
     public partial class App : Application
     {
+        static App() => HudMotion.ConfigureFrameRate();
+
+        private readonly bool _startRuntime;
+
+        public App() : this(true) { }
+
+        // WPF fixtures need the real resources and dispatcher, without the live recorder.
+        public App(bool startRuntime) => _startRuntime = startRuntime;
+
         private FileLogger? _logger;
         private OverlayWindow? _overlay;
         private ClientStatusWindow? _statusWindow;
@@ -37,6 +46,7 @@ namespace AMS2LeagueClient
         protected override void OnStartup(StartupEventArgs eventArgs)
         {
             base.OnStartup(eventArgs);
+            if (!_startRuntime) return;
             string[] args = eventArgs.Args;
             ClientStartupPolicy startupPolicy = ClientStartupPolicy.FromArguments(args);
             _allowInteractiveErrors = startupPolicy.ShowStatusWindow;

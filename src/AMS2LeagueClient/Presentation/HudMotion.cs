@@ -12,15 +12,29 @@ namespace AMS2LeagueClient.Presentation
     /// </summary>
     internal static class HudMotion
     {
+        public const int AnimationFrameRate = 144;
+
+        public static void ConfigureFrameRate()
+        {
+            Timeline.DesiredFrameRateProperty.OverrideMetadata(
+                typeof(DoubleAnimation), new PropertyMetadata((int?)AnimationFrameRate));
+            Timeline.DesiredFrameRateProperty.OverrideMetadata(
+                typeof(DoubleAnimationUsingKeyFrames), new PropertyMetadata((int?)AnimationFrameRate));
+        }
+
         public static void SlideIn(UIElement element, double fromX, double fromY, int durationMs)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
             TranslateTransform transform = EnsureTranslate(element);
             var duration = new Duration(TimeSpan.FromMilliseconds(durationMs));
             var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-            transform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(fromX, 0, duration) { EasingFunction = easing });
-            transform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(fromY, 0, duration) { EasingFunction = easing });
-            element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = easing });
+            double startX = Math.Abs(transform.X) > 0.01 ? transform.X : fromX;
+            double startY = Math.Abs(transform.Y) > 0.01 ? transform.Y : fromY;
+            transform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(startX, 0, duration) { EasingFunction = easing });
+            transform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(startY, 0, duration) { EasingFunction = easing });
+            double fromOpacity = DependencyPropertyHelper.GetValueSource(element, UIElement.OpacityProperty).IsAnimated
+                && element.Opacity < 0.99 ? element.Opacity : 0;
+            element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(fromOpacity, 1, duration) { EasingFunction = easing });
         }
 
         public static void SlideOut(UIElement element, double toX, double toY, int durationMs)
@@ -52,8 +66,10 @@ namespace AMS2LeagueClient.Presentation
             ScaleTransform scale = EnsureScale(element);
             var duration = new Duration(TimeSpan.FromMilliseconds(durationMs));
             var easing = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 };
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(fromScale, 1, duration) { EasingFunction = easing });
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(fromScale, 1, duration) { EasingFunction = easing });
+            double startX = Math.Abs(scale.ScaleX - 1) > 0.01 ? scale.ScaleX : fromScale;
+            double startY = Math.Abs(scale.ScaleY - 1) > 0.01 ? scale.ScaleY : fromScale;
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(startX, 1, duration) { EasingFunction = easing });
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(startY, 1, duration) { EasingFunction = easing });
         }
 
         /// <summary>Left-to-right accent sweep that fades out (fastest lap, flag banner).</summary>

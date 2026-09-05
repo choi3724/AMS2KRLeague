@@ -50,6 +50,9 @@ namespace AMS2LeagueClient.Presentation
         public void SetViewModel(OverlayViewModel viewModel)
         {
             if (viewModel == null) throw new ArgumentNullException(nameof(viewModel));
+            double requiredHeight = LeftTowerLayoutMetrics.RequiredHeightForRows(viewModel.RankingRowCapacity, viewModel.IsDiagnostic);
+            bool capacityChanged = Height != requiredHeight;
+            Height = requiredHeight;
             DataContext = viewModel;
 
             string rankingKey = viewModel.RankingRangeText + RecordSeparator + string.Join(
@@ -65,8 +68,28 @@ namespace AMS2LeagueClient.Presentation
             _rankingKey = rankingKey;
             IReadOnlyList<TimingTowerTransition> transitions = _transitionTracker.Observe(viewModel.RankingRows);
             SynchronizeRankingRows(viewModel.RankingRows);
-            RankingItems.UpdateLayout();
-            AnimateChangedRows(viewModel.RankingRows, transitions);
+            // Resizing the visible row window is not an on-track overtake.
+            // Snap the pinned player to its new row instead of sliding from an
+            // old, now out-of-bounds row during the live resize preview.
+            if (capacityChanged)
+            {
+                for (int index = 0; index < _rankingRows.Count; index++)
+                {
+                    if (RankingItems.ItemContainerGenerator.ContainerFromIndex(index) is ContentPresenter presenter
+                        && presenter.RenderTransform is TranslateTransform transform && !transform.IsFrozen)
+                    {
+                        transform.BeginAnimation(TranslateTransform.YProperty, null);
+                        transform.Y = 0;
+                    }
+                }
+            }
+            else if (transitions.Any(transition => transition.IsReorder
+                || transition.PositionGained
+                || transition.PositionLost
+                || transition.StatusChanged))
+            {
+                AnimateChangedRows(viewModel.RankingRows, transitions);
+            }
         }
 
         private void SynchronizeRankingRows(IReadOnlyList<RankingRowViewModel> rows)
@@ -103,7 +126,7 @@ namespace AMS2LeagueClient.Presentation
                     {
                         _rankingRows.Move(currentIndex, targetIndex);
                     }
-                    _rankingRows[targetIndex] = incoming;
+                    _rankingRows[targetIndex].UpdateFrom(incoming);
                 }
             }
 
@@ -130,9 +153,10 @@ namespace AMS2LeagueClient.Presentation
                     if (transition.IsReorder)
                     {
                         TranslateTransform transform = EnsureTranslate(presenter);
+                        double fromY = transition.RowDelta * LeftTowerLayoutMetrics.RankingRowPitch + transform.Y;
                         transform.BeginAnimation(
                             TranslateTransform.YProperty,
-                            new DoubleAnimation(transition.RowDelta * LeftTowerLayoutMetrics.RankingRowPitch, 0, duration) { EasingFunction = easing });
+                            new DoubleAnimation(fromY, 0, duration) { EasingFunction = easing });
                     }
 
                     if (transition.PositionGained || transition.PositionLost)
@@ -151,10 +175,6 @@ namespace AMS2LeagueClient.Presentation
                     }
                 }
 
-                // Never animate the whole row opacity. A status update is not
-                // evidence that an actively racing participant became inactive.
-                presenter.BeginAnimation(OpacityProperty, null);
-                presenter.Opacity = 1;
             }
         }
 

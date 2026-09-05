@@ -97,7 +97,7 @@ namespace AMS2LeagueClient.Core.Presentation
             {
                 IsVisible = visible,
                 IsExpanded = item != null,
-                EventId = item?.Id ?? "STATE:" + update.Version,
+                EventId = item?.Id ?? "STATE:" + StateTextFor(displayState),
                 Text = item?.Title ?? "레이스 컨트롤 " + update.History.Count,
                 Title = item?.Title ?? "레이스 컨트롤",
                 DriverLine = driver,
@@ -189,8 +189,27 @@ namespace AMS2LeagueClient.Core.Presentation
         public const int GapRows = 2;
         public const int TimingColumns = 3;
         public const int SectorColumns = 3;
+        public const int MinimumRankingRows = 2;
+        public const int MaximumRankingRows = SharedMemoryLayout.MaxParticipants;
 
         public static int RequiredHeight => HeaderAndFooterHeight + RankingRows * RankingRowPitch;
+
+        public static int RequiredHeightForRows(int rows, bool diagnostic)
+            => HeaderAndFooterHeight
+                + ClampRankingRows(rows) * RankingRowPitch
+                + (diagnostic ? DiagnosticHeight - DesiredHeight : 0);
+
+        public static int CalculateRankingRows(int physicalWidth, int physicalHeight, bool diagnostic)
+        {
+            if (physicalWidth <= 0) throw new ArgumentOutOfRangeException(nameof(physicalWidth));
+            if (physicalHeight <= 0) throw new ArgumentOutOfRangeException(nameof(physicalHeight));
+            double designHeight = physicalHeight * Width / (double)physicalWidth;
+            double reservedHeight = HeaderAndFooterHeight + (diagnostic ? DiagnosticHeight - DesiredHeight : 0);
+            return ClampRankingRows((int)Math.Floor((designHeight - reservedHeight) / RankingRowPitch));
+        }
+
+        public static int ClampRankingRows(int rows)
+            => Math.Max(MinimumRankingRows, Math.Min(MaximumRankingRows, rows));
 
         public static bool FitsWithoutOverlap(int viewportHeight)
             => viewportHeight >= RequiredHeight;

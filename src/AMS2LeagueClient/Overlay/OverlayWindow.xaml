@@ -14,16 +14,14 @@
         MinWidth="120" MinHeight="80"
         SizeToContent="Manual">
     <Grid>
-        <Viewbox Stretch="Uniform">
+        <Viewbox Stretch="Uniform" VerticalAlignment="Top">
             <presentation:OverlayHudView x:Name="TimingHud" />
         </Viewbox>
         <Grid x:Name="EditChrome" Visibility="Collapsed">
-            <Border BorderBrush="#FF4DE3B1" BorderThickness="2" CornerRadius="6" IsHitTestVisible="False" />
-            <Border Height="30" VerticalAlignment="Top" Background="#F0203447" BorderBrush="#FF4DE3B1" BorderThickness="0,0,0,1"
-                    MouseLeftButtonDown="EditDrag_MouseLeftButtonDown">
-                <TextBlock Text="순위 타워 · 드래그" Foreground="White" FontSize="13" FontWeight="Bold" Margin="9,0" VerticalAlignment="Center" />
-            </Border>
-            <ResizeGrip Width="24" Height="24" HorizontalAlignment="Right" VerticalAlignment="Bottom" Background="#DD4DE3B1" Cursor="SizeNWSE" />
+            <Border BorderBrush="#FF4DE3B1" BorderThickness="2" CornerRadius="6" Background="Transparent"
+                    Cursor="SizeAll" ToolTip="순위 타워 · 드래그로 이동 / 오른쪽 아래 모서리로 크기 조절"
+                    MouseLeftButtonDown="EditDrag_MouseLeftButtonDown" />
+            <ResizeGrip Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Bottom" Background="Transparent" Cursor="SizeNWSE" />
         </Grid>
     </Grid>
 </Window>

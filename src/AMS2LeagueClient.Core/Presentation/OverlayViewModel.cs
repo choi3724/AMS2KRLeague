@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using AMS2LeagueClient.Core.Events;
@@ -10,7 +11,7 @@ using AMS2LeagueClient.Core.Telemetry;
 
 namespace AMS2LeagueClient.Core.Presentation
 {
-    public sealed class RankingRowViewModel
+    public sealed class RankingRowViewModel : INotifyPropertyChanged
     {
         public int ParticipantIndex { get; set; } = -1;
         public string Position { get; set; } = "P—";
@@ -29,6 +30,54 @@ namespace AMS2LeagueClient.Core.Presentation
         public bool IsDimmed { get; set; }
         public string Status { get; set; } = string.Empty;
         public string StatusColor { get; set; } = "#91A5B8";
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public void UpdateFrom(RankingRowViewModel source)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            bool timeChanged = CurrentTime != source.CurrentTime;
+            CurrentTime = source.CurrentTime;
+            if (ParticipantIndex == source.ParticipantIndex
+                && Position == source.Position
+                && Name == source.Name
+                && Class == source.Class
+                && Lap == source.Lap
+                && IsPlayer == source.IsPlayer
+                && Background == source.Background
+                && Accent == source.Accent
+                && Foreground == source.Foreground
+                && ClassBackground == source.ClassBackground
+                && ClassForeground == source.ClassForeground
+                && TimeForeground == source.TimeForeground
+                && DisplayState == source.DisplayState
+                && IsDimmed == source.IsDimmed
+                && Status == source.Status
+                && StatusColor == source.StatusColor)
+            {
+                if (timeChanged) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentTime)));
+                return;
+            }
+
+            ParticipantIndex = source.ParticipantIndex;
+            Position = source.Position;
+            Name = source.Name;
+            Class = source.Class;
+            Lap = source.Lap;
+            CurrentTime = source.CurrentTime;
+            IsPlayer = source.IsPlayer;
+            Background = source.Background;
+            Accent = source.Accent;
+            Foreground = source.Foreground;
+            ClassBackground = source.ClassBackground;
+            ClassForeground = source.ClassForeground;
+            TimeForeground = source.TimeForeground;
+            DisplayState = source.DisplayState;
+            IsDimmed = source.IsDimmed;
+            Status = source.Status;
+            StatusColor = source.StatusColor;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+        }
     }
 
     public sealed class OverlayViewModel
@@ -103,6 +152,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public string ClassPositionText { get; set; } = "C— / —";
         public string CurrentLapHeaderText { get; set; } = "LAP —";
         public string RankingRangeText { get; set; } = "순위";
+        public int RankingRowCapacity { get; set; } = MaxRankingRows;
+        public IReadOnlyList<RankingRowViewModel> AllRankingRows { get; set; } = Array.Empty<RankingRowViewModel>();
         public IReadOnlyList<RankingRowViewModel> RankingRows { get; set; } = Array.Empty<RankingRowViewModel>();
         public int TotalPositionsVisible => RankingRows.Count;
         public bool IsPlayerVisibleInRanking => RankingRows.Any(row => row.IsPlayer);
@@ -133,8 +184,11 @@ namespace AMS2LeagueClient.Core.Presentation
             IReadOnlyDictionary<int, ParticipantBroadcastState>? broadcastStates = null,
             RaceControlUpdate? raceControl = null,
             float? eventTimeRemainingOverride = null,
-            string? eventTimeRemainingTextOverride = null)
+            string? eventTimeRemainingTextOverride = null,
+            int rankingRowCapacity = MaxRankingRows,
+            IReadOnlyDictionary<int, float>? participantLapTimes = null)
         {
+            rankingRowCapacity = LeftTowerLayoutMetrics.ClampRankingRows(rankingRowCapacity);
             OverlayTextCatalog catalog = text ?? OverlayTextCatalog.Korean;
             broadcastStates = broadcastStates ?? raceControl?.ParticipantStates;
             var gapPresenter = new GapPresenter();
@@ -165,13 +219,15 @@ namespace AMS2LeagueClient.Core.Presentation
             float best = local.BestLapTime > 0 ? local.BestLapTime : snapshot.BestLapTime;
             uint displayLap = local.CurrentLap > 0 ? local.CurrentLap : local.LapsCompleted + 1;
             string noCar = catalog.CultureName == "ko-KR" ? "차량 없음" : "NO CAR";
-            IReadOnlyList<RankingRowViewModel> rankingRows = BuildRankingRows(
+            IReadOnlyList<RankingRowViewModel> allRankingRows = BuildRankingRows(
                 snapshot,
                 league,
                 local.Index,
                 broadcastStates,
-                league.FastestLapParticipant?.Source.Index);
-            bool playerPinnedAfterLeaders = league.Local?.LeaguePosition > MaxRankingRows;
+                league.FastestLapParticipant?.Source.Index,
+                participantLapTimes);
+            IReadOnlyList<RankingRowViewModel> rankingRows = SelectRankingRows(allRankingRows, rankingRowCapacity);
+            bool playerPinnedAfterLeaders = league.Local?.LeaguePosition > rankingRowCapacity;
             float displayedEventTimeRemaining = eventTimeRemainingOverride ?? snapshot.EventTimeRemaining;
             string range = rankingRows.Count == 0
                 ? "순위"
@@ -245,6 +301,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 ClassPositionText = FormatClassPosition(league, local),
                 CurrentLapHeaderText = "LAP " + displayLap,
                 RankingRangeText = range,
+                RankingRowCapacity = rankingRowCapacity,
+                AllRankingRows = allRankingRows,
                 RankingRows = rankingRows,
                 TrackLengthText = IsPositiveFinite(snapshot.TrackLength) ? snapshot.TrackLength.ToString("0", CultureInfo.InvariantCulture) + "m" : "—",
                 EventTimeRemainingText = eventTimeRemainingTextOverride
@@ -291,24 +349,42 @@ namespace AMS2LeagueClient.Core.Presentation
                 : minutes.ToString(CultureInfo.InvariantCulture) + ":" + seconds.ToString("00", CultureInfo.InvariantCulture);
         }
 
+        public void ResizeRanking(int capacity)
+        {
+            capacity = LeftTowerLayoutMetrics.ClampRankingRows(capacity);
+            if (RankingRowCapacity == capacity) return;
+            RankingRowCapacity = capacity;
+            RankingRows = SelectRankingRows(AllRankingRows.Count > 0 ? AllRankingRows : RankingRows, capacity);
+            bool pinned = RankingRows.Count > 1 && RankingRows[RankingRows.Count - 1].IsPlayer
+                && TimingTowerTransitionTracker.ParsePosition(RankingRows[RankingRows.Count - 1].Position)
+                    > TimingTowerTransitionTracker.ParsePosition(RankingRows[RankingRows.Count - 2].Position) + 1;
+            RankingRangeText = RankingRows.Count == 0 ? "순위"
+                : pinned ? RankingRows[0].Position + " — " + RankingRows[RankingRows.Count - 2].Position
+                    + " · PLAYER " + RankingRows[RankingRows.Count - 1].Position
+                : RankingRows[0].Position + " — " + RankingRows[RankingRows.Count - 1].Position;
+        }
+
+        private static IReadOnlyList<RankingRowViewModel> SelectRankingRows(
+            IReadOnlyList<RankingRowViewModel> rows, int capacity)
+        {
+            var selected = rows.Take(capacity).ToList();
+            RankingRowViewModel? player = rows.FirstOrDefault(row => row.IsPlayer);
+            if (player != null && !selected.Contains(player))
+            {
+                selected[selected.Count - 1] = player;
+            }
+            return selected;
+        }
+
         private static IReadOnlyList<RankingRowViewModel> BuildRankingRows(
             TelemetrySnapshot snapshot,
             LeagueClassification league,
             int localIndex,
             IReadOnlyDictionary<int, ParticipantBroadcastState>? broadcastStates,
-            int? fastestIndex)
+            int? fastestIndex,
+            IReadOnlyDictionary<int, float>? participantLapTimes)
         {
-            List<LeagueParticipant> selected = league.Participants
-                .Take(MaxRankingRows)
-                .ToList();
-            LeagueParticipant? local = league.Participants.FirstOrDefault(item => item.Source.Index == localIndex);
-            if (local != null && selected.All(item => item.Source.Index != localIndex))
-            {
-                selected = league.Participants.Take(MaxRankingRows - 1).ToList();
-                selected.Add(local);
-            }
-
-            return selected
+            return league.Participants
                 .Select(item =>
                 {
                     ParticipantRowDisplayState displayState = ParticipantRowStateResolver.Resolve(item.Source);
@@ -325,7 +401,9 @@ namespace AMS2LeagueClient.Core.Presentation
                         CurrentTime = FormatParticipantCurrentTime(
                             snapshot.KnownSessionState,
                             item.Source,
-                            player ? snapshot.CurrentTime : (float?)null),
+                            player && snapshot.ViewedParticipantIndex == item.Source.Index ? snapshot.CurrentTime : (float?)null,
+                            participantLapTimes != null && participantLapTimes.TryGetValue(item.Source.Index, out float measured)
+                                ? measured : (float?)null),
                         IsPlayer = player,
                         DisplayState = displayState,
                         IsDimmed = dimmed,
@@ -349,7 +427,8 @@ namespace AMS2LeagueClient.Core.Presentation
         internal static string FormatParticipantCurrentTime(
             SessionState? sessionState,
             ParticipantSnapshot participant,
-            float? localCurrentTime)
+            float? localCurrentTime,
+            float? observedLapTime = null)
         {
             switch (participant.KnownRaceState)
             {
@@ -376,26 +455,17 @@ namespace AMS2LeagueClient.Core.Presentation
                     return "FIN";
             }
 
+            if (!participant.IsActive || participant.KnownRaceState != RaceState.Racing) return "--";
             if (localCurrentTime.HasValue && IsPositiveFinite(localCurrentTime.Value))
             {
                 return FormatLapTime(localCurrentTime.Value);
             }
 
-            float elapsed = 0;
-            bool observed = false;
-            foreach (float sectorTime in new[]
-            {
-                participant.CurrentSector1Time,
-                participant.CurrentSector2Time,
-                participant.CurrentSector3Time
-            })
-            {
-                if (!IsPositiveFinite(sectorTime)) continue;
-                elapsed += sectorTime;
-                observed = true;
-            }
-
-            return observed ? FormatLapTime(elapsed) : "--";
+            if (observedLapTime.HasValue && IsPositiveFinite(observedLapTime.Value))
+                return "~" + FormatLapTime(observedLapTime.Value);
+            // Sector arrays can contain shared race-start elapsed values, not
+            // individual lap starts. Never sum them into a fabricated live lap.
+            return IsPositiveFinite(participant.LastLapTime) ? "L" + FormatLapTime(participant.LastLapTime) : "--";
         }
 
         private static string StatusOf(

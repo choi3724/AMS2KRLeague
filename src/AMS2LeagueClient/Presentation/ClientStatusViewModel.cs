@@ -16,9 +16,9 @@ namespace AMS2LeagueClient.Presentation
         private string _serverText = "서버: 확인 중";
         private string _accountText = "계정: 연결 안 됨";
 
-        public ClientStatusViewModel(string version = "0.3.0")
+        public ClientStatusViewModel(string version = "0.3.1")
         {
-            VersionText = "AMS2 League Overlay " + (string.IsNullOrWhiteSpace(version) ? "0.3.0" : version);
+            VersionText = "AMS2 League Overlay " + (string.IsNullOrWhiteSpace(version) ? "0.3.1" : version);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
@@ -36,6 +37,8 @@ namespace AMS2LeagueClient.Runtime
         private readonly OverlayVisibilityController _visibilityController = new OverlayVisibilityController();
         private readonly MultiplayerWaitingOverlayController _multiplayerOverlayController = new MultiplayerWaitingOverlayController();
         private readonly RelativeDistanceTrendTracker _relativeDistanceTrendTracker = new RelativeDistanceTrendTracker();
+        private readonly ParticipantLapClock _participantLapClock = new ParticipantLapClock();
+        private IReadOnlyDictionary<int, float> _participantLapTimes = new Dictionary<int, float>();
         private readonly object _readerGate = new object();
         private readonly object _telemetryGate = new object();
         private readonly Channel<TelemetryLogEntry> _telemetryLogChannel;
@@ -103,7 +106,9 @@ namespace AMS2LeagueClient.Runtime
             };
             _processTimer.Tick += ProcessTick;
 
-            _uiTimer = new DispatcherTimer(DispatcherPriority.Render)
+            // Telemetry projection is 20 Hz data work, not animation rendering;
+            // keep it below WPF's compositor/render priority so motion stays smooth.
+            _uiTimer = new DispatcherTimer(DispatcherPriority.Background)
             {
                 // Poll the dispatcher faster than the target cadence. The absolute
                 // deadline gate in UiTick keeps rendering at no more than 20 Hz while
@@ -307,6 +312,7 @@ namespace AMS2LeagueClient.Runtime
                 LogWindowChanges(window);
 
                 TelemetrySnapshot? snapshot = Volatile.Read(ref _latest);
+                _participantLapTimes = _participantLapClock.Observe(snapshot);
                 DateTimeOffset now = DateTimeOffset.UtcNow;
                 MultiplayerOverlayDecision? multiplayerDecision = snapshot == null
                     ? null
@@ -469,6 +475,7 @@ namespace AMS2LeagueClient.Runtime
                 _logger.Info("RELATIVE_CHANGE", "aheadIndex=" + (league.Ahead?.Source.Index.ToString(CultureInfo.InvariantCulture) ?? "none") + " behindIndex=" + (league.Behind?.Source.Index.ToString(CultureInfo.InvariantCulture) ?? "none") + " rawCount=" + league.RawParticipantCount + " leagueCount=" + league.LeagueParticipantCount + " safetyCarsExcluded=" + league.SafetyCarsExcluded);
             }
 
+            int rankingRowCapacity = _overlay.GetTimingTowerRowCapacity(window);
             string presentationKey = BuildPresentationKey(
                 snapshot,
                 local.Participant,
@@ -477,7 +484,9 @@ namespace AMS2LeagueClient.Runtime
                 eventUpdate.QueuedCount,
                 raceControlUpdate,
                 multiplayerDecision.EffectiveRemainingSeconds,
-                multiplayerDecision.RemainingDisplayTextOverride);
+                multiplayerDecision.RemainingDisplayTextOverride)
+                + "|towerRows=" + rankingRowCapacity.ToString(CultureInfo.InvariantCulture)
+                + (_participantLapTimes.Count > 0 ? "|lapTick=" + snapshot.CapturedAt.UtcTicks : string.Empty);
             if (_diagnostic)
             {
                 presentationKey += "|rates=" + _snapshotRate.ToString("0.0", CultureInfo.InvariantCulture) + "/" + _uiRate.ToString("0.0", CultureInfo.InvariantCulture);
@@ -499,7 +508,9 @@ namespace AMS2LeagueClient.Runtime
                     broadcastStates: raceControlUpdate.ParticipantStates,
                     raceControl: raceControlUpdate,
                     eventTimeRemainingOverride: multiplayerDecision.EffectiveRemainingSeconds,
-                    eventTimeRemainingTextOverride: multiplayerDecision.RemainingDisplayTextOverride);
+                    eventTimeRemainingTextOverride: multiplayerDecision.RemainingDisplayTextOverride,
+                    rankingRowCapacity: rankingRowCapacity,
+                    participantLapTimes: _participantLapTimes);
                 _relativeDistanceTrendTracker.Apply(timing, _sessionTracker.Generation);
                 _overlay.SetViewModel(OverlayShellViewModel.Build(snapshot, timing, eventUpdate.CurrentEvent, false, raceControl: raceControlUpdate));
                 Interlocked.Increment(ref _uiUpdateCount);

@@ -54,6 +54,7 @@ namespace AMS2LeagueClient.Overlay
         {
             _diagnostic = diagnostic;
             InitializeComponent();
+            SizeChanged += (sender, args) => ResizeTimingPreview();
             string resolvedLayoutPath = layoutPath ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "AMS2KRLeague",
@@ -103,6 +104,28 @@ namespace AMS2LeagueClient.Overlay
 
         public bool IsComponentEnabled(string component)
             => _layoutProfile.IsEnabled(component);
+
+        public int GetTimingTowerRowCapacity(GameWindowSnapshot gameWindow)
+        {
+            if (gameWindow == null) throw new ArgumentNullException(nameof(gameWindow));
+            OverlayBounds bounds;
+            if (_layoutEditing && IsVisible && _handle != IntPtr.Zero)
+            {
+                bounds = OverlayWindowInterop.ReadPhysicalBounds(_handle);
+            }
+            else
+            {
+                OverlayComponentLayout defaults = OverlayComponentLayoutCalculator.Calculate(
+                    gameWindow.Width,
+                    gameWindow.Height,
+                    gameWindow.Dpi,
+                    _diagnostic,
+                    _viewModel.RaceControl.IsExpanded);
+                bounds = Resolve(OverlayComponentKeys.TimingTower, defaults.Timing, gameWindow);
+            }
+
+            return LeftTowerLayoutMetrics.CalculateRankingRows(bounds.Width, bounds.Height, _diagnostic);
+        }
 
         /// <summary>
         /// Turns one overlay surface on or off. The choice is persisted
@@ -155,6 +178,7 @@ namespace AMS2LeagueClient.Overlay
         public void SetViewModel(OverlayShellViewModel viewModel, bool animate = true)
         {
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            ResizeTimingPreview();
             TimingHud.SetViewModel(viewModel.Timing);
             _relativeView.SetViewModel(viewModel.Timing);
             _lapTimingView.SetViewModel(viewModel.Timing);
@@ -190,6 +214,16 @@ namespace AMS2LeagueClient.Overlay
                 if (!IsEventCardPresentable) _eventWindow.HideOverlay();
                 if (!IsRaceControlPresentable) _raceControlWindow.HideOverlay();
             }
+        }
+
+        private void ResizeTimingPreview()
+        {
+            if (ActualWidth <= 0 || ActualHeight <= 0) return;
+            int capacity = LeftTowerLayoutMetrics.CalculateRankingRows(
+                (int)Math.Round(ActualWidth), (int)Math.Round(ActualHeight), _diagnostic);
+            if (_viewModel.Timing.RankingRowCapacity == capacity) return;
+            _viewModel.Timing.ResizeRanking(capacity);
+            TimingHud.SetViewModel(_viewModel.Timing);
         }
 
         /// <summary>The event card surface is currently shown (including its exit animation).</summary>
@@ -520,12 +554,21 @@ namespace AMS2LeagueClient.Overlay
             content.Width = designWidth;
             content.Height = designHeight;
             var root = new Grid();
-            root.Children.Add(new Viewbox
+            if (content is RaceControlView)
             {
-                Stretch = Stretch.Uniform,
-                Child = content,
-                IsHitTestVisible = false
-            });
+                // This text-heavy card reflows against the actual window size.
+                content.Width = content.Height = double.NaN;
+                root.Children.Add(content);
+            }
+            else
+            {
+                root.Children.Add(new Viewbox
+                {
+                    Stretch = Stretch.Fill,
+                    Child = content,
+                    IsHitTestVisible = false
+                });
+            }
             _editChrome = CreateEditChrome(label);
             root.Children.Add(_editChrome);
             Content = root;
@@ -588,29 +631,14 @@ namespace AMS2LeagueClient.Overlay
         private Grid CreateEditChrome(string label)
         {
             var chrome = new Grid { Visibility = Visibility.Collapsed };
-            chrome.Children.Add(new Border
+            var dragBar = new Border
             {
                 BorderBrush = new SolidColorBrush(Color.FromRgb(77, 227, 177)),
                 BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(6),
-                IsHitTestVisible = false
-            });
-            var dragBar = new Border
-            {
-                Height = 30,
-                VerticalAlignment = VerticalAlignment.Top,
-                Background = new SolidColorBrush(Color.FromArgb(242, 32, 52, 71)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(77, 227, 177)),
-                BorderThickness = new Thickness(0, 0, 0, 1),
-                Child = new TextBlock
-                {
-                    Text = label + " · 드래그",
-                    Foreground = Brushes.White,
-                    FontSize = 13,
-                    FontWeight = FontWeights.Bold,
-                    Margin = new Thickness(9, 0, 9, 0),
-                    VerticalAlignment = VerticalAlignment.Center
-                }
+                Background = Brushes.Transparent,
+                Cursor = Cursors.SizeAll,
+                ToolTip = label + " · 드래그로 이동 / 오른쪽 아래 모서리로 크기 조절"
             };
             dragBar.MouseLeftButtonDown += (sender, args) =>
             {
@@ -619,11 +647,11 @@ namespace AMS2LeagueClient.Overlay
             chrome.Children.Add(dragBar);
             chrome.Children.Add(new ResizeGrip
             {
-                Width = 24,
-                Height = 24,
+                Width = 16,
+                Height = 16,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Bottom,
-                Background = new SolidColorBrush(Color.FromArgb(221, 77, 227, 177)),
+                Background = Brushes.Transparent,
                 Cursor = Cursors.SizeNWSE
             });
             return chrome;

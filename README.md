@@ -2,14 +2,14 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-현재 릴리스: **0.3.0**
+현재 릴리스: **0.3.1**
 
 안정 기준선: **0.2.2**
 
 ## 주요 기능
 
 - League Classification 기준 Timing Tower와 크게 확장한 드라이버명
-- 타워 행의 차량 클래스와 현재 랩 진행 시간
+- 타워 행의 차량 클래스와 참가자별 랩 시간(게임 직접값 / 관측 진행 시간 / 직전 랩 구분)
 - F1 중계 그래픽 스타일 전환: 타워 빌드, 추월/피추월 플래시와 순위 숫자 롤, 최속 랩 퍼플 스윕, 카드 슬라이드 인/아웃
 - 상태창에서 언제든 각 오버레이 화면을 켜고 끄기(즉시 저장, 재시작 후 복원)
 - Safety Car를 순위와 참가자 수에서 제외
@@ -32,12 +32,12 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 ## 실행 방법
 
-1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 `AMS2-League-Overlay-0.3.0-Setup.exe`를 받습니다.
+1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 `AMS2-League-Overlay-0.3.1-Setup.exe`를 받습니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
 
-설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.3.0-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
+설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.3.1-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
 
 게임이 실행되지 않았거나 Shared Memory를 사용할 수 없으면 오버레이는 대기 상태로 유지됩니다. 프로그램은 게임 설정, 실행 파일, 저장 파일을 자동 변경하지 않습니다.
 
@@ -45,7 +45,11 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 ## 오버레이 위치와 크기 조절
 
-상태창에서 **레이아웃 편집**을 누르면 각 UI가 독립된 청록색 편집 테두리로 표시됩니다. 각 UI 상단 바를 드래그해 이동하고 오른쪽 아래 손잡이로 크기를 조절합니다. **저장 후 잠금**을 누르면 `%LOCALAPPDATA%\AMS2KRLeague\overlay-layout.json`에 현재 게임 해상도 대비 비율로 저장되고 다시 click-through 상태가 됩니다. **기본 위치 복원**은 저장된 배치를 삭제하고 기본 배치를 즉시 적용합니다.
+상태창에서 **레이아웃 편집**을 누르면 각 UI가 독립된 청록색 편집 테두리로 표시됩니다. 테두리 안을 드래그해 이동하고 오른쪽 아래 손잡이로 크기를 조절합니다. **저장 후 잠금**을 누르면 `%LOCALAPPDATA%\AMS2KRLeague\overlay-layout.json`에 현재 게임 해상도 대비 비율로 저장되고 다시 click-through 상태가 됩니다. **기본 위치 복원**은 저장된 배치를 삭제하고 기본 배치를 즉시 적용합니다.
+
+타워는 폭에 맞춰 글자를 조절하고 높이에 따라 표시 행을 즉시 늘립니다(2~64행, 상위 순위 우선/범위 밖 플레이어 마지막 고정). 다른 카드는 가로·세로 크기를 독립적으로 적용합니다. Race Control은 글자를 찌그러뜨리지 않고 창 크기에 맞춰 줄바꿈·배치를 조절하며, 낮은 높이에서는 보조 이력을 숨기고 현재 알림을 우선합니다.
+
+타워의 접두사 없는 현재 시간은 로컬 플레이어의 AMS2 직접값입니다. 상대 차량의 `~0:12.345`는 해당 차량의 실제 스타트/피니시 라인 통과 이후 관측한 UI용 시간이며 공식 기록이 아닙니다. 아직 라인 통과를 관측하지 못했거나 데이터가 끊기면 AMS2 직전 랩 `L1:40.123` 또는 `--`를 표시합니다. Practice/Qualifying 완료는 유효 Best Lap, Race 완료는 `FIN`, 중도 종료는 `RET`/`DNF`/`DSQ`로 표시합니다. 관측 시계는 결과/Compact 업로드에 사용하지 않습니다.
 
 순위 타워와 전후방 거리, 현재/섹터 타임은 서로 독립된 창이므로 각각 다른 위치와 크기를 사용할 수 있습니다. 레이아웃 편집 중에는 평소 조건에 따라 숨겨지는 이벤트 및 Race Control UI도 함께 배치할 수 있습니다. 상태창의 **표시할 오버레이** 체크박스는 편집 모드와 무관하게 언제든 사용할 수 있으며, 해제하면 해당 화면이 즉시 꺼지고 설정이 저장되어 다음 실행에도 유지됩니다. **모두 켜기**/**모두 끄기**로 한 번에 바꿀 수 있습니다.
 

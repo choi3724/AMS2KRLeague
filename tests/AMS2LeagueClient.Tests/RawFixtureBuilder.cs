@@ -213,6 +213,12 @@ namespace AMS2LeagueClient.Tests
             return this;
         }
 
+        public RawFixtureBuilder SetParticipantLapDistance(int index, float distance)
+        {
+            WriteFloat(SharedMemoryLayout.ParticipantOffset(index) + SharedMemoryLayout.ParticipantCurrentLapDistance, distance);
+            return this;
+        }
+
         public RawFixtureBuilder SetCurrentTiming(
             float currentTime,
             float sector1,

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -30,11 +31,22 @@ namespace AMS2LeagueClient.Tests
 {
     internal static class Program
     {
+        private static string? _layoutCaptureDirectory;
+
         [STAThread]
-        private static int Main()
+        private static int Main(string[] args)
         {
-            var application = new AMS2LeagueClient.App();
+            var application = new AMS2LeagueClient.App(startRuntime: false);
             application.InitializeComponent();
+            int captureArgument = Array.IndexOf(args, "--capture-layout");
+            if (captureArgument >= 0 && captureArgument + 1 < args.Length)
+                _layoutCaptureDirectory = Path.GetFullPath(args[captureArgument + 1]);
+            if (args.Contains("--motion-probe", StringComparer.Ordinal))
+            {
+                OverlayMotionProbe.Run();
+                application.Shutdown();
+                return 0;
+            }
             var tests = new (string Name, Action Test)[]
             {
                 ("Official v14 activity metadata offsets", ActivityMetadataLayoutOffsets),
@@ -53,6 +65,10 @@ namespace AMS2LeagueClient.Tests
                 ("Participant refresh resets lap confirmation", ParticipantRefreshResetsLapConfirmation),
                 ("RaceControl clears AMS2 top-center alert", RaceControlLeftAuxiliaryPlacement),
                 ("Compact UI metrics meet target", CompactUiMetricsMeetTarget),
+                ("Timing tower row capacity follows resized aspect ratio", TimingTowerRowCapacityFollowsResize),
+                ("Timing tower last row stays inside bounds", TimingTowerLastRowStaysInsideBounds),
+                ("Expanded timing tower preserves leader and player selection", ExpandedTimingTowerPreservesSelection),
+                ("Timing refresh updates rows without collection churn", TimingRefreshUpdatesRowsInPlace),
                 ("Compact anchors hold at target resolutions", CompactAnchorsHoldAtTargetResolutions),
                 ("Independent layout profile scales and clamps", IndependentLayoutProfileScalesAndClamps),
                 ("Timing rows expose class and current time", TimingRowsExposeClassAndCurrentTime),
@@ -101,6 +117,15 @@ namespace AMS2LeagueClient.Tests
                 ,("Session lap counter rolls", SessionLapCounterRolls)
                 ,("Event card exit keeps surface for animation", EventCardExitKeepsSurfaceForAnimation)
                 ,("Lap timing best lap pops", LapTimingBestLapPops)
+                ,("Resize preview immediately matches saved tower", ResizePreviewMatchesSavedTower)
+                ,("Auxiliary panels fill independently resized bounds", AuxiliaryPanelsFillResizedBounds)
+                ,("Ongoing flags do not replay entrance", OngoingFlagsDoNotReplayEntrance)
+                ,("Timing tick only notifies current time binding", TimingTickOnlyNotifiesTime)
+                ,("Broadcast motion requests high refresh", BroadcastMotionRequestsHighRefresh)
+                ,("Race control reflows without clipping or glyph distortion", RaceControlReflowsWithoutClipping)
+                ,("Participant lap clocks start independently at observed lines", ParticipantLapClocksStartIndependently)
+                ,("Participant lap clocks reject stale identity and terminal states", ParticipantLapClocksRejectInvalidContinuity)
+                ,("Tower timing never sums shared sector clocks", TowerTimingNeverSumsSharedSectors)
             };
             int passed = 0;
             foreach ((string name, Action test) in tests)
@@ -560,6 +585,104 @@ namespace AMS2LeagueClient.Tests
             AssertTrue(OverlayUiMetrics.TowerHeight + OverlayUiMetrics.ComponentGap + OverlayUiMetrics.RelativeHeight <= 700);
             AssertEqual(15, LeftTowerLayoutMetrics.RankingRows);
             AssertTrue(LeftTowerLayoutMetrics.RequiredHeight <= LeftTowerLayoutMetrics.DesiredHeight);
+        }
+
+        private static void TimingTowerRowCapacityFollowsResize()
+        {
+            foreach (int rows in new[] { 2, 15, 20, 64 })
+            {
+                int height = LeftTowerLayoutMetrics.RequiredHeightForRows(rows, false);
+                AssertEqual(rows, LeftTowerLayoutMetrics.CalculateRankingRows(OverlayUiMetrics.TowerWidth, height, false));
+            }
+
+            AssertEqual(19, LeftTowerLayoutMetrics.CalculateRankingRows(
+                OverlayUiMetrics.TowerWidth,
+                LeftTowerLayoutMetrics.RequiredHeightForRows(20, false) - 1,
+                false));
+            AssertEqual(15, LeftTowerLayoutMetrics.CalculateRankingRows(1040, 1172, false));
+            AssertEqual(15, LeftTowerLayoutMetrics.CalculateRankingRows(
+                OverlayUiMetrics.TowerWidth,
+                LeftTowerLayoutMetrics.RequiredHeightForRows(15, true),
+                true));
+        }
+
+        private static void TimingTowerLastRowStaysInsideBounds()
+        {
+            foreach (int capacity in new[] { 15, 20 })
+            {
+                var view = new OverlayHudView();
+                RankingRowViewModel[] rows = Enumerable.Range(1, capacity)
+                    .Select(index => Row(index, "P" + index, "DRIVER " + index, "0:20.000"))
+                    .ToArray();
+                OverlayViewModel timing = TimingRows(rows);
+                timing.RankingRowCapacity = capacity;
+                view.SetViewModel(timing);
+                int requiredHeight = LeftTowerLayoutMetrics.RequiredHeightForRows(capacity, false);
+                var size = new Size(OverlayUiMetrics.TowerWidth, requiredHeight);
+                view.Measure(size);
+                view.Arrange(new Rect(size));
+                view.UpdateLayout();
+
+                ItemsControl items = FindDescendant<ItemsControl>(view) ?? throw new InvalidOperationException("Ranking items missing.");
+                ContentPresenter last = Container(items, capacity - 1);
+                double bottom = last.TranslatePoint(new Point(0, last.ActualHeight), view).Y;
+                AssertEqual(capacity, items.Items.Count);
+                AssertEqual((double)requiredHeight, view.Height);
+                AssertTrue(bottom <= view.ActualHeight + 0.5);
+            }
+        }
+
+        private static void ExpandedTimingTowerPreservesSelection()
+        {
+            TelemetrySnapshot snapshot = DemoSnapshotFactory.CreateSnapshot();
+            ParticipantSnapshot local = ResolveLocal(snapshot);
+            LeagueClassification league = Classify(snapshot);
+            OverlayViewModel compact = OverlayViewModel.Build(
+                snapshot, local, league, 30, 20, false, "TEST", rankingRowCapacity: 10);
+            AssertEqual(10, compact.RankingRows.Count);
+            AssertTrue(compact.RankingRows.Take(9).Select(row => row.Position)
+                .SequenceEqual(Enumerable.Range(1, 9).Select(position => "P" + position)));
+            AssertTrue(compact.RankingRows[9].IsPlayer);
+            AssertEqual("P16", compact.RankingRows[9].Position);
+
+            OverlayViewModel expanded = OverlayViewModel.Build(
+                snapshot, local, league, 30, 20, false, "TEST", rankingRowCapacity: 20);
+            AssertEqual(20, expanded.RankingRows.Count);
+            AssertTrue(expanded.RankingRows.Select(row => row.Position)
+                .SequenceEqual(Enumerable.Range(1, 20).Select(position => "P" + position)));
+            AssertEqual(20, expanded.RankingRows.Select(row => row.ParticipantIndex).Distinct().Count());
+            AssertTrue(expanded.IsPlayerVisibleInRanking);
+        }
+
+        private static void TimingRefreshUpdatesRowsInPlace()
+        {
+            var view = new OverlayHudView();
+            view.SetViewModel(TimingRows(Row(1, "P1", "ALPHA", "0:20.000"), Row(2, "P2", "BRAVO", "0:21.000")));
+            LayoutTower(view);
+            ItemsControl items = FindDescendant<ItemsControl>(view) ?? throw new InvalidOperationException("Ranking items missing.");
+            object firstItem = items.Items[0];
+            ContentPresenter firstPresenter = Container(items, 0);
+            var entry = new TranslateTransform();
+            firstPresenter.RenderTransform = entry;
+            entry.BeginAnimation(TranslateTransform.XProperty, null);
+            entry.X = 0;
+            int collectionChanges = 0;
+            ((INotifyCollectionChanged)items.ItemsSource).CollectionChanged += (sender, args) => collectionChanges++;
+
+            for (int frame = 1; frame <= 120; frame++)
+            {
+                view.SetViewModel(TimingRows(
+                    Row(1, "P1", "ALPHA", "0:20." + frame.ToString("000")),
+                    Row(2, "P2", "BRAVO", "0:21." + frame.ToString("000"))));
+            }
+
+            AssertEqual(0, collectionChanges);
+            AssertTrue(ReferenceEquals(firstItem, items.Items[0]));
+            AssertTrue(ReferenceEquals(firstPresenter, Container(items, 0)));
+            AssertFalse(entry.HasAnimatedProperties);
+            AssertEqual("0:20.120", Descendants<TextBlock>(firstPresenter).Single(text => text.Text == "0:20.120").Text);
+            AssertEqual(1.0, firstPresenter.Opacity);
+            AssertFalse(DependencyPropertyHelper.GetValueSource(firstPresenter, UIElement.OpacityProperty).IsAnimated);
         }
 
         private static void CompactAnchorsHoldAtTargetResolutions()
@@ -1967,6 +2090,340 @@ namespace AMS2LeagueClient.Tests
             AssertTrue(Named<TextBlock>(view, "BestLapValue").RenderTransform is ScaleTransform best && best.HasAnimatedProperties);
             AssertTrue(Named<TextBlock>(view, "Sector3Value").RenderTransform is ScaleTransform sector && sector.HasAnimatedProperties);
             AssertFalse(Named<TextBlock>(view, "Sector2Value").RenderTransform is ScaleTransform idle && idle.HasAnimatedProperties);
+        }
+
+        private static void ResizePreviewMatchesSavedTower()
+        {
+            string layout = Path.Combine(Path.GetTempPath(), "ams2-resize-" + Guid.NewGuid().ToString("N") + ".json");
+            var window = new OverlayWindow(false, layout);
+            try
+            {
+                var model = DemoSnapshotFactory.CreateShell(false);
+                window.SetViewModel(model, false);
+                window.ShowDemoAt(-5000, -5000, 96);
+                PumpDispatcher();
+                AssertTrue(window.BeginLayoutEdit());
+                ItemsControl items = FindDescendant<ItemsControl>(window)!;
+                foreach (int capacity in new[] { 10, 20, 8, 20 })
+                {
+                    window.Width = OverlayUiMetrics.TowerWidth;
+                    window.Height = LeftTowerLayoutMetrics.RequiredHeightForRows(capacity, false);
+                    PumpDispatcher();
+                    // No SetViewModel/telemetry tick between these resizes.
+                    AssertEqual(capacity, items.Items.Count);
+                    AssertEqual(capacity, model.Timing.RankingRowCapacity);
+                    AssertTrue(model.Timing.RankingRows.Any(row => row.IsPlayer));
+                    if (capacity < 16) AssertEqual("P16", model.Timing.RankingRows.Last().Position);
+                    ContentPresenter last = Container(items, capacity - 1);
+                    AssertTrue(last.TranslatePoint(new Point(0, last.ActualHeight), window).Y <= window.ActualHeight + 0.5);
+                }
+                CaptureLayout((FrameworkElement)window.Content, "tower-preview");
+                window.EndLayoutEdit(true);
+                PumpDispatcher();
+                AssertEqual(20, items.Items.Count);
+                CaptureLayout((FrameworkElement)window.Content, "tower-applied");
+                var reloaded = new OverlayWindow(false, layout);
+                try
+                {
+                    reloaded.SetViewModel(DemoSnapshotFactory.CreateShell(false), false);
+                    reloaded.ShowDemoAt(-5000, -5000, 96);
+                    PumpDispatcher();
+                    AssertEqual(20, FindDescendant<ItemsControl>(reloaded)!.Items.Count);
+                    AssertTrue(Math.Abs(window.ActualHeight - reloaded.ActualHeight) < 1);
+                }
+                finally { reloaded.Close(); }
+            }
+            finally
+            {
+                window.EndLayoutEdit(false);
+                window.Close();
+                if (File.Exists(layout)) File.Delete(layout);
+            }
+        }
+
+        private static void AuxiliaryPanelsFillResizedBounds()
+        {
+            var existing = Application.Current.Windows.Cast<Window>().ToHashSet();
+            var window = new OverlayWindow(false, Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json"));
+            try
+            {
+                var shell = DemoSnapshotFactory.CreateShell(false, OverlayEventType.PositionGained);
+                shell.RaceControl = new RaceControlViewModel
+                {
+                    IsVisible = true, IsExpanded = true, Title = "레이스 컨트롤",
+                    Message = "랩타임 삭제", DriverLine = "P16 플레이어", StateLabel = "! 황색기"
+                };
+                window.SetViewModel(shell, false);
+                Window[] panels = Application.Current.Windows.Cast<Window>()
+                    .Where(item => item != window && !existing.Contains(item)).ToArray();
+                AssertEqual(6, panels.Length);
+                foreach (Window panel in panels)
+                {
+                    var root = (Grid)panel.Content;
+                    var box = root.Children.OfType<Viewbox>().SingleOrDefault();
+                    var content = box == null ? root.Children.OfType<RaceControlView>().Single() : (FrameworkElement)box.Child;
+                    if (content is MultiplayerWaitingOverlayView)
+                        content.DataContext = new MultiplayerWaitingOverlayViewModel
+                        {
+                            Title = "멀티플레이어 세션 대기", SessionLabel = "예선 결과 확정 및 다음 세션 준비",
+                            ParticipantCountText = "리그 48 / 원본 49", RemainingLabel = "남은 시간", RemainingValue = "세션 종료 대기"
+                        };
+                    if (box != null) AssertEqual(Stretch.Fill, box.Stretch);
+                    double designWidth = box == null ? OverlayUiMetrics.RaceControlExpandedWidth : content.Width;
+                    double designHeight = box == null ? OverlayUiMetrics.RaceControlExpandedHeight : content.Height;
+                    foreach ((double x, double y) in new[] { (1.5, 0.8), (0.8, 1.6), (1.0, 1.0) })
+                    {
+                        var size = new Size(designWidth * x, designHeight * y);
+                        root.Measure(size);
+                        root.Arrange(new Rect(size));
+                        root.UpdateLayout();
+                        Rect bounds = content.TransformToAncestor(root).TransformBounds(new Rect(content.RenderSize));
+                        AssertTrue(Math.Abs(bounds.Width - size.Width) < 1);
+                        AssertTrue(Math.Abs(bounds.Height - size.Height) < 1);
+                        AssertTrue(Math.Abs(bounds.X) < 1 && Math.Abs(bounds.Y) < 1);
+                        CaptureLayout(root, panel.Title + "-" + x + "x" + y);
+                    }
+                }
+            }
+            finally { window.Close(); }
+        }
+
+        private static void OngoingFlagsDoNotReplayEntrance()
+        {
+            RaceControlViewModel State(int version) => RaceControlViewModel.FromUpdate(new RaceControlUpdate(
+                Array.Empty<RaceControlEvent>(), null, Array.Empty<RaceControlEvent>(),
+                new Dictionary<int, ParticipantBroadcastState>(), BroadcastOverlayState.Yellow, version, false));
+            AssertEqual(State(1).EventId, State(120).EventId);
+            var view = new RaceControlView { Width = 416, Height = 152 };
+            RaceControlViewModel Yellow(string id, bool expanded = true) => new RaceControlViewModel
+            {
+                IsVisible = true, IsExpanded = expanded, EventId = id,
+                Title = "레이스 컨트롤", Message = "! 황색기", StateLabel = "! 황색기", Accent = "#FFD166"
+            };
+            view.SetViewModel(Yellow("first"), false);
+            view.Measure(new Size(view.Width, view.Height));
+            view.Arrange(new Rect(0, 0, view.Width, view.Height));
+            Border panel = Named<Border>(view, "Panel");
+            for (int tick = 1; tick <= 120; tick++)
+            {
+                view.SetViewModel(Yellow("new-id-" + tick, tick % 2 == 0), true);
+                AssertFalse(DependencyPropertyHelper.GetValueSource(panel, UIElement.OpacityProperty).IsAnimated);
+                AssertFalse(((TranslateTransform)panel.RenderTransform).HasAnimatedProperties);
+            }
+            AssertEqual((double)OverlayUiMetrics.RaceControlExpandedHeight, view.Height);
+            view.SetViewModel(Yellow("compact", false), true);
+            // The host, not SetViewModel, owns the user's independent dimensions.
+            view.Width = OverlayUiMetrics.RaceControlCompactWidth;
+            view.Height = OverlayUiMetrics.RaceControlCompactHeight;
+            AssertEqual((double)OverlayUiMetrics.RaceControlCompactHeight, view.Height);
+            view.Measure(new Size(view.Width, view.Height));
+            view.Arrange(new Rect(0, 0, view.Width, view.Height));
+            CaptureLayout(view, "yellow-compact");
+            var changed = Yellow("new-state", false);
+            changed.StateLabel = "전 코스 황색기";
+            view.SetViewModel(changed, true);
+            AssertTrue(((ScaleTransform)Named<TextBlock>(view, "StateLabelText").RenderTransform).HasAnimatedProperties);
+            AssertFalse(DependencyPropertyHelper.GetValueSource(panel, UIElement.OpacityProperty).IsAnimated);
+            changed = Yellow("penalty");
+            changed.Message = "랩타임 삭제";
+            view.SetViewModel(changed, true);
+            AssertTrue(((TranslateTransform)panel.RenderTransform).HasAnimatedProperties);
+            AssertEqual(RaceControlView.ExitDuration, view.SetViewModel(new RaceControlViewModel(), true));
+            view.SetViewModel(Yellow("returned"), true);
+            AssertTrue(((TranslateTransform)panel.RenderTransform).HasAnimatedProperties);
+        }
+
+        private static void TimingTickOnlyNotifiesTime()
+        {
+            var row = Row(1, "P1", "ALPHA", "0:20.000");
+            var notifications = new List<string?>();
+            row.PropertyChanged += (sender, args) => notifications.Add(args.PropertyName);
+            for (int tick = 1; tick <= 120; tick++)
+                row.UpdateFrom(Row(1, "P1", "ALPHA", "0:20." + tick.ToString("000")));
+            AssertEqual(120, notifications.Count);
+            AssertTrue(notifications.All(name => name == nameof(RankingRowViewModel.CurrentTime)));
+            row.UpdateFrom(Row(1, "P1", "ALPHA", "0:20.120"));
+            AssertEqual(120, notifications.Count);
+            row.UpdateFrom(Row(1, "P2", "ALPHA", "0:20.121"));
+            AssertEqual(string.Empty, notifications.Last());
+        }
+
+        private static void BroadcastMotionRequestsHighRefresh()
+        {
+            AssertEqual((int?)144, Timeline.GetDesiredFrameRate(new DoubleAnimation()));
+            AssertEqual((int?)144, Timeline.GetDesiredFrameRate(new DoubleAnimationUsingKeyFrames()));
+        }
+
+        private static TelemetrySnapshot LapClockFrame(double seconds, float a, float b,
+            uint lapA = 0, uint lapB = 0, RaceState stateA = RaceState.Racing,
+            GameState game = GameState.InGamePlaying, string nameA = "ALPHA", bool activeA = true)
+        {
+            return Parse(new RawFixtureBuilder(4).SetGameState(game).SetSequence(200 + (uint)(seconds * 1000) * 2).SetTrackTelemetry(1000, -1)
+                .SetParticipant(0, activeA, nameA, 1, lapA, lapA + 1, stateA, PitMode.None)
+                .SetParticipant(1, true, "BRAVO", 2, lapB, lapB + 1, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, a).SetParticipantLapDistance(1, b), FixedTime().AddSeconds(seconds));
+        }
+
+        private static void ParticipantLapClocksStartIndependently()
+        {
+            var clock = new ParticipantLapClock();
+            AssertEqual(0, clock.Observe(LapClockFrame(0, 990, 980)).Count);
+            clock.Observe(LapClockFrame(0.1, 2, 985)); // counter can lag the distance reset
+            clock.Observe(LapClockFrame(0.2, 8, 991, 1));
+            clock.Observe(LapClockFrame(0.3, 14, 998, 1));
+            clock.Observe(LapClockFrame(0.4, 20, 2, 1, 1));
+            var times = clock.Observe(LapClockFrame(0.5, 25, 8, 1, 1));
+            AssertTrue(Math.Abs(times[0] - 0.4f) < 0.001);
+            AssertTrue(Math.Abs(times[1] - 0.1f) < 0.001);
+            // Leader finishing never stops the other driver's lap clock.
+            times = clock.Observe(LapClockFrame(0.6, 30, 12, 1, 1, RaceState.Finished));
+            AssertFalse(times.ContainsKey(0));
+            AssertTrue(Math.Abs(times[1] - 0.2f) < 0.001);
+            // Rank is not an identity or timing input.
+            var reordered = new RawFixtureBuilder(4).SetTrackTelemetry(1000, -1)
+                .SetParticipant(1, true, "BRAVO", 1, 1, 2, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(1, 18);
+            times = clock.Observe(Parse(reordered, FixedTime().AddSeconds(0.7)));
+            AssertTrue(Math.Abs(times[1] - 0.3f) < 0.001);
+        }
+
+        private static void ParticipantLapClocksRejectInvalidContinuity()
+        {
+            ParticipantLapClock Started()
+            {
+                var clock = new ParticipantLapClock();
+                clock.Observe(LapClockFrame(0, 990, 980));
+                clock.Observe(LapClockFrame(0.1, 2, 985, 1));
+                clock.Observe(LapClockFrame(0.2, 8, 991, 1));
+                return clock;
+            }
+            foreach (RaceState state in new[] { RaceState.Finished, RaceState.Retired, RaceState.Dnf, RaceState.Disqualified })
+                AssertFalse(Started().Observe(LapClockFrame(0.3, 15, 995, 1, stateA: state)).ContainsKey(0));
+            AssertFalse(Started().Observe(LapClockFrame(0.3, 15, 995, 1, nameA: "REPLACEMENT")).ContainsKey(0));
+            AssertFalse(Started().Observe(LapClockFrame(0.3, 15, 995, 1, activeA: false)).ContainsKey(0));
+            AssertFalse(Started().Observe(LapClockFrame(2, 15, 995, 1)).ContainsKey(0));
+            AssertFalse(Started().Observe(LapClockFrame(0.3, 999, 995, 1)).ContainsKey(0)); // reverse/teleport
+            AssertFalse(Started().Observe(LapClockFrame(0.3, 15, 995, 0)).ContainsKey(0)); // counter reset
+            AssertFalse(Started().Observe(LapClockFrame(0.3, float.NaN, 995, 1)).ContainsKey(0));
+            var stale = Started();
+            var staleFixture = new RawFixtureBuilder(4).SetTrackTelemetry(1000, -1).SetSequence(600)
+                .SetParticipant(0, true, "ALPHA", 1, 1, 2, RaceState.Racing, PitMode.None).SetParticipantLapDistance(0, 8);
+            AssertTrue(Math.Abs(stale.Observe(Parse(staleFixture, FixedTime().AddSeconds(5)))[0] - 0.1f) < 0.001);
+            var paused = Started();
+            var before = paused.Observe(LapClockFrame(0.3, 8, 991, 1, game: GameState.InGamePaused));
+            var after = paused.Observe(LapClockFrame(10, 8, 991, 1, game: GameState.InGamePaused));
+            AssertEqual(before[0], after[0]);
+            paused.Observe(LapClockFrame(10.1, 8, 991, 1));
+            after = paused.Observe(LapClockFrame(10.2, 14, 997, 1));
+            AssertTrue(Math.Abs(after[0] - before[0] - 0.1f) < 0.001);
+            AssertEqual(0, paused.Observe(null).Count);
+            AssertEqual(0, paused.Observe(LapClockFrame(11, 100, 200, 1)).Count); // mid-lap attach cannot infer a start
+
+            var expired = new ParticipantLapClock();
+            TelemetrySnapshot Timed(double seconds, float distance, float remaining, RaceState state = RaceState.Racing)
+                => Parse(new RawFixtureBuilder(4).SetSequence(200 + (uint)(seconds * 1000) * 2)
+                    .SetTrackTelemetry(1000, remaining).SetSessionTiming(1, 0, remaining)
+                    .SetParticipant(0, true, "ALPHA", 1, 1, 2, state, PitMode.None)
+                    .SetParticipantLapDistance(0, distance), FixedTime().AddSeconds(seconds));
+            expired.Observe(Timed(0, 990, 0.2f));
+            expired.Observe(Timed(0.1, 2, 0.1f));
+            expired.Observe(Timed(0.2, 8, 0));
+            AssertTrue(Math.Abs(expired.Observe(Timed(0.3, 14, 0))[0] - 0.2f) < 0.001);
+            AssertFalse(expired.Observe(Timed(0.4, 20, 0, RaceState.Finished)).ContainsKey(0));
+        }
+
+        private static void TowerTimingNeverSumsSharedSectors()
+        {
+            var fixture = new RawFixtureBuilder(4).SetSession(SessionState.Race);
+            for (int driver = 0; driver < 4; driver++)
+                fixture.SetCurrentTiming(12, 12, -1, -1, participantIndex: driver).SetParticipantLapTimes(driver, -1, -1);
+            fixture.SetParticipantLapTimes(0, 70.125f, 70.125f).SetParticipantLapTimes(1, 73.5f, 73.5f);
+            TelemetrySnapshot snapshot = Parse(fixture);
+            OverlayViewModel Build(IReadOnlyDictionary<int, float>? clocks = null) => OverlayViewModel.Build(
+                snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE", participantLapTimes: clocks);
+            var timing = Build();
+            AssertEqual("L1:10.125", timing.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("L1:13.500", timing.RankingRows.Single(row => row.ParticipantIndex == 1).CurrentTime);
+            AssertEqual("--", timing.RankingRows.Single(row => row.ParticipantIndex == 2).CurrentTime);
+            AssertEqual("0:12.000", PlayerRow(timing).CurrentTime); // viewed player's direct game source only
+            timing = Build(new Dictionary<int, float> { [0] = 6.4f, [1] = 4.1f });
+            AssertEqual("~0:06.400", timing.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("~0:04.100", timing.RankingRows.Single(row => row.ParticipantIndex == 1).CurrentTime);
+        }
+
+        private static void RaceControlReflowsWithoutClipping()
+        {
+            foreach (bool expanded in new[] { false, true })
+            foreach ((int width, int height) in new[] { (72, 48), (288, 66), (160, 260), (600, 55), (416, 152), (832, 304), (240, 120) })
+            {
+                var view = new RaceControlView { Width = width, Height = height };
+                view.SetViewModel(new RaceControlViewModel
+                {
+                    IsVisible = true, IsExpanded = expanded, EventId = "fixture",
+                    Title = expanded ? "레이스 컨트롤 — 랩타임 삭제" : "레이스 컨트롤",
+                    DriverLine = "P16 ENG-IceBlasT 긴 플레이어 이름",
+                    Message = "레이스 관리자가 트랙 한계 위반으로 해당 참가자의 랩타임을 삭제했습니다.",
+                    HistoryText = "17:39 이전 랩타임 삭제 알림\n17:38 드라이브스루 수행 필요\n17:37 전 코스 황색기 상태",
+                    StateLabel = "!! 이중 황색기", CountText = "123"
+                }, false);
+                var size = new Size(width, height);
+                view.Measure(size);
+                view.Arrange(new Rect(size));
+                PumpDispatcher();
+                view.UpdateLayout();
+                AssertEqual((double)width, view.Width);
+                AssertEqual((double)height, view.Height);
+                Grid body = Named<Grid>(view, "Body");
+                GeneralTransform transform = body.TransformToAncestor(view);
+                Point zero = transform.Transform(new Point());
+                Point unitX = transform.Transform(new Point(1, 0));
+                Point unitY = transform.Transform(new Point(0, 1));
+                AssertTrue(Math.Abs((unitX.X - zero.X) - (unitY.Y - zero.Y)) < 0.001);
+                Rect bodyBounds = transform.TransformBounds(new Rect(body.RenderSize));
+                AssertTrue(bodyBounds.Left >= 0 && bodyBounds.Top >= 0);
+                AssertTrue(bodyBounds.Right <= width + 0.5 && bodyBounds.Bottom <= height + 0.5);
+                foreach (TextBlock text in Descendants<TextBlock>(view))
+                {
+                    if (text.ActualHeight == 0) continue;
+                    bool hidden = false;
+                    for (DependencyObject? parent = text; parent != null && parent != view; parent = VisualTreeHelper.GetParent(parent))
+                        if (parent is UIElement element && element.Visibility != Visibility.Visible) hidden = true;
+                    if (hidden) continue;
+                    Rect bounds = text.TransformToAncestor(view).TransformBounds(new Rect(text.RenderSize));
+                    if (bounds.Right > width + 0.5 || bounds.Bottom > height + 0.5)
+                        throw new InvalidOperationException($"{width}x{height} expanded={expanded} {text.Name}: {bounds}");
+                    AssertEqual(TextTrimming.None, text.TextTrimming);
+                    var measured = new TextBlock
+                    {
+                        Text = text.Text, FontSize = text.FontSize, FontFamily = text.FontFamily,
+                        FontWeight = text.FontWeight, TextWrapping = text.TextWrapping
+                    };
+                    measured.Measure(new Size(Math.Max(1, text.ActualWidth), double.PositiveInfinity));
+                    AssertTrue(text.ActualHeight + 1 >= measured.DesiredSize.Height);
+                }
+                if ((width == 288 && !expanded) || (expanded && (width == 160 || width == 600 || width == 416)))
+                    CaptureLayout(view, "race-control-fit-" + width + "x" + height + "-" + expanded);
+            }
+        }
+
+        private static void CaptureLayout(FrameworkElement view, string name)
+        {
+            if (_layoutCaptureDirectory == null) return;
+            Directory.CreateDirectory(_layoutCaptureDirectory);
+            // Capture the settled layout, not a tower-entry animation frame.
+            var frame = new DispatcherFrame();
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+            timer.Tick += (sender, args) => { timer.Stop(); frame.Continue = false; };
+            timer.Start();
+            Dispatcher.PushFrame(frame);
+            view.UpdateLayout();
+            var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                (int)Math.Ceiling(view.ActualWidth), (int)Math.Ceiling(view.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(view);
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+            using var stream = File.Create(Path.Combine(_layoutCaptureDirectory, name + ".png"));
+            encoder.Save(stream);
         }
 
         private static void LayoutTower(FrameworkElement view)
