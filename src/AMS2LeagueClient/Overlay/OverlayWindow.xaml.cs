@@ -564,10 +564,19 @@ namespace AMS2LeagueClient.Overlay
             {
                 root.Children.Add(new Viewbox
                 {
-                    Stretch = Stretch.Fill,
+                    Stretch = Stretch.Uniform,
                     Child = content,
                     IsHitTestVisible = false
                 });
+                // Reflow the panel to the user's free aspect ratio, then apply
+                // one uniform scale. Text must never get separate X/Y scaling.
+                root.SizeChanged += (sender, args) =>
+                {
+                    double scale = Math.Min(args.NewSize.Width / designWidth, args.NewSize.Height / designHeight);
+                    if (scale <= 0 || !double.IsFinite(scale)) return;
+                    content.Width = args.NewSize.Width / scale;
+                    content.Height = args.NewSize.Height / scale;
+                };
             }
             _editChrome = CreateEditChrome(label);
             root.Children.Add(_editChrome);

@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using AMS2LeagueClient.Core.Presentation;
 
 namespace AMS2LeagueClient.Presentation
 {
@@ -15,10 +16,11 @@ namespace AMS2LeagueClient.Presentation
         private string _windowText = "게임 창: 감지되지 않음";
         private string _serverText = "서버: 확인 중";
         private string _accountText = "계정: 연결 안 됨";
+        private SessionPlayMode _sessionPlayMode;
 
-        public ClientStatusViewModel(string version = "0.3.1")
+        public ClientStatusViewModel(string version = "0.4.0")
         {
-            VersionText = "AMS2 League Overlay " + (string.IsNullOrWhiteSpace(version) ? "0.3.1" : version);
+            VersionText = "AMS2 League Overlay " + (string.IsNullOrWhiteSpace(version) ? "0.4.0" : version);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -33,6 +35,18 @@ namespace AMS2LeagueClient.Presentation
         public string ServerText { get => _serverText; set => Set(ref _serverText, value); }
         public string AccountText { get => _accountText; set => Set(ref _accountText, value); }
         public string VersionText { get; }
+        // Not persisted: do not silently carry yesterday's room type into another game launch.
+        public SessionPlayMode SessionPlayMode
+        {
+            get => _sessionPlayMode;
+            set
+            {
+                if (!Enum.IsDefined(typeof(SessionPlayMode), value)) value = SessionPlayMode.Unknown;
+                if (_sessionPlayMode == value) return;
+                _sessionPlayMode = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SessionPlayMode)));
+            }
+        }
 
         public void SetWaiting()
         {

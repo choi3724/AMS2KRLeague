@@ -57,6 +57,7 @@ namespace AMS2LeagueClient.Runtime
         private readonly HttpClient _httpClient;
         private readonly bool _ownsHttpClient;
         private bool _disposed;
+        public Action<string>? FailureDiagnostic { private get; set; }
 
         public Cafe24ActivityUploadTransport(ActivityConnectionOptions options, HttpClient? httpClient = null)
             : this(options, string.Empty, string.Empty, httpClient)
@@ -167,10 +168,12 @@ namespace AMS2LeagueClient.Runtime
                     HttpCompletionOption.ResponseHeadersRead,
                     timeout.Token).ConfigureAwait(false);
                 int statusCode = (int)response.StatusCode;
-                byte[]? responseBytes = await ReadLimitedAsync(
-                    response.Content,
-                    MaximumResponseBytes,
-                    timeout.Token).ConfigureAwait(false);
+                byte[]? responseBytes = await ReadUploadResponseAsync(response, timeout.Token, cancellationToken).ConfigureAwait(false);
+                if (statusCode == 403)
+                {
+                    return ActivityUploadTransportResult.Http(403, false,
+                        DescribeForbidden(response, responseBytes, endpoint, item.Metadata.QueueItemId));
+                }
                 if (responseBytes == null)
                 {
                     return IsSuccessStatus(statusCode)
@@ -296,10 +299,12 @@ namespace AMS2LeagueClient.Runtime
                     HttpCompletionOption.ResponseHeadersRead,
                     timeout.Token).ConfigureAwait(false);
                 int statusCode = (int)response.StatusCode;
-                byte[]? responseBytes = await ReadLimitedAsync(
-                    response.Content,
-                    MaximumResponseBytes,
-                    timeout.Token).ConfigureAwait(false);
+                byte[]? responseBytes = await ReadUploadResponseAsync(response, timeout.Token, cancellationToken).ConfigureAwait(false);
+                if (statusCode == 403)
+                {
+                    return TelemetryChunkUploadTransportResult.Failure(403,
+                        DescribeForbidden(response, responseBytes, TelemetryChunksEndpoint, metadata.ChunkId), false);
+                }
                 if (responseBytes == null)
                 {
                     return TelemetryChunkUploadTransportResult.Failure(
@@ -613,6 +618,81 @@ namespace AMS2LeagueClient.Runtime
             return source;
         }
 
+        private static async Task<byte[]?> ReadUploadResponseAsync(HttpResponseMessage response,
+            CancellationToken timeout, CancellationToken caller)
+        {
+            bool forbidden = response.StatusCode == HttpStatusCode.Forbidden;
+            try { return await ReadLimitedAsync(response.Content, forbidden ? 4096 : MaximumResponseBytes, timeout).ConfigureAwait(false); }
+            catch (Exception exception) when (forbidden && !caller.IsCancellationRequested
+                && (exception is IOException || exception is HttpRequestException || exception is OperationCanceledException))
+            {
+                // The HTTP status is known even if the error body cannot be read.
+                // Never turn a permanent 403 into an endless network retry.
+                return null;
+            }
+        }
+
+        private string DescribeForbidden(HttpResponseMessage response, byte[]? bytes, string endpoint, string itemId)
+        {
+            string mediaType = response.Content.Headers.ContentType?.MediaType?.ToLowerInvariant() ?? "unknown";
+            string kind = mediaType == "text/html" ? "HTML" : mediaType == "application/json" ? "JSON" : "OTHER";
+            string code = "HTTP_403_" + kind;
+            string requestId = string.Empty;
+            if (bytes != null && bytes.Length > 0)
+            {
+                try
+                {
+                    using JsonDocument document = JsonDocument.Parse(bytes);
+                    kind = "JSON";
+                    code = "HTTP_403_JSON";
+                    if (document.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        string error = StringValue(document.RootElement, "error");
+                        // Copy known application codes only, never arbitrary echoed values,
+                        // message/body, token, cookie, URL or raw HTML into the log/queue.
+                        if (error == "SCOPE_FORBIDDEN" || error == "OFFICIAL_RESULT_FORBIDDEN"
+                            || error == "PRIVATE_DRIVER_UPLOAD_DENIED" || error == "COMPACT_PRIVATE_UPLOAD_DENIED") code = error;
+                        requestId = SafeRequestId(StringValue(document.RootElement, "requestId"));
+                    }
+                }
+                catch (JsonException)
+                {
+                    if (Encoding.UTF8.GetString(bytes).TrimStart().StartsWith("<", StringComparison.Ordinal))
+                    {
+                        kind = "HTML";
+                        code = "HTTP_403_HTML";
+                    }
+                }
+            }
+            if (requestId.Length == 0)
+            {
+                foreach (string header in new[] { "X-Request-ID", "X-Correlation-ID" })
+                {
+                    if (response.Headers.TryGetValues(header, out var values)) requestId = SafeRequestId(values.FirstOrDefault() ?? string.Empty);
+                    if (requestId.Length > 0) break;
+                }
+            }
+            string safeContentType = mediaType == "application/json" || mediaType == "text/html" || mediaType == "text/plain"
+                ? mediaType : "other";
+            try
+            {
+                FailureDiagnostic?.Invoke("endpoint=" + endpoint + " item=" + itemId + " http=403 contentType="
+                    + safeContentType + " responseKind=" + kind + " code=" + code + " requestId=" + requestId
+                    + " body=" + (bytes == null ? "EXCEEDS_4096_BYTES_OR_UNREADABLE" : "OMITTED") + " action=QUARANTINE");
+            }
+            catch { /* A logging failure must not turn a permanent 403 into a retry. */ }
+            return code;
+        }
+
+        private string SafeRequestId(string value)
+        {
+            // The application's ID is 16 hex chars; common infrastructure IDs are
+            // hex/UUID. Reject bearer-shaped or echoed credential values outright.
+            if (value.Length < 8 || value.Length > 64 || value.Equals(_options.BearerToken, StringComparison.OrdinalIgnoreCase)) return string.Empty;
+            return value.All(character => (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')
+                || (character >= 'A' && character <= 'F') || character == '-') ? value : string.Empty;
+        }
+
         private static ActivityUploadTransportResult ParseUploadResponse(int statusCode, byte[] responseBytes)
         {
             if (responseBytes.Length == 0)
@@ -631,7 +711,7 @@ namespace AMS2LeagueClient.Runtime
                 }
 
                 JsonElement root = document.RootElement;
-                bool duplicate = root.TryGetProperty("duplicate", out JsonElement duplicateElement)
+                bool duplicate = IsSuccessStatus(statusCode) && root.TryGetProperty("duplicate", out JsonElement duplicateElement)
                     && (duplicateElement.ValueKind == JsonValueKind.True
                         || (duplicateElement.ValueKind == JsonValueKind.String
                             && bool.TryParse(duplicateElement.GetString(), out bool parsedDuplicate)
@@ -717,7 +797,6 @@ namespace AMS2LeagueClient.Runtime
 
         private static bool IsTelemetryRetryableStatus(int statusCode)
             => statusCode == 401
-                || statusCode == 403
                 || statusCode == 404
                 || statusCode == 405
                 || statusCode == 408

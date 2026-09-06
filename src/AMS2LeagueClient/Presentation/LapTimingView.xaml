@@ -6,10 +6,10 @@
              FontFamily="{DynamicResource HudFontFamily}"
              SnapsToDevicePixels="True" UseLayoutRounding="True" IsHitTestVisible="False">
     <Border Background="{StaticResource TertiaryPanelBackgroundBrush}" BorderBrush="#47526779" BorderThickness="1" CornerRadius="8" Padding="11,8">
-        <StackPanel>
+        <StackPanel VerticalAlignment="Center">
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                <StackPanel><TextBlock Text="{Binding CurrentLabel}" Foreground="#9BB0C3" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold"/><TextBlock Text="{Binding CurrentLapText}" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" Style="{StaticResource HudNumericText}"/></StackPanel>
+                <StackPanel><TextBlock Text="{Binding CurrentLabel}" Foreground="#9BB0C3" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold"/><TextBlock Text="{Binding CurrentLapText}" Foreground="{Binding CurrentLapColor}" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" Style="{StaticResource HudNumericText}"/></StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center"><TextBlock Text="{Binding LastLabel}" Foreground="#9BB0C3" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock x:Name="LastLapValue" Text="{Binding LastLapText}" Foreground="#E4EBF2" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="SemiBold" Style="{StaticResource HudNumericText}" RenderTransformOrigin="0.5,0.5"><TextBlock.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></TextBlock.RenderTransform></TextBlock></StackPanel>
                 <StackPanel Grid.Column="2" HorizontalAlignment="Right"><TextBlock Text="{Binding BestLabel}" Foreground="#9BB0C3" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" FontWeight="SemiBold" HorizontalAlignment="Right"/><TextBlock x:Name="BestLapValue" Text="{Binding BestLapText}" Foreground="#82F1D0" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" Style="{StaticResource HudNumericText}" RenderTransformOrigin="1,0.5"><TextBlock.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></TextBlock.RenderTransform></TextBlock></StackPanel>
             </Grid>

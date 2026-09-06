@@ -92,7 +92,7 @@ namespace AMS2LeagueClient.Core.SessionWitness
             var result = new SessionWitnessUpdate();
             bool relevantSession = IsRelevant(snapshot.SessionStateRaw);
             bool canStart = relevantSession && snapshot.NumParticipants > 1
-                && snapshot.KnownGameState != GameState.FrontEnd;
+                && FutureTelemetryCaptureRuntime.IsCaptureScope(snapshot);
 
             // Official SHM v14 exposes no authoritative multiplayer boolean.
             // Multiple observed participants are therefore a capture eligibility

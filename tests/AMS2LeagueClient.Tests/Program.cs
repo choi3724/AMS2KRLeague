@@ -63,6 +63,10 @@ namespace AMS2LeagueClient.Tests
                 ("Start finish wrap never creates lap gap", StartFinishWrapNeverCreatesLapGap),
                 ("Actual lap gaps require stable cumulative progress", ActualLapGapsRequireStableCumulativeProgress),
                 ("Participant refresh resets lap confirmation", ParticipantRefreshResetsLapConfirmation),
+                ("Relative time gap uses matching game source and survives lap gap", RelativeTimeGapUsesMatchingGameSource),
+                ("Prestart relative uses world positions until lap progress is ready", PrestartRelativeUsesWorldPositions),
+                ("Prestart relative rejects missing and ambiguous positions", PrestartRelativeRejectsUnknownPositions),
+                ("Relative time and distance remain visible at resized bounds", RelativeTimeAndDistanceRemainVisible),
                 ("RaceControl clears AMS2 top-center alert", RaceControlLeftAuxiliaryPlacement),
                 ("Compact UI metrics meet target", CompactUiMetricsMeetTarget),
                 ("Timing tower row capacity follows resized aspect ratio", TimingTowerRowCapacityFollowsResize),
@@ -71,14 +75,14 @@ namespace AMS2LeagueClient.Tests
                 ("Timing refresh updates rows without collection churn", TimingRefreshUpdatesRowsInPlace),
                 ("Compact anchors hold at target resolutions", CompactAnchorsHoldAtTargetResolutions),
                 ("Independent layout profile scales and clamps", IndependentLayoutProfileScalesAndClamps),
-                ("Timing rows expose class and current time", TimingRowsExposeClassAndCurrentTime),
+                ("Timing rows expose class and best lap", TimingRowsExposeClassAndCurrentTime),
                 ("Class badge palette is explicit and stable", ClassBadgePaletteIsExplicitAndStable),
                 ("Class and timing typography fits tower", ClassAndTimingTypographyFitsTower),
                 ("Only inactive participant states are dimmed", OnlyInactiveParticipantStatesAreDimmed),
                 ("Status changes never dim active rows", StatusChangesNeverDimActiveRows),
-                ("Practice active uses current timing", PracticeActiveUsesCurrentTiming),
+                ("Practice active tower uses best lap, personal panel stays live", PracticeActiveUsesCurrentTiming),
                 ("Practice completed uses best lap", PracticeCompletedUsesBestLap),
-                ("Qualifying active uses current timing", QualifyingActiveUsesCurrentTiming),
+                ("Qualifying active tower uses best lap, personal panel stays live", QualifyingActiveUsesCurrentTiming),
                 ("Qualifying completed uses best lap", QualifyingCompletedUsesBestLap),
                 ("Race timing stops per participant", RaceTimingStopsPerParticipant),
                 ("Terminal states never keep timing", TerminalStatesNeverKeepTiming),
@@ -89,7 +93,8 @@ namespace AMS2LeagueClient.Tests
                 ("Overlay edit mode restores click-through", OverlayEditModeRestoresClickThrough),
                 ("Multiplayer menu shows waiting overlay", MultiplayerMenuShowsWaitingOverlay),
                 ("Multiplayer qualify-end transition shows waiting", MultiplayerQualifyEndShowsWaitingOverlay),
-                ("Waiting overlay excludes single and replay", WaitingOverlayExcludesSingleAndReplay),
+                ("Waiting overlay includes single but excludes replay", WaitingOverlayIncludesSingleExcludesReplay),
+                ("Waiting mode is explicit and session labels follow SHM", WaitingModeAndSessionLabels),
                 ("Waiting overlay returns to gameplay", WaitingOverlayReturnsToGameplay),
                 ("Remaining timer fallback is bounded to generation", RemainingTimerFallbackBounded),
                 ("Waiting timer never fabricates countdown", WaitingTimerDoesNotFabricateCountdown),
@@ -106,6 +111,7 @@ namespace AMS2LeagueClient.Tests
                 ,("Anonymous enrollment status never claims upload is disabled", AnonymousEnrollmentStatusIsAccurate)
                 ,("Telemetry gzip HTTP contract is exact", TelemetryGzipHttpContractIsExact)
                 ,("Compact telemetry gzip HTTP contract is exact", CompactTelemetryGzipHttpContractIsExact)
+                ,("403 JSON HTML diagnostics quarantine without credentials or replay", ForbiddenUploadDiagnostics)
                 ,("Activity runtime automatically uploads pending telemetry chunks", ActivityRuntimeUploadsPendingTelemetry)
                 ,("Transition tracker reports position direction and fastest lap", TransitionTrackerReportsPositionDirection)
                 ,("Position change flashes row and rolls number", PositionChangeFlashesRowAndRollsNumber)
@@ -116,6 +122,7 @@ namespace AMS2LeagueClient.Tests
                 ,("Relative participant change animates", RelativeParticipantChangeAnimates)
                 ,("Session lap counter rolls", SessionLapCounterRolls)
                 ,("Event card exit keeps surface for animation", EventCardExitKeepsSurfaceForAnimation)
+                ,("Fastest lap and leader change flash once per event", EventHighlightsFlashOnce)
                 ,("Lap timing best lap pops", LapTimingBestLapPops)
                 ,("Resize preview immediately matches saved tower", ResizePreviewMatchesSavedTower)
                 ,("Auxiliary panels fill independently resized bounds", AuxiliaryPanelsFillResizedBounds)
@@ -125,7 +132,25 @@ namespace AMS2LeagueClient.Tests
                 ,("Race control reflows without clipping or glyph distortion", RaceControlReflowsWithoutClipping)
                 ,("Participant lap clocks start independently at observed lines", ParticipantLapClocksStartIndependently)
                 ,("Participant lap clocks reject stale identity and terminal states", ParticipantLapClocksRejectInvalidContinuity)
-                ,("Tower timing never sums shared sector clocks", TowerTimingNeverSumsSharedSectors)
+                ,("Tower best lap ignores sector loss and observed clocks", TowerTimingFallsBackForMissingSectors)
+                ,("Tower best lap uses only the participant best source", OpponentTimingUsesCurrentLapSectors)
+                ,("Opening lap shows out-lap label per driver only in the tower", OpeningLapLabelInTower)
+                ,("Race control shows current green flag without history", RaceControlShowsCurrentGreenWithoutHistory)
+                ,("Invalid current lap freezes personal panel but preserves tower bests", InvalidLapDisplayFreezesPerParticipant)
+                ,("Invalid lap event interrupts ordinary events once per lap", InvalidLapEventIsVisibleOncePerLap)
+                ,("Opening invalid flags stay out of UI without changing raw data", OpeningInvalidFlagsStayHidden)
+                ,("Relative lap gaps appear only in Race", RelativeLapGapsOnlyInRace)
+                ,("Pit and track relatives use separate physical populations", PitAndTrackRelativesStaySeparate)
+                ,("Pit relative rejects unknown geometry without track fallback", PitRelativeRejectsUnknownGeometry)
+                ,("Pit-to-track distance source changes do not fake trends", PitRelativeTransitionResetsTrend)
+                ,("Practice qualifying pit exit starts a new out lap, then timed running", PracticeLapPhaseFollowsPitExit)
+                ,("Lap phase resets on session identity and counter rollback", LapPhaseRejectsStaleState)
+                ,("PIT includes all five pit modes and preserves penalty precedence", AllPitModesShowPitBadge)
+                ,("Native lap start clears out lap before geometric and completed counters", NativeLapStartClearsOutLapImmediately)
+                ,("Pit-exit state cannot re-arm a started timed lap", PitExitDoesNotRearmTimedLap)
+                ,("Real first timed lap starts without any lap counter change", FirstTimedLapUsesNativeTimingAvailability)
+                ,("Out lap survives real pause and menu generation changes", OutLapSurvivesPauseAndMenu)
+                ,("Late attach distinguishes untimed out lap from first timed lap", LateAttachRecognizesUntimedOutLap)
             };
             int passed = 0;
             foreach ((string name, Action test) in tests)
@@ -407,7 +432,7 @@ namespace AMS2LeagueClient.Tests
             AssertEqual(1, expired.History.Count);
             RaceControlViewModel hidden = RaceControlViewModel.FromUpdate(expired);
             AssertFalse(hidden.IsVisible);
-            AssertTrue(hidden.HistoryText.Contains("드라이브스루", StringComparison.Ordinal));
+            AssertTrue(expired.History[0].Message.Contains("드라이브스루", StringComparison.Ordinal));
         }
 
         private static void RaceControlStateOnlyCardFits()
@@ -521,6 +546,7 @@ namespace AMS2LeagueClient.Tests
                 };
                 tracker.Apply(view, 7);
                 AssertEqual("+0.250", view.AheadGap);
+                AssertEqual(string.Empty, view.AheadLapGap);
             }
         }
 
@@ -545,16 +571,19 @@ namespace AMS2LeagueClient.Tests
             var first = LapCandidateView("1|AHEAD|CAR|GT3", 1);
             tracker.Apply(first, 8);
             AssertEqual("+0.500", first.AheadGap);
+            AssertEqual(string.Empty, first.AheadLapGap);
             var confirmed = LapCandidateView("1|AHEAD|CAR|GT3", 1);
             tracker.Apply(confirmed, 8);
-            AssertEqual("LAP 1", confirmed.AheadGap);
+            AssertEqual("LAP 1", confirmed.AheadLapGap);
+            AssertEqual("+0.500", confirmed.AheadGap);
 
             var firstTwo = LapCandidateView("1|AHEAD|CAR|GT3", 2);
             tracker.Apply(firstTwo, 8);
-            AssertEqual("LAP 1", firstTwo.AheadGap);
+            AssertEqual("LAP 1", firstTwo.AheadLapGap);
             var confirmedTwo = LapCandidateView("1|AHEAD|CAR|GT3", 2);
             tracker.Apply(confirmedTwo, 8);
-            AssertEqual("LAP 2", confirmedTwo.AheadGap);
+            AssertEqual("LAP 2", confirmedTwo.AheadLapGap);
+            AssertEqual("+0.500", confirmedTwo.AheadGap);
         }
 
         private static void ParticipantRefreshResetsLapConfirmation()
@@ -563,11 +592,12 @@ namespace AMS2LeagueClient.Tests
             tracker.Apply(LapCandidateView("1|OLD|CAR|GT3", 1), 9);
             var oldConfirmed = LapCandidateView("1|OLD|CAR|GT3", 1);
             tracker.Apply(oldConfirmed, 9);
-            AssertEqual("LAP 1", oldConfirmed.AheadGap);
+            AssertEqual("LAP 1", oldConfirmed.AheadLapGap);
 
             var refreshed = LapCandidateView("1|NEW|CAR|GT3", 1);
             tracker.Apply(refreshed, 9);
             AssertEqual("+0.500", refreshed.AheadGap);
+            AssertEqual(string.Empty, refreshed.AheadLapGap);
 
             var sessionTracker = new RelativeDistanceTrendTracker();
             sessionTracker.Apply(LapCandidateView("1|SAME|CAR|GT3", 1), 9);
@@ -575,6 +605,356 @@ namespace AMS2LeagueClient.Tests
             var nextSession = LapCandidateView("1|SAME|CAR|GT3", 1);
             sessionTracker.Apply(nextSession, 10);
             AssertEqual("+0.500", nextSession.AheadGap);
+            AssertEqual(string.Empty, nextSession.AheadLapGap);
+        }
+
+        private static void RelativeTimeGapUsesMatchingGameSource()
+        {
+            var fixture = new RawFixtureBuilder(4).SetViewedIndex(1).SetTrackTelemetry(1000, 300)
+                .SetParticipantLapDistance(0, 550).SetParticipantLapDistance(1, 500)
+                .SetParticipantLapDistance(2, 460).SetParticipantLapDistance(3, 100)
+                .SetSplitAhead(0.842f).SetSplitBehind(1.127f);
+            OverlayViewModel view = BuildTiming(fixture);
+            AssertEqual("+0.842s", view.AheadGap);
+            AssertEqual("+1.127s", view.BehindGap);
+            AssertEqual("50m", view.AheadDistance);
+            AssertEqual("40m", view.BehindDistance);
+            AssertEqual("GAME_SPLIT", view.AheadSource);
+
+            view.AheadLapGapCandidate = 1;
+            view.BehindLapGapCandidate = 2;
+            var tracker = new RelativeDistanceTrendTracker();
+            tracker.Apply(view, 1);
+            tracker.Apply(view, 1);
+            AssertEqual("LAP 1", view.AheadLapGap);
+            AssertEqual("LAP 2", view.BehindLapGap);
+            AssertEqual("+0.842s", view.AheadGap);
+            AssertEqual("+1.127s", view.BehindGap);
+
+            foreach (float invalid in new[] { -1f, float.NaN, float.PositiveInfinity })
+            {
+                view = BuildTiming(fixture.SetSplitAhead(invalid).SetSplitBehind(invalid));
+                AssertEqual("—", view.AheadGap);
+                AssertEqual("—", view.BehindGap);
+                AssertEqual("50m", view.AheadDistance);
+            }
+            view = BuildTiming(fixture.SetSplitAhead(0).SetSplitBehind(0));
+            AssertEqual("+0.000s", view.AheadGap);
+            AssertEqual("+0.000s", view.BehindGap);
+            // A physically nearer car must never inherit another car's ranking split.
+            view = BuildTiming(fixture.SetSplitAhead(0.842f).SetSplitBehind(1.127f)
+                .SetParticipantLapDistance(3, 510));
+            AssertEqual(3, view.AheadParticipantIndex);
+            AssertEqual("10m", view.AheadDistance);
+            AssertEqual("—", view.AheadGap);
+            AssertEqual("UNKNOWN", view.AheadSource);
+            AssertEqual("+1.127s", view.BehindGap);
+        }
+
+        private static RawFixtureBuilder PitRelativeFixture(PitMode localMode = PitMode.InPit, PitMode frontMode = PitMode.InGarage, uint completed = 0)
+        {
+            var fixture = new RawFixtureBuilder(5).SetViewedIndex(1).SetTrackTelemetry(4000, 300)
+                .SetParticipant(0, true, "PIT FRONT", 1, completed, completed + 1, RaceState.Racing, frontMode)
+                .SetParticipant(1, true, "ME", 2, completed, completed + 1, RaceState.Racing, localMode)
+                .SetParticipant(2, true, "PIT REAR", 3, completed, completed + 1, RaceState.Racing, PitMode.InPit)
+                .SetParticipant(3, true, "TRACK FRONT", 4, completed, completed + 1, RaceState.Racing, PitMode.None)
+                .SetParticipant(4, true, "TRACK REAR", 5, completed, completed + 1, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 0).SetParticipantLapDistance(1, 3800).SetParticipantLapDistance(2, 0)
+                .SetParticipantLapDistance(3, 3942).SetParticipantLapDistance(4, 3766)
+                .SetParticipantMotion(0, 100, 10, 90, 0, (float)(Math.PI / 2), 0, 0) // angled garage car remains a candidate
+                .SetParticipantMotion(1, 100, 10, 100, 0, 0, 0, 0)
+                .SetParticipantMotion(2, 100, 10, 120, 0, 0, 0, 0)
+                .SetParticipantMotion(3, 100, 10, 98, 0, 0, 0, 10) // nearer in 3D, but on the other route
+                .SetParticipantMotion(4, 100, 10, 102, 0, 0, 0, 10);
+            return fixture;
+        }
+
+        private static void PitAndTrackRelativesStaySeparate()
+        {
+            foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify, SessionState.Race })
+            foreach (PitMode ownPit in new[] { PitMode.DrivingIntoPits, PitMode.InPit, PitMode.DrivingOutOfPits, PitMode.InGarage, PitMode.DrivingOutOfGarage })
+            foreach (PitMode otherPit in new[] { PitMode.DrivingIntoPits, PitMode.InPit, PitMode.DrivingOutOfPits, PitMode.InGarage, PitMode.DrivingOutOfGarage })
+            foreach (uint completed in new uint[] { 0, 3 })
+            {
+                var fixture = PitRelativeFixture(ownPit, otherPit, completed).SetSession(session);
+                byte[] original = fixture.Buffer.ToArray();
+                OverlayViewModel view = BuildTiming(fixture);
+                AssertEqual(0, view.AheadParticipantIndex);
+                AssertEqual(2, view.BehindParticipantIndex);
+                AssertEqual("~10m", view.AheadDistance);
+                AssertEqual("~20m", view.BehindDistance);
+                AssertFalse(view.AheadLapGapCandidate.HasValue);
+                AssertFalse(view.BehindLapGapCandidate.HasValue);
+                AssertTrue(fixture.Buffer.SequenceEqual(original));
+                view = BuildTiming(PitRelativeFixture(PitMode.None, otherPit, completed).SetSession(session));
+                AssertEqual(3, view.AheadParticipantIndex);
+                AssertEqual(4, view.BehindParticipantIndex);
+                AssertEqual("142m", view.AheadDistance);
+                AssertEqual("34m", view.BehindDistance);
+            }
+            var pit = PitRelativeFixture();
+            var unranked = BuildTiming(pit.SetParticipant(0, true, "UNRANKED PIT", 0, 0, 1, RaceState.NotStarted, PitMode.InGarage));
+            AssertEqual(0, unranked.AheadParticipantIndex);
+            AssertEqual("P—", unranked.AheadPosition);
+            AssertEqual("UNRANKED PIT", unranked.AheadName);
+            AssertEqual("~10m", unranked.AheadDistance);
+            pit = PitRelativeFixture();
+            var engine = new RaceEventEngine();
+            foreach (int seconds in new[] { 0, 10, 20 })
+            {
+                TelemetrySnapshot snapshot = Parse(pit, FixedTime().AddSeconds(seconds));
+                AssertFalse(engine.Observe(snapshot, Classify(snapshot), 1, snapshot.CapturedAt).DetectedEvents.Any(item => item.Type == OverlayEventType.Battle));
+            }
+            var panel = new RelativeDriversView();
+            panel.SetViewModel(BuildTiming(pit));
+            panel.Measure(new Size(panel.Width, panel.Height));
+            panel.Arrange(new Rect(0, 0, panel.Width, panel.Height));
+            CaptureLayout(panel, "pit-relative-only");
+        }
+
+        private static void PitRelativeRejectsUnknownGeometry()
+        {
+            foreach ((float x, float y, float z) in new[] { (0f, 0f, 0f), (float.NaN, 10f, 90f), (100f, 10f, float.PositiveInfinity), (100f, 10f, 100f), (100f, 20f, 90f), (140f, 10f, 90f), (100f, 10f, -100f) })
+            {
+                var view = BuildTiming(PitRelativeFixture().SetParticipantMotion(0, x, y, z, 0, 0, 0, 0));
+                AssertEqual(-1, view.AheadParticipantIndex);
+                AssertEqual("—", view.AheadDistance); // never substitute TRACK FRONT
+                AssertEqual(2, view.BehindParticipantIndex);
+            }
+            AssertEqual("~10m", BuildTiming(PitRelativeFixture().SetTrackTelemetry(0, 300)).AheadDistance);
+            AssertEqual(-1, BuildTiming(PitRelativeFixture(frontMode: (PitMode)999)).AheadParticipantIndex);
+            AssertFalse(BuildTiming(PitRelativeFixture(localMode: (PitMode)999)).IsBottomGapPanelVisible);
+            AssertEqual(-1, BuildTiming(PitRelativeFixture().SetParticipantVehicle(0, "SafetyCar", "SafetyCar")).AheadParticipantIndex);
+            // Requesting a pit stop has not entered the pit area yet.
+            AssertEqual(3, BuildTiming(PitRelativeFixture(PitMode.None).SetParticipantControl(1, PitSchedule.PlayerRequested)).AheadParticipantIndex);
+        }
+
+        private static void PitRelativeTransitionResetsTrend()
+        {
+            var tracker = new RelativeDistanceTrendTracker();
+            OverlayViewModel Sample(bool pit, float frontZ)
+            {
+                var fixture = PitRelativeFixture(pit ? PitMode.InPit : PitMode.None, pit ? PitMode.InPit : PitMode.None)
+                    .SetParticipantMotion(0, 100, 10, frontZ, 0, 0, 0, 0).SetParticipantLapDistance(0, 3900);
+                var view = BuildTiming(fixture);
+                tracker.Apply(view, 1);
+                return view;
+            }
+            AssertEqual(0, Sample(true, 90).AheadParticipantIndex);
+            AssertEqual("▲", Sample(true, 80).AheadDistanceTrendArrow);
+            var track = Sample(false, 80);
+            AssertEqual(0, track.AheadParticipantIndex); // same car, different measurement source
+            AssertEqual("100m", track.AheadDistance);
+            AssertEqual(string.Empty, track.AheadDistanceTrendArrow);
+            AssertEqual("~20m", Sample(true, 80).AheadDistance);
+            AssertEqual(string.Empty, Sample(true, 80).AheadDistanceTrendArrow);
+        }
+
+        private static void RelativeLapGapsOnlyInRace()
+        {
+            var fixture = new RawFixtureBuilder(4).SetViewedIndex(1).SetTrackTelemetry(1000, 300)
+                .SetParticipant(0, true, "AHEAD", 1, 3, 4, RaceState.Racing, PitMode.None)
+                .SetParticipant(2, true, "BEHIND", 3, 0, 1, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 550).SetParticipantLapDistance(1, 500)
+                .SetParticipantLapDistance(2, 460).SetParticipantLapDistance(3, 100)
+                .SetSplitAhead(0.842f).SetSplitBehind(1.127f);
+            var tracker = new RelativeDistanceTrendTracker();
+            foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify, SessionState.Test, SessionState.TimeAttack })
+            {
+                OverlayViewModel view = BuildTiming(fixture.SetSession(SessionState.Race));
+                tracker.Apply(view, 1);
+                tracker.Apply(view, 1);
+                AssertEqual("LAP 1", view.AheadLapGap);
+                AssertEqual("LAP 2", view.BehindLapGap);
+                view = BuildTiming(fixture.SetSession(session));
+                for (int sample = 0; sample < 3; sample++)
+                {
+                    tracker.Apply(view, 1); // same generation: previous Race labels must clear immediately
+                    AssertFalse(view.AheadLapGapCandidate.HasValue);
+                    AssertFalse(view.BehindLapGapCandidate.HasValue);
+                    AssertEqual(string.Empty, view.AheadLapGap);
+                    AssertEqual(string.Empty, view.BehindLapGap);
+                    AssertEqual("+0.842s", view.AheadGap);
+                    AssertEqual("+1.127s", view.BehindGap);
+                    AssertEqual("50m", view.AheadDistance);
+                    AssertEqual("40m", view.BehindDistance);
+                }
+                if (session == SessionState.Practice)
+                {
+                    var panel = new RelativeDriversView();
+                    panel.SetViewModel(view);
+                    panel.Measure(new Size(panel.Width, panel.Height));
+                    panel.Arrange(new Rect(0, 0, panel.Width, panel.Height));
+                    CaptureLayout(panel, "practice-relative-no-lap");
+                }
+            }
+        }
+
+        private static void PrestartRelativeUsesWorldPositions()
+        {
+            var fixture = new RawFixtureBuilder(4).SetViewedIndex(1).SetTrackTelemetry(1000, 300)
+                .SetSplitAhead(0.842f).SetSplitBehind(1.127f);
+            for (int index = 0; index < 4; index++)
+                fixture.SetParticipant(index, true, "GRID_" + index, (uint)index + 1, 0, 1, RaceState.NotStarted, PitMode.None)
+                    .SetParticipantLapDistance(index, 0);
+            // yaw 0 faces -Z. Physical neighbours deliberately differ from ranking neighbours.
+            fixture.SetParticipantMotion(1, 100, 10, 100, 0, 0, 0, 0)
+                .SetParticipantMotion(0, 100, 10, 115, 0, 0, 0, 0)
+                .SetParticipantMotion(2, 100, 10, 95, 0, 0, 0, 0)
+                .SetParticipantMotion(3, 100, 10, 90, 0, 0, 0, 0)
+                .SetParticipantVehicle(2, "Mercedes AMG SafetyCar", "SafetyCar");
+            var tracker = new RelativeDistanceTrendTracker();
+            OverlayViewModel view = BuildTiming(fixture);
+            AssertEqual(3, view.AheadParticipantIndex);
+            AssertEqual(0, view.BehindParticipantIndex);
+            AssertEqual("~10m", view.AheadDistance);
+            AssertEqual("~15m", view.BehindDistance);
+            AssertEqual("—", view.AheadGap); // never copy a ranking neighbour's time
+            AssertEqual("—", view.BehindGap);
+            AssertTrue(view.IsBottomGapPanelVisible);
+            AssertFalse(view.AheadLapGapCandidate.HasValue);
+            tracker.Apply(view, 1);
+            tracker.Apply(view, 1);
+            AssertEqual(string.Empty, view.AheadLapGap);
+
+            fixture.SetParticipantMotion(3, 100, 10, 80, 0, 0, 0, 10)
+                .SetParticipantMotion(0, 100, 10, 110, 0, 0, 0, 10);
+            view = BuildTiming(fixture); // all lap distances still zero: display must already move
+            tracker.Apply(view, 1);
+            AssertEqual("~20m", view.AheadDistance);
+            AssertEqual("~10m", view.BehindDistance);
+            AssertEqual("#FF7777", view.AheadDistanceColor);
+            AssertEqual("#FF7777", view.BehindDistanceColor);
+
+            fixture.SetParticipant(3, true, "GRID_3", 1, 0, 1, RaceState.Racing, PitMode.None).SetParticipantLapDistance(3, 25)
+                .SetParticipant(0, true, "GRID_0", 3, 0, 1, RaceState.Racing, PitMode.None).SetParticipantLapDistance(0, 0)
+                .SetParticipantLapDistance(1, 5);
+            view = BuildTiming(fixture); // player/front crossed; rear has not. Rank reorder must not corrupt selection.
+            AssertEqual(3, view.AheadParticipantIndex);
+            AssertEqual(0, view.BehindParticipantIndex);
+            AssertEqual("~20m", view.AheadDistance);
+            AssertEqual("~10m", view.BehindDistance);
+            AssertEqual("+0.842s", view.AheadGap);
+            AssertEqual("+1.127s", view.BehindGap);
+            AssertFalse(view.BehindLapGapCandidate.HasValue);
+
+            view = BuildTiming(fixture.SetParticipantLapDistance(0, 995));
+            AssertEqual("20m", view.AheadDistance); // all progress initialized: use native track distance again
+            AssertEqual("10m", view.BehindDistance);
+            AssertEqual(0, view.AheadLapGapCandidate);
+            AssertEqual(0, view.BehindLapGapCandidate);
+        }
+
+        private static void PrestartRelativeRejectsUnknownPositions()
+        {
+            var fixture = new RawFixtureBuilder(3).SetViewedIndex(1).SetTrackTelemetry(1000, 300)
+                .SetSplitAhead(-1).SetSplitBehind(-1);
+            for (int index = 0; index < 3; index++)
+                fixture.SetParticipant(index, true, "GRID_" + index, (uint)index + 1, 0, 1, RaceState.Racing, PitMode.None)
+                    .SetParticipantLapDistance(index, 0);
+            OverlayViewModel view = BuildTiming(fixture); // no world data: no rank fallback, duplicate P1 or fabricated 0m
+            AssertEqual(-1, view.AheadParticipantIndex);
+            AssertEqual(-1, view.BehindParticipantIndex);
+            AssertEqual("—", view.AheadDistance);
+            AssertEqual("—", view.BehindDistance);
+            AssertFalse(view.IsBottomGapPanelVisible);
+
+            fixture.SetParticipantMotion(1, 100, 10, 100, 0, 0, 0, 0);
+            foreach ((float x, float y, float z, float yaw) in new[]
+            {
+                (0f, 0f, 0f, 0f), (float.NaN, 10f, 90f, 0f), (100f, 10f, float.PositiveInfinity, 0f),
+                (100f, 10f, 90f, float.NaN), (100f, 10f, 100f, 0f), (102f, 10f, 100f, 0f), // overlapping/alongside
+                (120f, 10f, 95f, 0f), (100f, 20f, 90f, 0f), (100f, 10f, -100f, 0f), // lateral/overpass/distant
+                (100f, 10f, 90f, (float)Math.PI) // opposite direction on another track section
+            })
+            {
+                view = BuildTiming(fixture.SetParticipantMotion(0, x, y, z, 0, yaw, 0, 0));
+                AssertEqual(-1, view.AheadParticipantIndex);
+                AssertEqual(-1, view.BehindParticipantIndex);
+            }
+            // A different heading must rotate ahead/behind, not assume world Z is the track direction.
+            float turn = (float)(Math.PI / 2);
+            fixture.SetParticipantMotion(1, 100, 10, 100, 0, turn, 0, 0)
+                .SetParticipantMotion(0, 90, 10, 100, 0, turn, 0, 0)
+                .SetParticipantMotion(2, 115, 10, 100, 0, turn, 0, 0);
+            view = BuildTiming(fixture.SetTrackTelemetry(0, 300));
+            AssertEqual("~10m", view.AheadDistance); // no track length needed for nearby world distance
+            AssertEqual("~15m", view.BehindDistance);
+            AssertEqual("—", view.AheadGap); // absence of time remains explicit
+            AssertFalse(view.AheadLapGapCandidate.HasValue);
+            foreach ((bool active, RaceState state, PitMode pit) in new[]
+            {
+                (false, RaceState.Racing, PitMode.None), (true, RaceState.Retired, PitMode.None),
+                (true, RaceState.Racing, PitMode.InGarage)
+            })
+            {
+                view = BuildTiming(fixture.SetParticipant(0, active, "GRID_0", 1, 0, 1, state, pit).SetParticipantLapDistance(0, 0));
+                AssertEqual(-1, view.AheadParticipantIndex);
+                AssertEqual(2, view.BehindParticipantIndex);
+            }
+        }
+
+        private static void RelativeTimeAndDistanceRemainVisible()
+        {
+            foreach (bool lapped in new[] { false, true })
+            foreach (bool hasTime in new[] { false, true })
+            foreach ((int width, int height) in new[] { (520, 104), (416, 166), (780, 83) })
+            {
+                var view = new RelativeDriversView();
+                OverlayViewModel timing = DemoSnapshotFactory.CreateViewModel(false);
+                timing.AheadParticipantKey = timing.BehindParticipantKey = string.Empty; // static layout, no entrance motion
+                timing.AheadGap = hasTime ? (lapped ? "+123.456s" : "+0.842s") : "—";
+                timing.BehindGap = hasTime ? (lapped ? "+987.654s" : "+1.127s") : "—";
+                timing.AheadLapGap = lapped ? "LAP 1" : string.Empty;
+                timing.BehindLapGap = lapped ? "LAP 2" : string.Empty;
+                timing.AheadDistance = "1234m";
+                view.SetViewModel(timing);
+                double scale = Math.Min(width / 520.0, height / 104.0);
+                view.Width = width / scale;
+                view.Height = height / scale;
+                var host = new Viewbox { Stretch = Stretch.Uniform, Child = view };
+                var size = new Size(width, height);
+                host.Measure(size);
+                host.Arrange(new Rect(size));
+                PumpDispatcher();
+                host.UpdateLayout();
+                foreach (string side in new[] { "Ahead", "Behind" })
+                {
+                    Grid row = Named<Grid>(view, side + "Row");
+                    TextBlock gap = Named<TextBlock>(view, side + "TimeGapText");
+                    TextBlock lap = Named<TextBlock>(view, side + "LapGapText");
+                    TextBlock name = Named<TextBlock>(view, side + "NameText");
+                    Viewbox gapPanel = Named<Viewbox>(view, side + "GapPanel");
+                    StackPanel distance = Named<StackPanel>(view, side + "DistancePanel");
+                    AssertEqual(side == "Ahead" ? timing.AheadGap : timing.BehindGap, gap.Text);
+                    AssertEqual(side == "Ahead" ? timing.AheadLapGap : timing.BehindLapGap, lap.Text);
+                    AssertEqual(lapped ? Visibility.Visible : Visibility.Collapsed, lap.Visibility);
+                    AssertEqual(hasTime || !lapped ? Visibility.Visible : Visibility.Collapsed, gap.Visibility);
+                    AssertEqual(3, Grid.GetColumn(gapPanel)); // original right-hand gap slot, not below the name
+                    AssertTrue(Descendants<TextBlock>(gapPanel).Contains(lap));
+                    AssertTrue(Descendants<TextBlock>(gapPanel).Contains(gap));
+                    Rect gapBounds = gapPanel.TransformToAncestor(row).TransformBounds(new Rect(gapPanel.RenderSize));
+                    Rect nameBounds = name.TransformToAncestor(row).TransformBounds(new Rect(name.RenderSize));
+                    Rect distanceBounds = distance.TransformToAncestor(row).TransformBounds(new Rect(distance.RenderSize));
+                    AssertTrue(nameBounds.Right <= gapBounds.Left);
+                    AssertTrue(gapBounds.Right <= distanceBounds.Left);
+                    AssertTrue(distanceBounds.Right <= row.ActualWidth + 1);
+                    foreach (FrameworkElement element in new FrameworkElement[] { gap, distance, lap })
+                    {
+                        if (element.Visibility != Visibility.Visible) continue;
+                        Rect bounds = element.TransformToAncestor(host).TransformBounds(new Rect(element.RenderSize));
+                        AssertTrue(bounds.Left >= 0 && bounds.Top >= 0);
+                        AssertTrue(bounds.Right <= width + 1 && bounds.Bottom <= height + 1);
+                    }
+                    if (lapped && hasTime)
+                    {
+                        Rect lapBounds = lap.TransformToAncestor(row).TransformBounds(new Rect(lap.RenderSize));
+                        Rect timeBounds = gap.TransformToAncestor(row).TransformBounds(new Rect(gap.RenderSize));
+                        AssertTrue(lapBounds.Bottom <= timeBounds.Top + 1);
+                    }
+                }
+                CaptureLayout(host, "relative-gap-" + width + "x" + height + "-lap" + lapped + "-time" + hasTime);
+            }
         }
 
         private static void CompactUiMetricsMeetTarget()
@@ -750,7 +1130,7 @@ namespace AMS2LeagueClient.Tests
             OverlayShellViewModel shell = DemoSnapshotFactory.CreateShell(false);
             RankingRowViewModel player = shell.Timing.RankingRows.Single(row => row.IsPlayer);
             AssertEqual("GT3", player.Class);
-            AssertEqual("1:42.881", player.CurrentTime);
+            AssertEqual("1:40.973", player.CurrentTime);
             AssertTrue(OverlayUiMetrics.FontDriverName > OverlayUiMetrics.FontTitle);
             AssertFalse(player.IsDimmed);
             AssertEqual(ParticipantRowDisplayState.Active, player.DisplayState);
@@ -785,7 +1165,7 @@ namespace AMS2LeagueClient.Tests
             view.UpdateLayout();
 
             TextBlock classText = Descendants<TextBlock>(view).First(item => item.Text == "GT3");
-            TextBlock timeText = Descendants<TextBlock>(view).First(item => item.Text == "1:42.881");
+            TextBlock timeText = Descendants<TextBlock>(view).First(item => item.Text == "1:40.973");
             AssertEqual(OverlayUiMetrics.FontClass, classText.FontSize);
             AssertEqual(OverlayUiMetrics.FontTiming, timeText.FontSize);
             AssertTrue(classText.ActualHeight <= 36);
@@ -839,7 +1219,8 @@ namespace AMS2LeagueClient.Tests
                 .SetSession(SessionState.Practice)
                 .SetParticipant(3, true, "LEE", 4, 2, 3, RaceState.Racing, PitMode.None)
                 .SetCurrentTiming(42.5f, 42.5f, -1, -1));
-            AssertEqual("0:42.500", PlayerRow(timing).CurrentTime);
+            AssertEqual("2:20.881", PlayerRow(timing).CurrentTime);
+            AssertEqual("0:42.500", timing.CurrentLapText);
         }
 
         private static void PracticeCompletedUsesBestLap()
@@ -865,7 +1246,8 @@ namespace AMS2LeagueClient.Tests
                 .SetSession(SessionState.Qualify)
                 .SetParticipant(3, true, "LEE", 4, 2, 3, RaceState.Racing, PitMode.None)
                 .SetCurrentTiming(51.125f, 51.125f, -1, -1));
-            AssertEqual("0:51.125", PlayerRow(timing).CurrentTime);
+            AssertEqual("2:20.881", PlayerRow(timing).CurrentTime);
+            AssertEqual("0:51.125", timing.CurrentLapText);
         }
 
         private static void QualifyingCompletedUsesBestLap()
@@ -885,15 +1267,18 @@ namespace AMS2LeagueClient.Tests
                 .SetParticipant(0, true, "LEADER", 1, 4, 5, RaceState.Finished, PitMode.None)
                 .SetParticipant(3, true, "LEE", 4, 3, 4, RaceState.Racing, PitMode.None)
                 .SetCurrentTiming(34.125f, 34.125f, -1, -1));
-            AssertEqual("FIN", leaderFinished.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
-            AssertEqual("0:34.125", PlayerRow(leaderFinished).CurrentTime);
+            AssertEqual("FIN", leaderFinished.RankingRows.Single(row => row.ParticipantIndex == 0).Status);
+            AssertEqual("2:17.881", leaderFinished.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("2:20.881", PlayerRow(leaderFinished).CurrentTime);
+            AssertEqual("0:34.125", leaderFinished.CurrentLapText);
 
             OverlayViewModel trailingFinished = BuildTiming(new RawFixtureBuilder(4)
                 .SetSession(SessionState.Race)
                 .SetParticipant(0, true, "LEADER", 1, 4, 5, RaceState.Finished, PitMode.None)
                 .SetParticipant(3, true, "LEE", 4, 4, 5, RaceState.Finished, PitMode.None)
                 .SetCurrentTiming(39.875f, 39.875f, -1, -1));
-            AssertEqual("FIN", PlayerRow(trailingFinished).CurrentTime);
+            AssertEqual("FIN", PlayerRow(trailingFinished).Status);
+            AssertEqual("2:20.881", PlayerRow(trailingFinished).CurrentTime);
         }
 
         private static void TerminalStatesNeverKeepTiming()
@@ -909,7 +1294,8 @@ namespace AMS2LeagueClient.Tests
                     .SetSession(SessionState.Race)
                     .SetParticipant(3, true, "LEE", 4, 2, 3, state, PitMode.None)
                     .SetCurrentTiming(38.25f, 38.25f, -1, -1));
-                AssertEqual(expected, PlayerRow(timing).CurrentTime);
+                AssertEqual(expected, PlayerRow(timing).Status);
+                AssertEqual("2:20.881", PlayerRow(timing).CurrentTime);
                 AssertTrue(PlayerRow(timing).IsDimmed);
                 AssertEqual(ParticipantRowDisplayState.TerminalInactive, PlayerRow(timing).DisplayState);
             }
@@ -1083,7 +1469,7 @@ namespace AMS2LeagueClient.Tests
             AssertFalse(text.Contains("AMS2 LEAGUE · TIMING", StringComparer.Ordinal));
             AssertFalse(text.Contains("리그 순위", StringComparer.Ordinal));
             AssertTrue(text.Contains("GT3", StringComparer.Ordinal));
-            AssertTrue(text.Contains("1:42.881", StringComparer.Ordinal));
+            AssertTrue(text.Contains("1:40.973", StringComparer.Ordinal));
         }
 
         private static void OverlayEditModeRestoresClickThrough()
@@ -1157,7 +1543,7 @@ namespace AMS2LeagueClient.Tests
                 .SetSession(SessionState.Qualify)
                 .SetSessionTiming(15, 0, 210.17f)
                 .SetParticipantVehicle(1, "Camaro SafetyCar", "SafetyCar");
-            MultiplayerOverlayDecision decision = new MultiplayerWaitingOverlayController().Observe(Parse(fixture), 0, FixedTime());
+            MultiplayerOverlayDecision decision = new MultiplayerWaitingOverlayController().Observe(Parse(fixture), 0, FixedTime(), SessionPlayMode.Multiplayer);
 
             AssertEqual(MultiplayerOverlayMode.Waiting, decision.Mode);
             AssertNotNull(decision.Waiting);
@@ -1177,11 +1563,11 @@ namespace AMS2LeagueClient.Tests
             MultiplayerOverlayDecision decision = new MultiplayerWaitingOverlayController().Observe(Parse(fixture), 0, FixedTime());
 
             AssertEqual(MultiplayerOverlayMode.Waiting, decision.Mode);
-            AssertEqual("MULTIPLAYER_SESSION_TRANSITION", decision.Reason);
+            AssertEqual("SESSION_TRANSITION", decision.Reason);
             AssertEqual("세션 종료 대기", decision.Waiting?.RemainingValue);
         }
 
-        private static void WaitingOverlayExcludesSingleAndReplay()
+        private static void WaitingOverlayIncludesSingleExcludesReplay()
         {
             var controller = new MultiplayerWaitingOverlayController();
             TelemetrySnapshot single = Parse(new RawFixtureBuilder(1)
@@ -1192,8 +1578,74 @@ namespace AMS2LeagueClient.Tests
                 .SetGameState(GameState.InGameReplay)
                 .SetSessionTiming(15, 0, 210));
 
-            AssertEqual(MultiplayerOverlayMode.Hidden, controller.Observe(single, 0, FixedTime()).Mode);
+            AssertEqual(MultiplayerOverlayMode.Waiting, controller.Observe(single, 0, FixedTime()).Mode);
+            AssertEqual("세션 대기 · 모드 미확인", controller.Observe(single, 0, FixedTime()).Waiting?.Title);
             AssertEqual(MultiplayerOverlayMode.Hidden, controller.Observe(replay, 1, FixedTime()).Mode);
+        }
+
+        private static void WaitingModeAndSessionLabels()
+        {
+            var controller = new MultiplayerWaitingOverlayController();
+            foreach (int count in new[] { 1, 30 }) // AI count cannot imply multiplayer
+            foreach ((SessionState session, string label) in new[]
+            {
+                (SessionState.Practice, "자유 연습 주행"), (SessionState.Qualify, "예선"),
+                (SessionState.Race, "레이스"), (SessionState.Test, "테스트 주행"),
+                (SessionState.Invalid, "세션 전환 중"), ((SessionState)999, "세션 미확인")
+            })
+            foreach ((SessionPlayMode mode, string title) in new[]
+            {
+                (SessionPlayMode.Unknown, "세션 대기 · 모드 미확인"),
+                (SessionPlayMode.SinglePlayer, "싱글플레이어 세션 대기"),
+                (SessionPlayMode.Multiplayer, "멀티플레이어 세션 대기")
+            })
+            {
+                var fixture = new RawFixtureBuilder(count).SetViewedIndex(0)
+                    .SetGameState(GameState.InGameMenuTimeTicking).SetSession(session);
+                var decision = controller.Observe(Parse(fixture), 1, FixedTime(), mode);
+                AssertEqual(MultiplayerOverlayMode.Waiting, decision.Mode);
+                AssertEqual(title, decision.Waiting?.Title);
+                AssertEqual(label, decision.Waiting?.SessionLabel);
+                fixture.SetSessionActivityMetadata(0, true);
+                AssertEqual(title, controller.Observe(Parse(fixture), 1, FixedTime(), mode).Waiting?.Title);
+                if (count == 30 && session == SessionState.Practice)
+                {
+                    var panel = new MultiplayerWaitingOverlayView { DataContext = decision.Waiting };
+                    var size = new Size(OverlayUiMetrics.WaitingWidth, OverlayUiMetrics.WaitingHeight);
+                    panel.Measure(size);
+                    panel.Arrange(new Rect(size));
+                    panel.UpdateLayout();
+                    foreach (TextBlock text in Descendants<TextBlock>(panel))
+                    {
+                        Rect bounds = text.TransformToAncestor(panel).TransformBounds(new Rect(text.RenderSize));
+                        AssertTrue(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= size.Width && bounds.Bottom <= size.Height);
+                    }
+                    CaptureLayout(panel, "waiting-practice-" + mode);
+                }
+            }
+            var status = new ClientStatusViewModel();
+            var window = new ClientStatusWindow(status);
+            var root = (FrameworkElement)window.Content;
+            root.Measure(new Size(860, 780));
+            root.Arrange(new Rect(0, 0, 860, 780));
+            root.UpdateLayout();
+            var select = Named<ComboBox>(root, "SessionPlayModeSelect");
+            AssertEqual(SessionPlayMode.Unknown, status.SessionPlayMode);
+            AssertEqual(SessionPlayMode.Unknown, select.SelectedValue);
+            foreach (SessionPlayMode mode in new[] { SessionPlayMode.SinglePlayer, SessionPlayMode.Multiplayer })
+            {
+                select.SelectedValue = mode;
+                PumpDispatcher();
+                AssertEqual(mode, status.SessionPlayMode);
+            }
+            status.SessionPlayMode = (SessionPlayMode)999;
+            PumpDispatcher();
+            AssertEqual(SessionPlayMode.Unknown, select.SelectedValue);
+            var statusCard = Descendants<ClientStatusView>(root).Single();
+            AssertTrue(select.TransformToAncestor(root).Transform(new Point(0, 0)).Y >=
+                statusCard.TransformToAncestor(root).Transform(new Point(0, statusCard.ActualHeight)).Y);
+            CaptureLayout(root, "status-mode-selector");
+            window.Close();
         }
 
         private static void WaitingOverlayReturnsToGameplay()
@@ -1363,6 +1815,73 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual(token, PairingTokenStore.Load(directory));
                 AssertFalse(Encoding.UTF8.GetString(File.ReadAllBytes(PairingTokenStore.ResolvePath(directory)))
                     .Contains(token, StringComparison.Ordinal));
+            });
+        }
+
+        private static void ForbiddenUploadDiagnostics()
+        {
+            const string token = "abcdef0123456789abcdef0123456789";
+            foreach (var example in new[]
+            {
+                (Body: "{\"error\":\"SCOPE_FORBIDDEN\",\"requestId\":\"0123456789abcdef\",\"duplicate\":true}", Type: "application/json", Code: "SCOPE_FORBIDDEN"),
+                (Body: "<html>Forbidden " + token + "</html>", Type: "text/html", Code: "HTTP_403_HTML"),
+                (Body: "<html>" + new string('x', 5000) + token, Type: "text/html", Code: "HTTP_403_HTML"),
+                (Body: "unreadable", Type: "text/plain", Code: "HTTP_403_OTHER"),
+                (Body: "{\"error\":\"" + token + "\",\"requestId\":\"" + token + "\",\"message\":\"Authorization: Bearer " + token + "\"}", Type: "application/json", Code: "HTTP_403_JSON")
+            }) WithTemporaryDirectory(directory =>
+            {
+                ActivityConnectionOptions options = ActivityConnectionOptions.Load(Path.Combine(directory, ActivityConnectionOptions.DefaultFileName));
+                options.ApiBaseUrl = "https://fixture.invalid/ams2";
+                options.BearerToken = token;
+                var diagnostics = new List<string>();
+                var handler = new EnrollmentFixtureHandler("fixture-existing-installation", token)
+                {
+                    UploadReply = () => new HttpResponseMessage(HttpStatusCode.Forbidden)
+                    { Content = example.Body == "unreadable" ? (HttpContent)new UnreadableErrorContent() : new StringContent(example.Body, Encoding.UTF8, example.Type) }
+                };
+                using var http = new HttpClient(handler);
+                using var transport = new Cafe24ActivityUploadTransport(options, "fixture-existing-installation", "0.3.1-test", http)
+                { FailureDiagnostic = diagnostics.Add };
+                var queue = new ActivityUploadQueue(Path.Combine(directory, "witness-queue"));
+                ActivityUploadItem original = queue.Enqueue("witness-forbidden", Cafe24ActivityUploadTransport.SessionWitnessEndpoint,
+                    "witness:forbidden-fixture", "{\"schema\":\"ams2-session-witness-v1\"}").Item;
+                var worker = new ActivityUploadWorker(queue, transport);
+                AssertEqual(1, worker.ProcessDueAsync(CancellationToken.None).GetAwaiter().GetResult().Quarantined);
+                AssertEqual(0, worker.ProcessDueAsync(CancellationToken.None).GetAwaiter().GetResult().Attempted);
+                ActivityUploadItem stored = queue.Scan().Single();
+                AssertEqual(ActivityUploadStatus.QUARANTINED, stored.State.Status);
+                AssertEqual(1, stored.State.AttemptCount);
+                AssertEqual(example.Code, stored.State.LastResult);
+                AssertEqual(original.Metadata.IdempotencyKey, stored.Metadata.IdempotencyKey);
+                AssertEqual(original.Metadata.BodySha256, stored.Metadata.BodySha256);
+                AssertTrue(original.PayloadUtf8.Span.SequenceEqual(stored.PayloadUtf8.Span));
+                AssertEqual(original.Metadata.IdempotencyKey, handler.UploadIdempotencyKey);
+                string telemetryRoot = Path.Combine(directory, "telemetry");
+                CreatePendingCompactTelemetryChunk(telemetryRoot);
+                var telemetryQueue = new TelemetryChunkUploadQueue(telemetryRoot);
+                var telemetryWorker = new TelemetryChunkUploadWorker(telemetryQueue, transport);
+                telemetryWorker.ProcessDueAsync(CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(0, telemetryWorker.ProcessDueAsync(CancellationToken.None).GetAwaiter().GetResult().Attempted);
+                AssertEqual(1, handler.UploadCalls);
+                AssertEqual(1, handler.TelemetryCalls);
+                AssertEqual(0, handler.EnrollmentCalls);
+                AssertEqual(token, options.BearerToken);
+                AssertEqual(2, diagnostics.Count);
+                AssertTrue(diagnostics.All(value => value.Contains("code=" + example.Code) && value.Length < 600 && !value.Contains(token)));
+                if (example.Code == "SCOPE_FORBIDDEN") AssertTrue(diagnostics.All(value => value.Contains("requestId=0123456789abcdef")));
+                if (example.Body.Length > 4096) AssertTrue(diagnostics.All(value => value.Contains("EXCEEDS_4096_BYTES")));
+
+                // A transient failure is still retryable and must not become SENT even
+                // if an inconsistent error body includes duplicate=true.
+                handler.UploadReply = () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                { Content = new StringContent("{\"error\":\"TEMPORARY\",\"duplicate\":true}", Encoding.UTF8, "application/json") };
+                ActivityUploadTransportResult retry = transport.SendAsync(original, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(503, retry.StatusCode);
+                AssertFalse(retry.Duplicate);
+                handler.UploadReply = null;
+                ActivityUploadTransportResult success = transport.SendAsync(original, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(201, success.StatusCode);
+                AssertEqual(original.Metadata.IdempotencyKey, handler.UploadIdempotencyKey);
             });
         }
 
@@ -1655,6 +2174,13 @@ namespace AMS2LeagueClient.Tests
             }
         }
 
+        private sealed class UnreadableErrorContent : HttpContent
+        {
+            protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+                => Task.FromException(new IOException("fixture error body disconnected"));
+            protected override bool TryComputeLength(out long length) { length = 0; return false; }
+        }
+
         private sealed class EnrollmentFixtureHandler : HttpMessageHandler
         {
             private readonly string _installationId;
@@ -1667,6 +2193,8 @@ namespace AMS2LeagueClient.Tests
             }
 
             public int EnrollmentCalls { get; private set; }
+            public Func<HttpResponseMessage>? UploadReply { get; set; }
+            public string UploadIdempotencyKey { get; private set; } = string.Empty;
             public int UploadCalls { get; private set; }
             public int TelemetryCalls { get; private set; }
             public string UploadAuthorization { get; private set; } = string.Empty;
@@ -1728,17 +2256,19 @@ namespace AMS2LeagueClient.Tests
                         : string.Empty;
                     string json = "{\"status\":\"stored\",\"duplicate\":false,\"chunkId\":\""
                         + chunkId + "\",\"contentSha256\":\"" + TelemetryPayloadSha256 + "\"}";
+                    if (UploadReply != null) return Task.FromResult(UploadReply());
                     return Task.FromResult(Response(HttpStatusCode.Created, json));
                 }
 
                 if (query.Contains(Cafe24ActivityUploadTransport.SessionWitnessEndpoint, StringComparison.Ordinal))
                 {
                     UploadCalls++;
+                    UploadIdempotencyKey = Header(request, "Idempotency-Key");
                     UploadAuthorization = request.Headers.Authorization?.ToString() ?? string.Empty;
                     UploadCompatibilityAuthorization = request.Headers.TryGetValues("X-AMS2-Authorization", out var values)
                         ? values.SingleOrDefault() ?? string.Empty
                         : string.Empty;
-                    return Task.FromResult(Response(HttpStatusCode.Created, "{\"status\":\"stored\",\"duplicate\":false}"));
+                    return Task.FromResult(UploadReply?.Invoke() ?? Response(HttpStatusCode.Created, "{\"status\":\"stored\",\"duplicate\":false}"));
                 }
 
                 return Task.FromResult(Response(HttpStatusCode.NotFound, "{\"error\":\"not_found\"}"));
@@ -2071,6 +2601,71 @@ namespace AMS2LeagueClient.Tests
             }
         }
 
+        private static void EventHighlightsFlashOnce()
+        {
+            foreach (OverlayEventType type in Enum.GetValues<OverlayEventType>())
+                AssertEqual(type == OverlayEventType.RaceFastestLap || type == OverlayEventType.LeaderChange,
+                    EventCardViewModel.FromEvent(DemoSnapshotFactory.CreateEvent(type), false).FlashOnEntry);
+
+            foreach (OverlayEventType type in new[] { OverlayEventType.RaceFastestLap, OverlayEventType.LeaderChange })
+            {
+                var view = new EventCardView { Width = 520, Height = 84 };
+                var item = new OverlayEvent(type, OverlayEventPriority.High, DateTimeOffset.UtcNow,
+                    TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(12),
+                    type == OverlayEventType.RaceFastestLap ? "레이스 최고 랩" : "선두 변경",
+                    "김드라이버", type == OverlayEventType.RaceFastestLap ? "0:55.749" : "P2 → P1", "FIXTURE");
+                EventCardViewModel model = EventCardViewModel.FromEvent(item, true);
+                view.SetViewModel(model, true);
+                view.Measure(new Size(view.Width, view.Height));
+                view.Arrange(new Rect(0, 0, view.Width, view.Height));
+                PumpDispatcher(); // resolve the newly assigned DataContext brush binding
+                Border sweep = Named<Border>(view, "EventSweep");
+                AssertTrue(sweep.HasAnimatedProperties);
+                AssertTrue(sweep.RenderTransform is ScaleTransform scale && scale.HasAnimatedProperties);
+                AssertEqual(0.0, sweep.GetAnimationBaseValue(UIElement.OpacityProperty));
+                AssertColor(model.Accent, sweep.Background);
+                if (_layoutCaptureDirectory != null)
+                {
+                    // A connected, off-screen surface ticks WPF animation clocks without taking game focus.
+                    var host = new Window { Content = view, SizeToContent = SizeToContent.WidthAndHeight,
+                        Left = -5000, Top = -5000, ShowActivated = false, ShowInTaskbar = false,
+                        WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = Brushes.Transparent };
+                    try
+                    {
+                        host.Show();
+                        PumpDispatcher();
+                        view.SetViewModel(new EventCardViewModel(), false);
+                        view.SetViewModel(model, true);
+                        CaptureLayout(view, "event-flash-" + type, 500);
+                        Console.WriteLine("PROOF " + type + " sweepOpacity=" + sweep.Opacity.ToString("0.000"));
+                        AssertTrue(sweep.Opacity > 0 && sweep.Opacity <= 0.42);
+                    }
+                    finally { host.Content = null; host.Close(); }
+                }
+
+                // Detach the finished effect, then rebuild the same event VM as each UI tick does.
+                sweep.BeginAnimation(UIElement.OpacityProperty, null);
+                ((ScaleTransform)sweep.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                for (int tick = 0; tick < 120; tick++)
+                    view.SetViewModel(EventCardViewModel.FromEvent(item, true), true);
+                AssertFalse(sweep.HasAnimatedProperties);
+                AssertFalse(((ScaleTransform)sweep.RenderTransform).HasAnimatedProperties);
+
+                view.SetViewModel(EventCardViewModel.FromEvent(DemoSnapshotFactory.CreateEvent(type), false), true);
+                AssertTrue(sweep.HasAnimatedProperties); // a genuinely new event flashes again
+                view.SetViewModel(EventCardViewModel.FromEvent(DemoSnapshotFactory.CreateEvent(OverlayEventType.Battle), false), true);
+                AssertFalse(sweep.HasAnimatedProperties); // preemption cannot inherit the previous flash
+                AssertEqual(0.0, sweep.Opacity);
+
+                model = EventCardViewModel.FromEvent(DemoSnapshotFactory.CreateEvent(type), false);
+                view.SetViewModel(model, true);
+                AssertEqual(EventCardView.ExitDuration, view.SetViewModel(new EventCardViewModel(), true));
+                AssertFalse(sweep.HasAnimatedProperties);
+                view.SetViewModel(model, false);
+                AssertFalse(sweep.HasAnimatedProperties); // preview/static mode is motion-free
+            }
+        }
+
         private static void LapTimingBestLapPops()
         {
             var view = new LapTimingView();
@@ -2168,10 +2763,10 @@ namespace AMS2LeagueClient.Tests
                             Title = "멀티플레이어 세션 대기", SessionLabel = "예선 결과 확정 및 다음 세션 준비",
                             ParticipantCountText = "리그 48 / 원본 49", RemainingLabel = "남은 시간", RemainingValue = "세션 종료 대기"
                         };
-                    if (box != null) AssertEqual(Stretch.Fill, box.Stretch);
+                    if (box != null) AssertEqual(Stretch.Uniform, box.Stretch);
                     double designWidth = box == null ? OverlayUiMetrics.RaceControlExpandedWidth : content.Width;
                     double designHeight = box == null ? OverlayUiMetrics.RaceControlExpandedHeight : content.Height;
-                    foreach ((double x, double y) in new[] { (1.5, 0.8), (0.8, 1.6), (1.0, 1.0) })
+                    foreach ((double x, double y) in new[] { (1.5, 0.8), (0.8, 1.6), (1.0, 1.0), (2.0, 2.0) })
                     {
                         var size = new Size(designWidth * x, designHeight * y);
                         root.Measure(size);
@@ -2181,6 +2776,20 @@ namespace AMS2LeagueClient.Tests
                         AssertTrue(Math.Abs(bounds.Width - size.Width) < 1);
                         AssertTrue(Math.Abs(bounds.Height - size.Height) < 1);
                         AssertTrue(Math.Abs(bounds.X) < 1 && Math.Abs(bounds.Y) < 1);
+                        int measuredTexts = 0;
+                        foreach (TextBlock text in Descendants<TextBlock>(content).Where(item => item.Visibility == Visibility.Visible && item.ActualWidth > 0 && item.ActualHeight > 0))
+                        {
+                            measuredTexts++;
+                            GeneralTransform transform = text.TransformToAncestor(root);
+                            Point zero = transform.Transform(new Point());
+                            double scaleX = (transform.Transform(new Point(1, 0)) - zero).Length;
+                            double scaleY = (transform.Transform(new Point(0, 1)) - zero).Length;
+                            AssertTrue(Math.Abs(scaleX - scaleY) < 0.0001);
+                            if (box != null && text.Name != "AheadTimeGapText" && text.Name != "BehindTimeGapText"
+                                && text.Name != "AheadLapGapText" && text.Name != "BehindLapGapText")
+                                AssertTrue(Math.Abs(scaleX - Math.Min(x, y)) < 0.0001);
+                        }
+                        AssertTrue(measuredTexts > 0);
                         CaptureLayout(root, panel.Title + "-" + x + "x" + y);
                     }
                 }
@@ -2332,23 +2941,572 @@ namespace AMS2LeagueClient.Tests
             AssertFalse(expired.Observe(Timed(0.4, 20, 0, RaceState.Finished)).ContainsKey(0));
         }
 
-        private static void TowerTimingNeverSumsSharedSectors()
+        private static void TowerTimingFallsBackForMissingSectors()
         {
             var fixture = new RawFixtureBuilder(4).SetSession(SessionState.Race);
             for (int driver = 0; driver < 4; driver++)
-                fixture.SetCurrentTiming(12, 12, -1, -1, participantIndex: driver).SetParticipantLapTimes(driver, -1, -1);
+                fixture.SetCurrentTiming(12, 12, -1, -1, participantIndex: driver)
+                    .SetParticipantCurrentSector(driver, 1).SetParticipantLapTimes(driver, -1, -1); // required active S2 is absent
             fixture.SetParticipantLapTimes(0, 70.125f, 70.125f).SetParticipantLapTimes(1, 73.5f, 73.5f);
             TelemetrySnapshot snapshot = Parse(fixture);
             OverlayViewModel Build(IReadOnlyDictionary<int, float>? clocks = null) => OverlayViewModel.Build(
                 snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE", participantLapTimes: clocks);
             var timing = Build();
-            AssertEqual("L1:10.125", timing.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
-            AssertEqual("L1:13.500", timing.RankingRows.Single(row => row.ParticipantIndex == 1).CurrentTime);
-            AssertEqual("--", timing.RankingRows.Single(row => row.ParticipantIndex == 2).CurrentTime);
-            AssertEqual("0:12.000", PlayerRow(timing).CurrentTime); // viewed player's direct game source only
+            AssertEqual("1:10.125", timing.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("BEST", timing.RankingRows.Single(row => row.ParticipantIndex == 0).Status);
+            AssertEqual("1:13.500", timing.RankingRows.Single(row => row.ParticipantIndex == 1).CurrentTime);
+            AssertEqual(string.Empty, timing.RankingRows.Single(row => row.ParticipantIndex == 1).Status);
+            AssertEqual("레이스 중", timing.RankingRows.Single(row => row.ParticipantIndex == 2).CurrentTime);
+            AssertEqual("레이스 중", PlayerRow(timing).CurrentTime);
+            AssertEqual("0:12.000", timing.CurrentLapText);
             timing = Build(new Dictionary<int, float> { [0] = 6.4f, [1] = 4.1f });
-            AssertEqual("~0:06.400", timing.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
-            AssertEqual("~0:04.100", timing.RankingRows.Single(row => row.ParticipantIndex == 1).CurrentTime);
+            AssertEqual("1:10.125", timing.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("1:13.500", timing.RankingRows.Single(row => row.ParticipantIndex == 1).CurrentTime);
+        }
+
+        private static void OpponentTimingUsesCurrentLapSectors()
+        {
+            foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify, SessionState.Race, SessionState.Test, SessionState.TimeAttack })
+            {
+                var fixture = new RawFixtureBuilder(4).SetSession(session)
+                    .SetParticipantLapTimes(0, 75.125f, 78).SetParticipantLapTimes(1, 80.5f, 82)
+                    .SetParticipantLapTimes(2, 90.25f, 95).SetParticipantLapTimes(3, 70.75f, 74);
+                string Time(int index) => BuildTiming(fixture).RankingRows.Single(row => row.ParticipantIndex == index).CurrentTime;
+                foreach (float current in new[] { 0f, 10f, 999f, -1f, float.NaN })
+                {
+                    for (int index = 0; index < 4; index++) fixture.SetCurrentTiming(current, current, 35, 40, participantIndex: index);
+                    AssertEqual("1:15.125", Time(0));
+                    AssertEqual("1:20.500", Time(1));
+                    AssertEqual("1:30.250", Time(2));
+                    AssertEqual("1:10.750", Time(3));
+                }
+                foreach (float invalid in new[] { 0f, -1f, -123f, float.NaN, float.PositiveInfinity })
+                {
+                    fixture.SetParticipantLapTimes(0, invalid, 78).SetParticipantLapTimes(3, invalid, 74);
+                    string missing = session == SessionState.Race ? "레이스 중"
+                        : session == SessionState.TimeAttack ? "--" : "랩 타임 주행 중";
+                    AssertEqual(missing, Time(0));
+                    AssertEqual(missing, Time(3)); // never borrow root BestLapTime or a last lap
+                }
+                fixture.SetParticipantLapTimes(0, 69.125f, 69.125f);
+                AssertEqual("1:09.125", Time(0));
+                var view = BuildTiming(fixture);
+                AssertEqual("BEST", view.RankingRows.Single(row => row.ParticipantIndex == 0).Status);
+                var tower = new OverlayHudView();
+                tower.SetViewModel(view);
+                LayoutTower(tower);
+                if (session == SessionState.Practice) CaptureLayout(tower, "participant-best-lap-tower");
+            }
+        }
+
+        private static void InvalidLapDisplayFreezesPerParticipant()
+        {
+            var tracker = new InvalidLapDisplayTracker();
+            RawFixtureBuilder Frame(float time, bool invalid, uint completed = 2, string name = "AI") => new RawFixtureBuilder(4)
+                .SetParticipant(0, true, name, 1, completed, completed + 1, RaceState.Racing, PitMode.None)
+                .SetParticipantCurrentSector(0, 0).SetCurrentTiming(time, time + 10, -1, -1, invalid, 0)
+                .SetParticipant(3, true, "ME", 4, completed, completed + 1, RaceState.Racing, PitMode.None)
+                .SetParticipantCurrentSector(3, 0).SetCurrentTiming(time, time, -1, -1, invalid)
+                .SetParticipantLapTimes(0, 80.5f, 90).SetParticipantLapTimes(3, 70.125f, 80);
+            OverlayViewModel Apply(RawFixtureBuilder fixture, int generation = 1)
+            {
+                TelemetrySnapshot snapshot = Parse(fixture);
+                OverlayViewModel view = BuildTiming(fixture);
+                tracker.Apply(view, snapshot, generation);
+                AssertEqual(Parse(fixture).CurrentTime, snapshot.CurrentTime); // freeze never mutates source
+                return view;
+            }
+            AssertEqual("1:10.125", PlayerRow(Apply(Frame(10, false))).CurrentTime);
+            OverlayViewModel first = Apply(Frame(11, true));
+            AssertEqual("1:10.125", PlayerRow(first).CurrentTime);
+            OverlayViewModel later = Apply(Frame(44, true));
+            AssertEqual("1:10.125", PlayerRow(later).CurrentTime);
+            AssertEqual("0:11.000", later.CurrentLapText);
+            AssertEqual("1:20.500", later.AllRankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("무효", PlayerRow(later).Status);
+            AssertEqual(OverlayUiPalette.ActiveTime, PlayerRow(later).TimeForeground);
+            AssertEqual("#FF7777", PlayerRow(later).StatusColor);
+            AssertFalse(PlayerRow(later).IsDimmed);
+            AssertTrue(later.CurrentLabel.Contains("무효", StringComparison.Ordinal));
+            var tower = new OverlayHudView();
+            tower.SetViewModel(later);
+            LayoutTower(tower);
+            CaptureLayout(tower, "invalid-lap-tower");
+            var panel = new LapTimingView();
+            panel.SetViewModel(later);
+            panel.Measure(new Size(panel.Width, panel.Height));
+            panel.Arrange(new Rect(0, 0, panel.Width, panel.Height));
+            CaptureLayout(panel, "invalid-lap-personal");
+
+            AssertEqual("0:02.000", Apply(Frame(2, true, completed: 3)).CurrentLapText); // new lap never inherits frozen time
+            AssertEqual("0:03.000", Apply(Frame(3, true, completed: 3), 2).CurrentLapText); // new session
+            OverlayViewModel swapped = Apply(Frame(4, true, completed: 3, name: "NEW AI"), 2);
+            AssertEqual("1:20.500", swapped.AllRankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("0:03.000", swapped.CurrentLapText);
+            OverlayViewModel valid = Apply(Frame(5, false, completed: 3), 2);
+            AssertEqual("0:05.000", valid.CurrentLapText);
+            AssertTrue(PlayerRow(valid).Status != "무효");
+            AssertEqual("아웃랩", PlayerRow(Apply(Frame(6, true, completed: 0).SetParticipantLapTimes(3, -1, -1))).CurrentTime);
+            foreach ((RaceState state, string expected) in new[] { (RaceState.Finished, "FIN"), (RaceState.Dnf, "DNF"), (RaceState.Retired, "RET"), (RaceState.Disqualified, "DSQ") })
+                AssertEqual(expected, PlayerRow(Apply(Frame(7, true).SetParticipant(3, true, "ME", 4, 1, 2, state, PitMode.None))).Status);
+            OverlayViewModel missing = Apply(Frame(8, true).SetCurrentTiming(8, -1, -1, -1, true, 0));
+            AssertEqual("1:20.500", missing.AllRankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            missing = Apply(Frame(8, true).SetParticipantLapTimes(0, -1, 90), 3);
+            AssertEqual("레이스 중", missing.AllRankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("1:05.500", PlayerRow(Apply(Frame(9, true).SetParticipantLapTimes(3, 65.5f, 80), 3)).CurrentTime); // best update is never frozen
+        }
+
+        private static void InvalidLapEventIsVisibleOncePerLap()
+        {
+            var engine = new RaceEventEngine();
+            DateTimeOffset start = FixedTime();
+            RaceEventUpdate Observe(double seconds, bool invalid, uint completed = 1)
+            {
+                var fixture = new RawFixtureBuilder(4).SetParticipant(3, true, "ME", 4, completed, completed + 1, RaceState.Racing, PitMode.None)
+                    .SetCurrentTiming(20, 20, -1, -1, invalid);
+                TelemetrySnapshot snapshot = Parse(fixture, start.AddSeconds(seconds));
+                return engine.Observe(snapshot, Classify(snapshot), 1, snapshot.CapturedAt, BroadcastOverlayState.FullCourseYellow);
+            }
+            AssertEqual(0, Observe(0, false).DetectedEvents.Count);
+            engine.Queue.Enqueue(new OverlayEvent(OverlayEventType.PodiumExit, OverlayEventPriority.Critical, start,
+                TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(20), "순위 상승", "P4", "", "FIXTURE"), start);
+            RaceEventUpdate invalid = Observe(0.1, true);
+            AssertEqual(OverlayEventType.InvalidLap, invalid.CurrentEvent?.Type);
+            AssertEqual(OverlayEventPriority.Critical, invalid.CurrentEvent?.Priority);
+            AssertEqual(TimeSpan.FromSeconds(4), invalid.CurrentEvent?.DisplayDuration);
+            AssertEqual("LOCAL_LAP_INVALIDATED", invalid.CurrentEvent?.SourceKind);
+            AssertEqual("#FF7777", EventCardViewModel.FromEvent(invalid.CurrentEvent, false).Accent);
+            AssertFalse(invalid.CurrentEvent!.Title.Contains("트랙", StringComparison.Ordinal));
+            AssertFalse(Observe(1, true).DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap));
+            Observe(2, false);
+            AssertFalse(Observe(3, true).DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap)); // flag flicker, same lap
+            AssertTrue(Observe(6, true, 2).DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap));
+            engine.Reset();
+            AssertTrue(Observe(7, true, 2).DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap)); // attached while already invalid
+            foreach (OverlayEventType type in new[] { OverlayEventType.Finish, OverlayEventType.Retired, OverlayEventType.Disqualified })
+            {
+                var queue = new OverlayEventQueue();
+                var terminal = new OverlayEvent(type, OverlayEventPriority.Critical, start, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30), "종료", "", "", "FIXTURE");
+                queue.Enqueue(invalid.CurrentEvent, start);
+                queue.Enqueue(terminal, start);
+                AssertEqual(type, queue.Current?.Type);
+                queue.Enqueue(invalid.CurrentEvent, start);
+                AssertEqual(type, queue.Current?.Type);
+            }
+        }
+
+        private static void OpeningInvalidFlagsStayHidden()
+        {
+            foreach (SessionState session in new[] { SessionState.Race })
+            foreach (bool rootOnly in new[] { false, true })
+            {
+                var engine = new RaceEventEngine();
+                var tracker = new InvalidLapDisplayTracker();
+                double seconds = 0;
+                (OverlayViewModel View, RaceEventUpdate Events) Observe(uint completed, uint aiCompleted = 0,
+                    RaceState state = RaceState.Racing, int generation = 1)
+                {
+                    var fixture = new RawFixtureBuilder(4).SetSession(session);
+                    for (int driver = 0; driver < 4; driver++)
+                    {
+                        uint laps = driver == 3 ? completed : aiCompleted;
+                        fixture.SetParticipant(driver, true, "DRIVER_" + driver, (uint)driver + 1, laps, laps + 1, state, PitMode.None)
+                            .SetParticipantLapTimes(driver, -1, -1)
+                            .SetCurrentTiming((float)seconds, (float)seconds, -1, -1, true, driver)
+                            .SetParticipantCurrentSector(driver, 0);
+                        if (rootOnly) fixture.Buffer[SharedMemoryLayout.LapsInvalidated + driver] = 0;
+                    }
+                    byte[] original = fixture.Buffer.ToArray();
+                    TelemetrySnapshot snapshot = Parse(fixture, FixedTime().AddSeconds(seconds++));
+                    OverlayViewModel view = OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE");
+                    tracker.Apply(view, snapshot, generation);
+                    RaceEventUpdate events = engine.Observe(snapshot, Classify(snapshot), generation, snapshot.CapturedAt);
+                    AssertTrue(fixture.Buffer.SequenceEqual(original));
+                    AssertTrue(snapshot.LapInvalidated);
+                    AssertEqual(!rootOnly, snapshot.Participants[3].LapInvalidated);
+                    return (view, events);
+                }
+
+                Observe(0, state: RaceState.NotStarted); // grid -> green retains AMS2's invalid flag
+                foreach (int generation in new[] { 1, 1, 2 }) // duplicate and pause/resume must stay quiet too
+                {
+                    var opening = Observe(0, generation: generation);
+                    AssertFalse(opening.Events.DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap));
+                    AssertTrue(opening.View.AllRankingRows.All(row => row.Status != "무효" && row.CurrentTime == "아웃랩"));
+                    AssertFalse(opening.View.CurrentLabel.Contains("무효", StringComparison.Ordinal));
+                    AssertFalse(opening.View.CurrentLapStateText.Contains("무효", StringComparison.Ordinal));
+                    AssertEqual(OverlayViewModel.FormatLapTime((float)seconds - 1), opening.View.CurrentLapText);
+                    AssertEqual("#FFFFFF", opening.View.CurrentLapColor);
+                }
+                var nextLap = Observe(1, generation: 2);
+                AssertEqual("무효", PlayerRow(nextLap.View).Status);
+                AssertEqual(OverlayEventType.InvalidLap, nextLap.Events.CurrentEvent?.Type);
+                AssertTrue(nextLap.View.AllRankingRows.Where(row => !row.IsPlayer).All(row => row.Status != "무효"));
+                var aiNextLap = Observe(1, aiCompleted: 1, generation: 2);
+                AssertEqual(!rootOnly, aiNextLap.View.AllRankingRows.First(row => !row.IsPlayer).Status == "무효");
+                var restart = Observe(0, generation: 2); // lap counter rollback, not a new generation
+                AssertFalse(restart.Events.DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap));
+                AssertFalse(restart.Events.CurrentEvent?.Type == OverlayEventType.InvalidLap);
+                AssertTrue(restart.View.AllRankingRows.All(row => row.Status != "무효"));
+            }
+            var timeAttack = new RawFixtureBuilder(4).SetSession(SessionState.TimeAttack)
+                .SetParticipant(3, true, "ME", 4, 0, 1, RaceState.Racing, PitMode.None)
+                .SetCurrentTiming(20, 20, -1, -1, true);
+            OverlayViewModel view = BuildTiming(timeAttack);
+            new InvalidLapDisplayTracker().Apply(view, Parse(timeAttack), 1);
+            AssertEqual("무효", PlayerRow(view).Status); // Time Attack's first timed attempt is not an out lap
+        }
+
+        private static void OpeningLapLabelInTower()
+        {
+            var fixture = new RawFixtureBuilder(4).SetSession(SessionState.Race);
+            for (int index = 0; index < 4; index++)
+                fixture.SetParticipant(index, true, "DRIVER_" + index, (uint)index + 1, 0, 1, RaceState.Racing, PitMode.None)
+                    .SetParticipantLapTimes(index, -1, -1)
+                    .SetParticipantCurrentSector(index, 0).SetCurrentTiming(54.321f, 20 + index, -1, -1, participantIndex: index);
+            TelemetrySnapshot initial = Parse(fixture);
+            OverlayViewModel first = OverlayViewModel.Build(initial, ResolveLocal(initial), Classify(initial), 30, 20, false, "TEST",
+                participantLapTimes: new Dictionary<int, float> { [0] = 12, [3] = 14 });
+            AssertTrue(first.AllRankingRows.All(row => row.CurrentTime == "아웃랩"));
+            AssertEqual("0:54.321", first.CurrentLapText); // personal panel is independent
+            var tower = new OverlayHudView();
+            tower.SetViewModel(first);
+            LayoutTower(tower);
+            CaptureLayout(tower, "opening-out-lap-tower");
+            foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify, SessionState.Test })
+            {
+                OverlayViewModel practice = BuildTiming(fixture.SetSession(session));
+                AssertTrue(practice.AllRankingRows.All(row => row.CurrentTime == "랩 타임 주행 중")); // no pit-exit history; lap zero alone is not an out lap
+            }
+            fixture.SetSession(SessionState.Race).SetParticipant(0, true, "DRIVER_0", 1, 1, 2, RaceState.Racing, PitMode.None)
+                .SetParticipantLapTimes(0, 60.125f, 61)
+                .SetParticipantCurrentSector(0, 0).SetCurrentTiming(54.321f, 1.234f, -1, -1, participantIndex: 0);
+            OverlayViewModel leaderLapTwo = BuildTiming(fixture);
+            AssertEqual("레이스 중", leaderLapTwo.AllRankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertTrue(leaderLapTwo.AllRankingRows.All(row => row.Status != "BEST"));
+            AssertTrue(leaderLapTwo.AllRankingRows.Where(row => row.ParticipantIndex != 0).All(row => row.CurrentTime == "아웃랩"));
+            fixture.SetParticipant(3, true, "DRIVER_3", 4, 1, 2, RaceState.Racing, PitMode.None)
+                .SetParticipantLapTimes(3, 65.5f, 66)
+                .SetCurrentTiming(2.345f, 2.345f, -1, -1).SetParticipantCurrentSector(3, 0);
+            AssertEqual("레이스 중", PlayerRow(BuildTiming(fixture)).CurrentTime);
+            fixture.SetParticipant(0, true, "DRIVER_0", 1, 2, 3, RaceState.Racing, PitMode.None).SetParticipantLapTimes(0, 60.125f, 61);
+            AssertEqual("1:00.125", BuildTiming(fixture).AllRankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
+            AssertEqual("레이스 중", PlayerRow(BuildTiming(fixture)).CurrentTime); // leader crossing cannot unlock trailing driver
+            fixture.SetParticipant(3, true, "DRIVER_3", 4, 2, 3, RaceState.Racing, PitMode.None).SetParticipantLapTimes(3, 65.5f, 66);
+            AssertEqual("1:05.500", PlayerRow(BuildTiming(fixture)).CurrentTime);
+            foreach ((RaceState state, string text) in new[] { (RaceState.Finished, "FIN"), (RaceState.Retired, "RET"), (RaceState.Dnf, "DNF"), (RaceState.Disqualified, "DSQ") })
+                AssertEqual(text, PlayerRow(BuildTiming(fixture.SetParticipant(3, true, "DRIVER_3", 4, 0, 1, state, PitMode.None))).Status);
+            fixture.SetParticipant(3, true, "DRIVER_3", 4, 0, 2, RaceState.Racing, PitMode.None).SetCurrentTiming(1, 1, -1, -1, true);
+            OverlayViewModel counterTransition = BuildTiming(fixture);
+            new InvalidLapDisplayTracker().Apply(counterTransition, Parse(fixture), 1);
+            AssertEqual("아웃랩", PlayerRow(counterTransition).CurrentTime); // raw currentLap can advance before completed counter
+            AssertTrue(PlayerRow(counterTransition).Status != "무효");
+        }
+
+        private static void PracticeLapPhaseFollowsPitExit()
+        {
+            foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify, SessionState.Test })
+            foreach (uint initialLaps in new uint[] { 0, 5 })
+            {
+                var tracker = new InvalidLapDisplayTracker();
+                var events = new RaceEventEngine();
+                int tick = 0;
+                (OverlayViewModel View, RaceEventUpdate Events) Frame(PitMode pit, uint laps, float distance, float best = -1, bool invalid = true)
+                {
+                    var fixture = new RawFixtureBuilder(4).SetSession(session).SetTrackTelemetry(3000, 600);
+                    foreach (int index in new[] { 0, 3 })
+                        fixture.SetParticipant(index, true, "DRIVER_" + index, (uint)index + 1, laps, laps + 1, RaceState.Racing, pit)
+                            .SetParticipantLapDistance(index, distance).SetParticipantLapTimes(index, best, -1)
+                            .SetCurrentTiming(10 + tick, 10 + tick, -1, -1, invalid, index);
+                    byte[] original = fixture.Buffer.ToArray();
+                    var snapshot = Parse(fixture, FixedTime().AddMilliseconds(tick++ * 100));
+                    tracker.Observe(snapshot, 1);
+                    var view = OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE",
+                        outLapParticipants: tracker.OutLapParticipants);
+                    tracker.Apply(view, snapshot, 1);
+                    var update = events.Observe(snapshot, Classify(snapshot), 1, snapshot.CapturedAt,
+                        outLapParticipants: tracker.OutLapParticipants);
+                    AssertTrue(original.SequenceEqual(fixture.Buffer));
+                    return (view, update);
+                }
+                AssertEqual("--", PlayerRow(Frame(PitMode.InGarage, initialLaps, 100).View).CurrentTime);
+                foreach ((PitMode pit, float distance) in new[] { (PitMode.DrivingOutOfGarage, 120f), (PitMode.DrivingOutOfPits, 200f),
+                    (PitMode.None, 900f), (PitMode.None, 2990f) })
+                {
+                    var outLap = Frame(pit, initialLaps, distance);
+                    foreach (var row in outLap.View.AllRankingRows.Where(row => row.ParticipantIndex == 0 || row.IsPlayer))
+                    { AssertEqual("아웃랩", row.CurrentTime); AssertTrue(row.Status != "무효"); }
+                    AssertFalse(outLap.View.CurrentLapStateText.Contains("무효", StringComparison.Ordinal));
+                    AssertFalse(outLap.Events.DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap));
+                }
+                // Distance wraps before the counter update: the first timed lap must start now.
+                var timed = Frame(PitMode.None, initialLaps, 10, invalid: false);
+                AssertEqual("랩 타임 주행 중", PlayerRow(timed.View).CurrentTime);
+                var tower = new OverlayHudView();
+                tower.SetViewModel(timed.View); LayoutTower(tower);
+                var label = Descendants<TextBlock>(tower).First(text => text.Text == "랩 타임\n주행 중");
+                AssertEqual(OverlayUiMetrics.FontSmall, label.FontSize);
+                Rect labelBounds = label.TransformToAncestor(tower).TransformBounds(new Rect(label.RenderSize));
+                AssertTrue(labelBounds.Height <= OverlayUiMetrics.RowPitch - 2 + .5); // actual Viewbox-scaled glyphs, excluding row margins
+                CaptureLayout(tower, "lap-phase-" + session + "-stint" + initialLaps);
+                AssertTrue(Frame(PitMode.None, initialLaps + 1, 30).Events.DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap));
+                var recorded = Frame(PitMode.None, initialLaps + 2, 40, 65.125f, false);
+                AssertEqual("1:05.125", PlayerRow(recorded.View).CurrentTime);
+                AssertEqual("1:05.125", PlayerRow(Frame(PitMode.InPit, initialLaps + 2, 600, 65.125f).View).CurrentTime);
+                Frame(PitMode.DrivingOutOfPits, initialLaps + 2, 700, 65.125f);
+                var newStint = Frame(PitMode.None, initialLaps + 2, 800, 65.125f);
+                AssertEqual("1:05.125", PlayerRow(newStint.View).CurrentTime); // user's best-first choice
+                AssertTrue(PlayerRow(newStint.View).Status != "무효");
+                AssertFalse(newStint.Events.DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap));
+                Frame(PitMode.None, initialLaps + 3, 25, 65.125f, false); // trusted completed-lap transition, no usable wrap
+                AssertEqual(0, tracker.OutLapParticipants.Count);
+            }
+        }
+
+        private static void NativeLapStartClearsOutLapImmediately()
+        {
+            foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify, SessionState.Test })
+            foreach (string signal in new[] { "currentLap", "sector", "completed", "wrap" })
+            foreach (PitMode exitMode in new[] { PitMode.None, PitMode.DrivingOutOfPits })
+            {
+                var tracker = new InvalidLapDisplayTracker();
+                int tick = 0;
+                OverlayViewModel Frame(PitMode pit, uint currentLap, uint completed, int sector, float distance, float sector1)
+                {
+                    var fixture = new RawFixtureBuilder(4).SetSession(session).SetTrackTelemetry(3000, 600)
+                        .SetParticipant(3, true, "ME", 4, completed, currentLap, RaceState.Racing, pit)
+                        .SetParticipantLapTimes(3, -1, -1).SetParticipantLapDistance(3, distance)
+                        .SetParticipantCurrentSector(3, sector).SetCurrentTiming(50, sector1, 20, 10);
+                    var snapshot = Parse(fixture, FixedTime().AddMilliseconds(tick++ * 100));
+                    tracker.Observe(snapshot, 1);
+                    var view = OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE",
+                        outLapParticipants: tracker.OutLapParticipants);
+                    tracker.Apply(view, snapshot, 1);
+                    return view;
+                }
+                Frame(PitMode.InGarage, 7, 6, 2, 1000, 20);
+                Frame(PitMode.DrivingOutOfPits, 7, 6, 2, 1100, 20);
+                AssertEqual("아웃랩", PlayerRow(Frame(exitMode, 7, 6, 2, signal == "wrap" ? 2990 : 1200, 20)).CurrentTime);
+                uint current = signal == "currentLap" ? 8u : 7u;
+                uint completed = signal == "completed" ? 7u : 6u;
+                int sector = signal == "sector" ? 0 : 2;
+                float distance = signal == "wrap" ? 5 : 1205;
+                float sector1 = signal == "sector" ? .05f : 20;
+                AssertEqual("랩 타임 주행 중", PlayerRow(Frame(exitMode, current, completed, sector, distance, sector1)).CurrentTime);
+                AssertEqual("랩 타임 주행 중", PlayerRow(Frame(exitMode, current, completed, sector, distance + 5, sector1)).CurrentTime);
+                AssertEqual("랩 타임 주행 중", PlayerRow(Frame(PitMode.None, current, completed, sector, distance + 10, sector1)).CurrentTime);
+            }
+        }
+
+        private static void PitExitDoesNotRearmTimedLap()
+        {
+            var tracker = new InvalidLapDisplayTracker();
+            int tick = 0;
+            bool Frame(PitMode pit, uint current = 1, uint completed = 0, int sector = 2, float s1 = 20, float distance = 2000)
+            {
+                var snapshot = Parse(new RawFixtureBuilder(4).SetSession(SessionState.Qualify).SetTrackTelemetry(3000, 600)
+                    .SetParticipant(3, true, "ME", 4, completed, current, RaceState.Racing, pit)
+                    .SetParticipantCurrentSector(3, sector).SetCurrentTiming(60, s1, 20, 20)
+                    .SetParticipantLapDistance(3, distance), FixedTime().AddMilliseconds(tick++ * 100));
+                tracker.Observe(snapshot, 1);
+                return tracker.OutLapParticipants.Contains(3);
+            }
+            Frame(PitMode.InGarage, current: 0);
+            AssertTrue(Frame(PitMode.DrivingOutOfGarage)); // 0 -> 1 is initialization, not a timed lap
+            AssertTrue(Frame(PitMode.DrivingOutOfPits));
+            AssertTrue(Frame(PitMode.None, sector: 1));
+            AssertTrue(Frame(PitMode.None, sector: 0, s1: 20)); // neither a final-sector wrap nor a reset sector timer
+            AssertTrue(Frame(PitMode.None, sector: 2));
+            AssertTrue(Frame(PitMode.None, sector: 0, s1: -1)); // missing timing is not evidence
+            AssertTrue(Frame(PitMode.None, distance: 2990));
+            AssertTrue(Frame(PitMode.None, distance: 500)); // implausible teleport cannot start timing
+            AssertFalse(Frame(PitMode.None, current: 2));
+            AssertFalse(Frame(PitMode.DrivingOutOfPits, current: 2)); // late pit status after line; no new pit visit
+            AssertFalse(Frame(PitMode.None, current: 2));
+            Frame(PitMode.InPit, current: 2);
+            AssertTrue(Frame(PitMode.DrivingOutOfPits, current: 2)); // genuine new visit still starts a fresh out lap
+        }
+
+        private static void FirstTimedLapUsesNativeTimingAvailability()
+        {
+            foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify, SessionState.Test })
+            foreach (RaceState outState in new[] { RaceState.NotStarted, RaceState.Racing })
+            {
+                var tracker = new InvalidLapDisplayTracker();
+                var events = new RaceEventEngine();
+                int tick = 0;
+                OverlayViewModel Frame(PitMode pit, RaceState race, float s1, float distance, uint completed = 0, float best = -123, bool invalid = true)
+                {
+                    var fixture = new RawFixtureBuilder(4).SetSession(session).SetTrackTelemetry(3999.7273f, 600)
+                        .SetParticipant(3, true, "ME", 4, completed, completed + 1, race, pit)
+                        .SetParticipantLapTimes(3, best, -123).SetParticipantLapDistance(3, distance)
+                        .SetParticipantCurrentSector(3, s1 < 0 ? 2 : 0).SetCurrentTiming(60, s1, -1, -1, invalid);
+                    var snapshot = Parse(fixture, FixedTime().AddMilliseconds(tick++ * 60));
+                    tracker.Observe(snapshot, 1);
+                    var view = OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE",
+                        outLapParticipants: tracker.OutLapParticipants);
+                    tracker.Apply(view, snapshot, 1);
+                    var update = events.Observe(snapshot, Classify(snapshot), 1, snapshot.CapturedAt,
+                        outLapParticipants: tracker.OutLapParticipants);
+                    if (completed == 0) AssertFalse(update.DetectedEvents.Any(item => item.Type == OverlayEventType.InvalidLap));
+                    return view;
+                }
+                AssertEqual("아웃랩", PlayerRow(Frame(PitMode.DrivingOutOfPits, RaceState.Racing, -1, 100)).CurrentTime);
+                // Observed 2026-09-06 16:08:14 KST: 3999.8115 exceeds reported 3999.7273.
+                // First timing starts at S1 -1 -> .07910156 while lap=1 / completed=0 stay unchanged.
+                AssertEqual("아웃랩", PlayerRow(Frame(PitMode.None, outState, -1, 3999.8115f)).CurrentTime);
+                AssertEqual("랩 타임 주행 중", PlayerRow(Frame(PitMode.None, RaceState.Racing, .07910156f, 4.410772f, invalid: false)).CurrentTime);
+                AssertEqual("랩 타임 주행 중", PlayerRow(Frame(PitMode.None, RaceState.Racing, 15, 1100, invalid: false)).CurrentTime);
+                AssertEqual("랩 타임 주행 중", PlayerRow(Frame(PitMode.None, RaceState.Racing, .05f, 4, 1)).CurrentTime); // invalid finish has no accepted best
+                AssertEqual("0:55.235", PlayerRow(Frame(PitMode.None, RaceState.Racing, .05f, 4, 2, 55.235046f, false)).CurrentTime);
+            }
+        }
+
+        private static void OutLapSurvivesPauseAndMenu()
+        {
+            var tracker = new InvalidLapDisplayTracker();
+            var session = new SessionStateTracker();
+            int tick = 0;
+            void Frame(GameState game, PitMode pit, float s1 = -1)
+            {
+                var snapshot = Parse(new RawFixtureBuilder(4).SetSession(SessionState.Practice).SetGameState(game)
+                    .SetParticipant(3, true, "ME", 4, 5, 6, RaceState.Racing, pit)
+                    .SetParticipantLapTimes(3, -123, -123).SetParticipantCurrentSector(3, 0)
+                    .SetCurrentTiming(50, s1, -1, -1), FixedTime().AddMilliseconds(tick++ * 100));
+                session.Observe(snapshot);
+                tracker.Observe(snapshot, session.Generation);
+            }
+            Frame(GameState.InGamePlaying, PitMode.InGarage);
+            Frame(GameState.InGamePlaying, PitMode.DrivingOutOfPits);
+            Frame(GameState.InGamePlaying, PitMode.None);
+            AssertTrue(tracker.OutLapParticipants.Contains(3));
+            foreach (GameState game in new[] { GameState.InGamePaused, GameState.InGamePlaying, GameState.InGameMenuTimeTicking, GameState.InGamePlaying })
+            { Frame(game, PitMode.None); AssertTrue(tracker.OutLapParticipants.Contains(3)); }
+            AssertEqual(4, session.Generation);
+            Frame(GameState.InGamePlaying, PitMode.None, .0357f);
+            AssertFalse(tracker.OutLapParticipants.Contains(3));
+        }
+
+        private static void LateAttachRecognizesUntimedOutLap()
+        {
+            foreach (RaceState race in new[] { RaceState.NotStarted, RaceState.Racing })
+            {
+                var fixture = new RawFixtureBuilder(4).SetSession(SessionState.Practice)
+                    .SetParticipant(3, true, "ME", 4, 0, 1, race, PitMode.None)
+                    .SetParticipantLapTimes(3, -123, -123).SetCurrentTiming(999, -1, -1, -1, true);
+                var snapshot = Parse(fixture);
+                var tracker = new InvalidLapDisplayTracker(); tracker.Observe(snapshot, 1);
+                var view = OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE",
+                    outLapParticipants: tracker.OutLapParticipants);
+                tracker.Apply(view, snapshot, 1);
+                AssertEqual("아웃랩", PlayerRow(view).CurrentTime);
+                AssertTrue(PlayerRow(view).Status != "무효");
+                AssertEqual("아웃랩", PlayerRow(BuildTiming(fixture)).CurrentTime); // same rule in snapshot-only diagnostics
+                fixture.SetParticipant(3, true, "ME", 4, 0, 1, RaceState.Racing, PitMode.None)
+                    .SetParticipantLapTimes(3, -123, -123).SetCurrentTiming(10, 10, -1, -1, false);
+                AssertEqual("랩 타임 주행 중", PlayerRow(BuildTiming(fixture)).CurrentTime);
+            }
+            var stages = new RawFixtureBuilder(4).SetSession(SessionState.Practice);
+            for (int index = 0; index < 4; index++)
+                stages.SetParticipant(index, true, new[] { "차고 대기", "출차 후 주행", "첫 계측 주행", "인정 기록" }[index],
+                    (uint)index + 1, index == 3 ? 1u : 0u, index == 3 ? 2u : 1u,
+                    index == 1 ? RaceState.NotStarted : RaceState.Racing, index == 0 ? PitMode.InGarage : PitMode.None)
+                    .SetParticipantLapTimes(index, index == 3 ? 55.235046f : -123, -123)
+                    .SetParticipantCurrentSector(index, 0).SetCurrentTiming(50, index < 2 ? -1 : .079f, -1, -1, index < 2, index);
+            var sample = Parse(stages);
+            var display = new InvalidLapDisplayTracker(); display.Observe(sample, 1);
+            var control = new RaceControlAnalyzer(EvidenceKind.Fixture).Observe(sample, Classify(sample), 1, sample.CapturedAt);
+            var model = OverlayViewModel.Build(sample, ResolveLocal(sample), Classify(sample), 30, 20, false, "FIXTURE",
+                raceControl: control, outLapParticipants: display.OutLapParticipants);
+            display.Apply(model, sample, 1);
+            AssertTrue(model.AllRankingRows.Select(row => row.CurrentTime).SequenceEqual(new[] { "--", "아웃랩", "랩 타임 주행 중", "0:55.235" }));
+            AssertEqual("PIT", model.AllRankingRows[0].Status);
+            var tower = new OverlayHudView(); tower.SetViewModel(model); LayoutTower(tower); CaptureLayout(tower, "lap-lifecycle-four-stages");
+        }
+
+        private static void LapPhaseRejectsStaleState()
+        {
+            var tracker = new InvalidLapDisplayTracker();
+            int tick = 0;
+            TelemetrySnapshot Observe(PitMode pit, uint completed = 5, string name = "ME", SessionState session = SessionState.Practice,
+                int generation = 1, GameState game = GameState.InGamePlaying, RaceState race = RaceState.Racing)
+            {
+                var snapshot = Parse(new RawFixtureBuilder(4).SetSession(session).SetGameState(game)
+                    .SetParticipant(3, true, name, 4, completed, completed + 1, race, pit), FixedTime().AddMilliseconds(tick++ * 100));
+                tracker.Observe(snapshot, generation);
+                return snapshot;
+            }
+            void Arm() { Observe(PitMode.InGarage); Observe(PitMode.None); AssertTrue(tracker.OutLapParticipants.Contains(3)); }
+            Arm(); Observe(PitMode.None, name: "REPLACEMENT"); AssertFalse(tracker.OutLapParticipants.Contains(3));
+            Arm(); Observe(PitMode.None, completed: 0); AssertFalse(tracker.OutLapParticipants.Contains(3));
+            Arm(); Observe(PitMode.None, session: SessionState.Qualify); AssertFalse(tracker.OutLapParticipants.Contains(3));
+            Arm(); Observe(PitMode.None, generation: 2); AssertFalse(tracker.OutLapParticipants.Contains(3));
+            Arm(); Observe(PitMode.None, game: GameState.InGameReplay); AssertFalse(tracker.OutLapParticipants.Contains(3));
+            Arm(); Observe(PitMode.None, race: RaceState.Retired); AssertFalse(tracker.OutLapParticipants.Contains(3));
+            Arm(); tracker.Observe(null, 1); Observe(PitMode.None); AssertFalse(tracker.OutLapParticipants.Contains(3));
+            Arm(); var duplicate = Observe(PitMode.None); tracker.Observe(duplicate, 1); AssertTrue(tracker.OutLapParticipants.Contains(3));
+        }
+
+        private static void AllPitModesShowPitBadge()
+        {
+            foreach (PitMode pit in new[] { PitMode.None, PitMode.DrivingIntoPits, PitMode.InPit, PitMode.DrivingOutOfPits, PitMode.InGarage, PitMode.DrivingOutOfGarage, (PitMode)999 })
+            {
+                var fixture = new RawFixtureBuilder(29).SetSession(SessionState.Practice);
+                for (int index = 0; index < 29; index++)
+                    fixture.SetParticipant(index, true, "PIT_DRIVER_" + index, (uint)index + 1, 0, 1, RaceState.Racing, pit)
+                        .SetParticipantLapTimes(index, -1, -1);
+                TelemetrySnapshot snapshot = Parse(fixture);
+                var control = new RaceControlAnalyzer(EvidenceKind.Fixture).Observe(snapshot, Classify(snapshot), 1, snapshot.CapturedAt);
+                var view = OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE", raceControl: control);
+                bool isPit = pit != PitMode.None && pit != (PitMode)999;
+                AssertTrue(control.ParticipantStates.Values.All(state => state.IsPitActive == isPit));
+                AssertEqual(isPit ? 29 : 0, view.AllRankingRows.Count(row => row.Status == "PIT"));
+                AssertEqual(isPit, control.OverlayState.HasFlag(BroadcastOverlayState.PlayerPit));
+                AssertTrue(view.AllRankingRows.All(row => !row.IsDimmed));
+                if (pit == PitMode.InGarage)
+                {
+                    var tower = new OverlayHudView(); tower.SetViewModel(view); LayoutTower(tower); CaptureLayout(tower, "garage-pit-badges");
+                }
+            }
+            foreach ((RaceState race, PitSchedule schedule, string badge) in new[] {
+                (RaceState.Retired, PitSchedule.None, "RET"), (RaceState.Dnf, PitSchedule.None, "DNF"),
+                (RaceState.Disqualified, PitSchedule.None, "DSQ"), (RaceState.Racing, PitSchedule.DriveThrough, "DT"),
+                (RaceState.Racing, PitSchedule.StopGo, "SG") })
+            {
+                var snapshot = Parse(new RawFixtureBuilder(4).SetSession(SessionState.Practice)
+                    .SetParticipant(0, true, "PIT", 1, 0, 1, race, PitMode.InGarage).SetParticipantControl(0, schedule));
+                var control = new RaceControlAnalyzer(EvidenceKind.Fixture).Observe(snapshot, Classify(snapshot), 1, snapshot.CapturedAt);
+                var view = OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), Classify(snapshot), 30, 20, false, "FIXTURE", raceControl: control);
+                AssertEqual(badge, view.AllRankingRows.Single(row => row.ParticipantIndex == 0).Status);
+            }
+        }
+
+        private static void RaceControlShowsCurrentGreenWithoutHistory()
+        {
+            var analyzer = new RaceControlAnalyzer(EvidenceKind.Fixture);
+            DateTimeOffset now = FixedTime();
+            ObserveControl(analyzer, new RawFixtureBuilder(), now);
+            ObserveControl(analyzer, new RawFixtureBuilder().SetRootControl(FlagColour.Yellow), now.AddSeconds(1));
+            RaceControlUpdate update = ObserveControl(analyzer, new RawFixtureBuilder().SetRootControl(FlagColour.Green), now.AddSeconds(8));
+            AssertTrue(update.History.Count >= 2);
+            AssertEqual(RaceControlEventType.Green, update.ActiveEvent?.Type);
+            foreach ((int width, int height) in new[] { (416, 152), (240, 120), (600, 55) })
+            {
+                var view = new RaceControlView { Width = width, Height = height };
+                view.SetViewModel(RaceControlViewModel.FromUpdate(update), false);
+                view.Measure(new Size(width, height));
+                view.Arrange(new Rect(0, 0, width, height));
+                PumpDispatcher();
+                view.UpdateLayout();
+                AssertFalse(Descendants<TextBlock>(view).Any(item => item.Name == "HistoryText" || item.Name == "CountText"));
+                AssertEqual(Visibility.Collapsed, Named<TextBlock>(view, "DriverText").Visibility);
+                AssertEqual(Visibility.Collapsed, Named<TextBlock>(view, "StateLabelText").Visibility);
+                AssertEqual(update.ActiveEvent!.Title, Named<TextBlock>(view, "TitleText").Text);
+                AssertEqual(update.ActiveEvent.Message, Named<TextBlock>(view, "MessageText").Text);
+                if (width == 416) AssertEqual(24.0, Named<TextBlock>(view, "MessageText").FontSize);
+                CaptureLayout(view, "green-current-only-" + width + "x" + height);
+            }
+            AssertTrue(update.History.Any(item => item.Type == RaceControlEventType.Yellow)); // raw history was not removed
         }
 
         private static void RaceControlReflowsWithoutClipping()
@@ -2363,8 +3521,7 @@ namespace AMS2LeagueClient.Tests
                     Title = expanded ? "레이스 컨트롤 — 랩타임 삭제" : "레이스 컨트롤",
                     DriverLine = "P16 ENG-IceBlasT 긴 플레이어 이름",
                     Message = "레이스 관리자가 트랙 한계 위반으로 해당 참가자의 랩타임을 삭제했습니다.",
-                    HistoryText = "17:39 이전 랩타임 삭제 알림\n17:38 드라이브스루 수행 필요\n17:37 전 코스 황색기 상태",
-                    StateLabel = "!! 이중 황색기", CountText = "123"
+                    StateLabel = "!! 이중 황색기"
                 }, false);
                 var size = new Size(width, height);
                 view.Measure(size);
@@ -2406,13 +3563,13 @@ namespace AMS2LeagueClient.Tests
             }
         }
 
-        private static void CaptureLayout(FrameworkElement view, string name)
+        private static void CaptureLayout(FrameworkElement view, string name, int settleMs = 1200)
         {
             if (_layoutCaptureDirectory == null) return;
             Directory.CreateDirectory(_layoutCaptureDirectory);
-            // Capture the settled layout, not a tower-entry animation frame.
+            // Settle ordinary layouts; motion-specific captures can request an in-flight frame.
             var frame = new DispatcherFrame();
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(settleMs) };
             timer.Tick += (sender, args) => { timer.Stop(); frame.Continue = false; };
             timer.Start();
             Dispatcher.PushFrame(frame);

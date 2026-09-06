@@ -29,7 +29,12 @@ namespace AMS2LeagueClient.Presentation
             if (viewModel.IsVisible)
             {
                 DataContext = viewModel;
-                if (animate && viewModel.EventId != _eventId) AnimateIn();
+                if (animate && viewModel.EventId != _eventId)
+                {
+                    ResetSweep();
+                    AnimateIn();
+                    if (viewModel.FlashOnEntry) HudMotion.Sweep(EventSweep, 0.42, 360, 700);
+                }
                 else if (!animate) ResetMotion();
                 _eventId = viewModel.EventId;
                 _presented = true;
@@ -69,11 +74,24 @@ namespace AMS2LeagueClient.Presentation
 
         private void AnimateOut()
         {
+            ResetSweep();
             HudMotion.SlideOut(Panel, -24, 0, (int)ExitDuration.TotalMilliseconds);
+        }
+
+        private void ResetSweep()
+        {
+            EventSweep.BeginAnimation(OpacityProperty, null);
+            EventSweep.Opacity = 0;
+            if (EventSweep.RenderTransform is ScaleTransform scale && !scale.IsFrozen)
+            {
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                scale.ScaleX = 1;
+            }
         }
 
         private void ResetMotion()
         {
+            ResetSweep();
             Panel.BeginAnimation(OpacityProperty, null);
             Panel.Opacity = 1;
             if (Panel.RenderTransform is TranslateTransform panel)

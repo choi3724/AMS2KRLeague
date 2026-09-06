@@ -7,6 +7,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using AMS2LeagueClient.Core.FutureTelemetry;
+using AMS2LeagueClient.Core.CompactTelemetry;
+using AMS2LeagueClient.Core.Diagnostics;
 
 namespace AMS2LeagueActivity.Tests
 {
@@ -29,6 +31,9 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Telemetry upload worker retries without losing durable chunk", UploadWorkerRetriesThenSends);
             yield return new TestCase("Private driver upload defaults to LOCAL_PENDING_OWNER while public upload remains available", PrivateUploadDefaultsToDenied);
             yield return new TestCase("Archive fault ledger distinguishes serialization disk and finalize failures", ArchiveFailureStagesAreDistinct);
+            yield return new TestCase("Expired invalid compact chunk does not block healthy streams", ExpiredCompactFailureIsIsolated);
+            yield return new TestCase("Partial compact write retries identical bytes without losing dictionary", PartialCompactWriteRetriesIdentically);
+            yield return new TestCase("Archive failure diagnostics are sanitized and rate limited", FailureDiagnosticsAreBounded);
             yield return new TestCase("Compact replay world cadence option changes world row density only", ReplayWorldCadenceOption);
         }
 
@@ -592,6 +597,90 @@ namespace AMS2LeagueActivity.Tests
                 .GetDueBatch(1, DateTimeOffset.UtcNow)
                 .Single();
             AssertEx.Equal(TelemetryVisibility.PRIVATE_DRIVER_ANALYTICS, authorized.Metadata.Visibility);
+        }
+
+        private static void ExpiredCompactFailureIsIsolated()
+        {
+            using var directory = new TemporaryDirectory("archive-failure-isolation");
+            TelemetryArchiveIdentity identity = FixedIdentity("failure-isolation");
+            var options = new TelemetryArchiveOptions { ChunkDurationMs = 1000 };
+            var store = new CompactTelemetryChunkStore(directory.Root, identity, options);
+            var diagnostics = new List<string>();
+            var archive = new LocalDurableTelemetryArchive(directory.Root, identity, options, store.Commit, null)
+            { FailureDiagnostic = diagnostics.Add };
+            archive.TryCaptureRaceStory(new RaceStoryEventSample
+            {
+                EventId = "bad-input", EventType = "LAP_OBSERVED", SessionElapsedMs = 0,
+                CapturedAtUtc = At(0), LapDistanceMeters = -123
+            });
+            archive.TryCaptureFrame(Frame(0, 2, true));
+            archive.TryCaptureRaceStory(new RaceStoryEventSample
+            {
+                EventId = "healthy-input", EventType = "LAP_OBSERVED", SessionElapsedMs = 1100,
+                CapturedAtUtc = At(1100), LapDistanceMeters = 25
+            });
+            archive.TryCaptureFrame(Frame(1100, 2, true));
+            AssertDisposeFails(archive);
+            CompactTelemetryEnvelope[] frames = Directory.GetFiles(directory.Root, "*.a2ct.gz", SearchOption.AllDirectories)
+                .Select(path => { using var file = File.OpenRead(path); return CompactTelemetryCodec.Decode(TelemetryChunkSerializer.Gunzip(file)); })
+                .ToArray();
+            AssertEx.True(frames.Any(value => value.Block.SchemaId == CompactTelemetrySchemaId.ParticipantReplayV1
+                && value.Block.Samples.Any(sample => sample.ElapsedMs == 1100)), "A failed expired Story blocked the later Replay frame.");
+            AssertEx.True(frames.Any(value => value.Block.SchemaId == CompactTelemetrySchemaId.RaceEventV1
+                && value.Block.Samples.Any(sample => sample.ElapsedMs == 1100)), "A failed old Story blocked a healthy later Story chunk.");
+            AssertEx.False(archive.CompletionReport.FinalizeAcknowledged);
+            AssertEx.True(archive.CompletionReport.Streams.Any(value => value.WorkerExceptions > 0 || value.SerializationFailures > 0));
+            AssertEx.True(diagnostics.Any(value => value.Contains("stage=COMMIT stream=RACE_STORY chunk=0 schema=16")
+                && value.Contains("type=CompactTelemetryFormatException") && value.Contains("stack=AMS2LeagueClient.Core.CompactTelemetry")));
+            string preserved = AssertEx.Single(Directory.GetFiles(directory.Root, "*.source.json.gz", SearchOption.AllDirectories));
+            using var preservedFile = File.OpenRead(preserved);
+            TelemetryChunkEnvelope source = TelemetryChunkSerializer.Deserialize(TelemetryChunkSerializer.Gunzip(preservedFile));
+            AssertEx.Equal(identity.AttemptId, source.AttemptId);
+            AssertEx.Equal((double?)-123, source.Data.Rows[0][Array.IndexOf(source.Data.Fields, "lapDistanceMeters")]);
+            AssertEx.False(Directory.GetFiles(Path.GetDirectoryName(preserved)!, "*.upload.json").Any());
+        }
+
+        private static void FailureDiagnosticsAreBounded()
+        {
+            var lines = new List<string>();
+            var diagnostics = new ArchiveFailureDiagnostics { Write = lines.Add };
+            for (int index = 0; index < 1024; index++) diagnostics.Report(
+                new IOException("Authorization: Bearer fixture-secret; raw-json-and-password"),
+                FixedIdentity("diagnostic"), "COMMIT", TelemetryStreamType.PARTICIPANT_REPLAY, index);
+            AssertEx.Equal(11, lines.Count);
+            AssertEx.True(lines.All(value => value.Length < 500 && value.Contains("UNTRUSTED_MESSAGE_OMITTED")
+                && !value.Contains("fixture-secret") && !value.Contains("password")));
+            diagnostics.Write = _ => throw new IOException("fixture log disk failure");
+            diagnostics.Report(new IOException("fixture"), FixedIdentity("diagnostic"), "LEDGER_WRITE");
+        }
+
+        private static void PartialCompactWriteRetriesIdentically()
+        {
+            using var directory = new TemporaryDirectory("compact-partial-write");
+            TelemetryArchiveIdentity identity = FixedIdentity("partial-write");
+            var accumulator = new TelemetryChunkAccumulator(identity, TelemetryStreamType.PARTICIPANT_REPLAY, 0, 5);
+            for (int elapsed = 0; elapsed < 30_000; elapsed += 200) accumulator.AddReplay(Frame(elapsed, 3, true), 1, 64);
+            TelemetryChunkEnvelope source = accumulator.Build();
+            var store = new CompactTelemetryChunkStore(directory.Root, identity);
+            string session = new TelemetryChunkStore(directory.Root, identity).SessionDirectory;
+            string blocked = Path.Combine(session, "chunks", "compact", "replay", "00000012-0020.upload.json");
+            Directory.CreateDirectory(blocked);
+            bool failed = false;
+            try { store.Commit(source); }
+            catch (IOException) { failed = true; }
+            catch (UnauthorizedAccessException) { failed = true; }
+            AssertEx.True(failed, "Metadata write must fail after the payload is written.");
+            string payload = AssertEx.Single(Directory.GetFiles(session, "*.a2ct.gz", SearchOption.AllDirectories));
+            byte[] before = File.ReadAllBytes(payload);
+            // Only this test's known empty blocking directory; never production evidence.
+            Directory.Delete(blocked);
+            TelemetryChunkCommitOutcome result = store.Commit(source);
+            AssertEx.True(result.Disposition != TelemetryChunkCommitDisposition.CONFLICT_QUARANTINED);
+            AssertEx.True(before.SequenceEqual(File.ReadAllBytes(payload)), "Retry changed compact bytes after a partial durable write.");
+            using var file = File.OpenRead(payload);
+            CompactTelemetryEnvelope decoded = CompactTelemetryCodec.Decode(TelemetryChunkSerializer.Gunzip(file));
+            AssertEx.True(decoded.Participants.Count == 3, "Retry lost the initial participant dictionary.");
+            AssertEx.False(Directory.Exists(Path.Combine(session, "conflicts")));
         }
 
         private static void ArchiveFailureStagesAreDistinct()

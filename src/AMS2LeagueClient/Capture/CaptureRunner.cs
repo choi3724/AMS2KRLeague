@@ -175,8 +175,6 @@ namespace AMS2LeagueClient.Capture
                 DriverLine = string.IsNullOrEmpty(towerStatus) ? string.Empty : "P29  PLAYER",
                 Message = message,
                 StateLabel = stateLabel,
-                HistoryText = "FIXTURE 데이터 · 실제 AMS2 검출 아님",
-                CountText = "1",
                 Accent = accent
             };
             return CaptureShell(outputDirectory, fileName, shell, "FIXTURE / SIMULATION • NOT REAL AMS2", title + " 상태 표시 검증");

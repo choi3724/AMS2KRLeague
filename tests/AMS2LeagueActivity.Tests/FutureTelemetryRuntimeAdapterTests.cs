@@ -28,10 +28,12 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Compact integrity commit failure rolls the durable ledger back to PARTIAL", CompactIntegrityFailureIsPartial);
             yield return new TestCase("Compact loss-ledger conflict prevents finalize artifact creation", CompactLossConflictStopsFinalize);
             yield return new TestCase("Shipping compact runtime normalizes AMS2 negative time sentinels", CompactRuntimeNormalizesNegativeTimeSentinels);
+            yield return new TestCase("Story and replay share the nonnegative lap-distance domain", StoryDistanceMatchesReplayDomain);
             yield return new TestCase("Shipping compact runtime normalizes unavailable DriverFast domains", CompactRuntimeNormalizesUnavailableDriverFastDomains);
             yield return new TestCase("Future runtime identity reaches witness and all five persisted streams", RuntimeWitnessAndFiveStreams);
             yield return new TestCase("Future runtime fingerprint joins independent witnesses", IndependentWitnessFingerprintsJoin);
             yield return new TestCase("Future runtime separates restart attempts while retaining join identity", RestartAttemptIdentity);
+            yield return new TestCase("Restarting snapshots cannot start an unbound session witness", RestartingWitnessWaitsForArchiveIdentity);
             yield return new TestCase("Future runtime close uses durable acknowledgement before COMPLETE", CloseRequiresDurableAcknowledgement);
             yield return new TestCase("Future runtime propagates deterministic outer queue loss and isolates attempts", OuterQueueLossIsAttemptScoped);
             yield return new TestCase("Future runtime worker exception cannot produce COMPLETE", WorkerExceptionIsPartial);
@@ -701,6 +703,30 @@ namespace AMS2LeagueActivity.Tests
                 })
                 .ToArray();
 
+        private static void StoryDistanceMatchesReplayDomain()
+        {
+            using var temporary = new TemporaryDirectory("story-negative-distance");
+            var clock = new TestMonotonicClock();
+            var adapter = new FutureTelemetrySnapshotAdapter("0.3.1-test");
+            TelemetrySnapshot first = Snapshot(At(0), new[] { Participant(0, "LOCAL", 1, worldX: -623) }, null);
+            TelemetrySnapshot changed = Snapshot(At(1), new[] { Participant(0, "LOCAL", 2, worldX: -623) }, null);
+            adapter.Observe(first, Stamp(0));
+            FutureTelemetryCaptureBatch batch = adapter.Observe(changed, Stamp(200));
+            RaceStoryEventSample story = batch.StoryEvents.Single(value => value.EventType == "POSITION_CHANGE");
+            AssertEx.Null(story.LapDistanceMeters, "Story must not send a negative distance to the unsigned Compact field.");
+            AssertEx.Null(batch.Frame!.Participants.Single().LapDistanceMeters);
+            AssertEx.Equal(-123f, changed.Participants[0].CurrentLapDistance);
+            using var runtime = new FutureTelemetryCaptureRuntime(temporary.Root, "installation-story-domain", "0.3.1-test",
+                clockFactory: () => new TelemetrySessionClock(clock), archiveFormat: TelemetryArchiveFormat.COMPACT_A2CT_V1);
+            runtime.Observe(first);
+            clock.Timestamp = 200;
+            runtime.Observe(changed);
+            runtime.GameDetached();
+            runtime.Dispose();
+            AssertEx.True(runtime.AttemptLossLedgers.All(value => value.FinalizeAcknowledged));
+            AssertEx.True(ReadCompactFrames(temporary.Root).Any(value => value.Block.SchemaId == CompactTelemetrySchemaId.RaceEventV1));
+        }
+
         private static void CompactRuntimeNormalizesNegativeTimeSentinels()
         {
             using var temporary = new TemporaryDirectory("future-runtime-compact-time-sentinel");
@@ -955,6 +981,51 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal(2, identities[1].AttemptNumber);
         }
 
+        private static void RestartingWitnessWaitsForArchiveIdentity()
+        {
+            using var temporary = new TemporaryDirectory("restart-witness-binding");
+            var clock = new TestMonotonicClock();
+            var witness = new SessionWitnessCaptureEngine("installation-restart-joined", "0.3.1-test");
+            var runtime = new FutureTelemetryCaptureRuntime(temporary.Root, "installation-restart-joined", "0.3.1-test",
+                clockFactory: () => new TelemetrySessionClock(clock));
+            runtime.IdentityStarted += witness.BeginArchiveIdentity;
+            ParticipantSnapshot[] participants = { Participant(0, "LOCAL", 1), Participant(1, "OTHER", 2) };
+            var records = new List<SessionWitnessRecord>();
+            var identities = new List<TelemetryArchiveIdentity>();
+            runtime.IdentityStarted += identities.Add;
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                foreach (GameState game in new[] { GameState.InGameRestarting, GameState.InGameRestarting,
+                    GameState.InGameMenuTimeTicking, GameState.InGamePlaying })
+                {
+                    clock.Timestamp += 50;
+                    TelemetrySnapshot snapshot = Snapshot(At(clock.Timestamp / 50), participants, null,
+                        gameState: game, raceState: game == GameState.InGamePlaying ? RaceState.Racing : RaceState.NotStarted);
+                    runtime.Observe(snapshot);
+                    SessionWitnessUpdate update = witness.Observe(snapshot);
+                    if (update.FinalizedWitness != null) records.Add(update.FinalizedWitness);
+                    // Match ActivityCaptureRuntime's existing post-observation reconciliation.
+                    if (runtime.PendingRestartIdentity != null && witness.CurrentArchiveIdentity != null)
+                        AssertEx.True(runtime.SynchronizePendingRestartIdentity(witness.CurrentArchiveIdentity));
+                }
+            }
+            runtime.GameDetached();
+            SessionWitnessRecord? final = witness.Close(At(20), "GAME_DETACHED").FinalizedWitness;
+            if (final != null) records.Add(final);
+            runtime.Dispose();
+            AssertEx.Equal(2, identities.Count);
+            AssertEx.Equal(2, records.Count);
+            AssertEx.Equal(0L, runtime.Counters.IdentityNotificationFailures);
+            for (int index = 0; index < 2; index++)
+            {
+                AssertEx.Equal(identities[index].SessionId, records[index].CaptureSessionId);
+                AssertEx.Equal(identities[index].AttemptId, records[index].AttemptId);
+                AssertEx.Equal(identities[index].WitnessId, records[index].WitnessId);
+                AssertEx.Equal(identities[index].SessionFingerprint, records[index].SessionFingerprint);
+            }
+            AssertEx.NotEqual(records[0].AttemptId, records[1].AttemptId);
+        }
+
         private static void RuntimeWitnessAndFiveStreams()
         {
             using var temporary = new TemporaryDirectory("future-runtime-witness-five");
@@ -1179,7 +1250,9 @@ namespace AMS2LeagueActivity.Tests
                 "AMS2_SHM_V14",
                 new TelemetryArchiveOptions(),
                 () => new TelemetrySessionClock(monotonic),
-                (archiveRoot, identity, archiveOptions) => new LocalDurableTelemetryArchive(
+                (archiveRoot, identity, archiveOptions) => identity.AttemptNumber > 1
+                    ? new LocalDurableTelemetryArchive(archiveRoot, identity, archiveOptions)
+                    : new LocalDurableTelemetryArchive(
                     archiveRoot,
                     identity,
                     archiveOptions,
@@ -1190,14 +1263,23 @@ namespace AMS2LeagueActivity.Tests
                 At(0),
                 new[] { Participant(0, "LOCAL", 1, worldX: 10) },
                 null)));
+            monotonic.Timestamp = 50;
+            runtime.Observe(Snapshot(At(1), new[] { Participant(0, "LOCAL", 1) }, null, gameState: GameState.InGameRestarting));
+            monotonic.Timestamp = 100;
+            runtime.Observe(Snapshot(At(2), new[] { Participant(0, "LOCAL", 1) }, null, raceState: RaceState.NotStarted));
             runtime.GameDetached();
             runtime.Dispose();
 
-            TelemetryAttemptLossLedger ledger = AssertEx.Single(runtime.AttemptLossLedgers);
+            TelemetryAttemptLossLedger[] ledgers = runtime.AttemptLossLedgers.OrderBy(value => value.AttemptNumber).ToArray();
+            AssertEx.Equal(2, ledgers.Length);
+            TelemetryAttemptLossLedger ledger = ledgers[0];
             AssertEx.True(ledger.Streams.Sum(value => value.DiskWriteFailures) > 0);
             AssertEx.True(ledger.Streams.Sum(value => value.FinalizeFailures) > 0);
             AssertEx.False(ledger.FinalizeAcknowledged);
             AssertEx.Equal(TelemetryAttemptCompleteness.PARTIAL, ledger.Completeness);
+            AssertEx.True(ledgers[1].FinalizeAcknowledged);
+            AssertEx.Equal(0L, ledgers[1].KnownLossCount);
+            AssertEx.NotEqual(ledger.AttemptId, ledgers[1].AttemptId);
         }
 
         private static TelemetryVisibility VisibilityFor(TelemetryStreamType stream)

@@ -36,7 +36,20 @@
                                         <TextBlock Text="{Binding Class}" Foreground="{Binding ClassForeground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontClass}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" />
                                     </Border>
                                     <Viewbox Grid.Column="3" Stretch="Uniform" StretchDirection="DownOnly" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                        <TextBlock Text="{Binding CurrentTime}" Foreground="{Binding TimeForeground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontTiming}" Style="{StaticResource HudNumericText}" />
+                                        <TextBlock Foreground="{Binding TimeForeground}" FontWeight="Bold" TextAlignment="Right">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}">
+                                                    <Setter Property="Text" Value="{Binding CurrentTime}"/>
+                                                    <Setter Property="FontSize" Value="{x:Static core:OverlayUiMetrics.FontTiming}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding CurrentTime}" Value="랩 타임 주행 중">
+                                                            <Setter Property="Text" Value="랩 타임&#x0a;주행 중"/>
+                                                            <Setter Property="FontSize" Value="{x:Static core:OverlayUiMetrics.FontSmall}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </Viewbox>
                                     <TextBlock x:Name="StatusText" Grid.Column="4" Text="{Binding Status}" Foreground="{Binding StatusColor}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" HorizontalAlignment="Right" RenderTransformOrigin="1,0.5">
                                         <TextBlock.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></TextBlock.RenderTransform>

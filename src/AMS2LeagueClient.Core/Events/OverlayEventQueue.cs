@@ -24,10 +24,15 @@ namespace AMS2LeagueClient.Core.Events
                 return;
             }
 
-            if (item.Priority > Current.Priority)
+            bool invalidLapInterrupt = item.Type == OverlayEventType.InvalidLap
+                && Current.Type != OverlayEventType.InvalidLap && Current.Type != OverlayEventType.Finish
+                && Current.Type != OverlayEventType.Retired && Current.Type != OverlayEventType.Disqualified;
+            bool terminalInterrupt = Current.Type == OverlayEventType.InvalidLap
+                && (item.Type == OverlayEventType.Finish || item.Type == OverlayEventType.Retired || item.Type == OverlayEventType.Disqualified);
+            if (item.Priority > Current.Priority || invalidLapInterrupt || terminalInterrupt)
             {
-                // A higher-priority race-control event replaces the current card.
-                // The interrupted lower-priority card is deliberately not replayed.
+                // Invalid laps interrupt ordinary cards, but finish/retirement
+                // wins over an invalid lap. Interrupted cards are not replayed.
                 Start(item, now);
                 return;
             }

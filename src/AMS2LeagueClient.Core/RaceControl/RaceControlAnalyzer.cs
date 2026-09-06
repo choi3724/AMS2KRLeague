@@ -466,7 +466,7 @@ namespace AMS2LeagueClient.Core.RaceControl
         }
 
         private static bool IsPitActive(PitMode? mode)
-            => mode == PitMode.DrivingIntoPits || mode == PitMode.InPit || mode == PitMode.DrivingOutOfPits;
+            => mode.HasValue && mode.Value != PitMode.None; // Includes garage and garage exit, like AMS2's P badge.
 
         private static bool IsFiniteNonNegative(float value)
             => !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0;

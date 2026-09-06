@@ -6,6 +6,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using AMS2LeagueClient.Core.Diagnostics;
+using AMS2LeagueClient.Core.CompactTelemetry;
 
 namespace AMS2LeagueClient.Core.FutureTelemetry
 {
@@ -24,6 +26,11 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         private readonly Action? _beforeFinalize;
         private readonly Channel<CaptureMessage> _channel;
         private readonly Task _worker;
+        private readonly ArchiveFailureDiagnostics _diagnostics = new ArchiveFailureDiagnostics();
+        private readonly Dictionary<(TelemetryStreamType Stream, int Index), long> _retryAfter =
+            new Dictionary<(TelemetryStreamType Stream, int Index), long>();
+        private readonly HashSet<(TelemetryStreamType Stream, int Index)> _preservedFailures =
+            new HashSet<(TelemetryStreamType Stream, int Index)>();
         private readonly Dictionary<(TelemetryStreamType Stream, int Index), TelemetryChunkAccumulator> _chunks =
             new Dictionary<(TelemetryStreamType Stream, int Index), TelemetryChunkAccumulator>();
         private readonly Queue<IncidentFrame> _incidentRing = new Queue<IncidentFrame>();
@@ -83,6 +90,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         public TelemetryArchiveIdentity Identity => _store.Identity;
         public string SessionDirectory => _store.SessionDirectory;
         public TelemetryArchiveRecoveryReport RecoveryReport { get; }
+        public Action<string>? FailureDiagnostic { set => _diagnostics.Write = value; }
 
         public TelemetryArchiveRuntimeCounters Counters => new TelemetryArchiveRuntimeCounters
         {
@@ -263,15 +271,23 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                     bool finalizing = message.Kind == CaptureMessageKind.FINALIZE;
                     try
                     {
-                        if (finalizing) _beforeFinalize?.Invoke();
-                        FinalizeActiveIncidents();
-                        FlushAll();
+                        Exception? failure = null;
+                        try
+                        {
+                            if (finalizing) _beforeFinalize?.Invoke();
+                            FinalizeActiveIncidents();
+                        }
+                        catch (Exception exception) { failure = exception; }
+                        try { FlushAll(); }
+                        catch (Exception exception) { failure ??= exception; }
+                        if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
                         if (finalizing) Volatile.Write(ref _finalizeAcknowledged, 1);
                         message.Completion!.TrySetResult(true);
                     }
                     catch (Exception exception)
                     {
                         if (finalizing) RecordFinalizeFailure();
+                        _diagnostics.Report(exception, Identity, finalizing ? "FINALIZE" : "FLUSH");
                         message.Completion!.TrySetException(exception);
                     }
                     continue;
@@ -292,7 +308,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                             break;
                     }
                 }
-                catch (Exception)
+                catch (Exception exception)
                 {
                     // A malformed input fact is isolated from subsequent facts. Durable commit
                     // exceptions are counted inside Commit and retried on the next flush.
@@ -300,6 +316,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                     foreach (TelemetryStreamType stream in message.Streams())
                     {
                         Interlocked.Increment(ref _workerLossByStream[(int)stream]);
+                        _diagnostics.Report(exception, Identity, "PROCESS_" + message.Kind, stream);
                     }
                 }
             }
@@ -526,16 +543,29 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             {
                 long grace = pair.Key.Stream == TelemetryStreamType.INCIDENT_TRACE ? _options.IncidentPostRollMs : 0;
                 long bucketEnd = checked((long)(pair.Key.Index + 1) * _options.ChunkDurationMs);
-                if (bucketEnd + grace <= currentElapsedMs) Commit(pair.Key, pair.Value);
+                if (bucketEnd + grace > currentElapsedMs
+                    || (_retryAfter.TryGetValue(pair.Key, out long retryAt) && currentElapsedMs < retryAt)) continue;
+                try { Commit(pair.Key, pair.Value); }
+                catch
+                {
+                    // The failed source stays retained; neither this message nor other
+                    // streams should be discarded because an older chunk failed.
+                    // ponytail: persistent disk failure retains chunks until close;
+                    // use a disk-backed retry spool if long-failure memory becomes limiting.
+                    _retryAfter[pair.Key] = currentElapsedMs + 5_000;
+                }
             }
         }
 
         private void FlushAll()
         {
+            Exception? failure = null;
             foreach (var pair in _chunks.OrderBy(value => value.Key.Index).ThenBy(value => value.Key.Stream).ToArray())
             {
-                Commit(pair.Key, pair.Value);
+                try { Commit(pair.Key, pair.Value); }
+                catch (Exception exception) { failure ??= exception; }
             }
+            if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         }
 
         private void Commit((TelemetryStreamType Stream, int Index) key, TelemetryChunkAccumulator chunk)
@@ -549,13 +579,17 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 int.MaxValue,
                 Interlocked.Exchange(ref _droppedInputByStream[(int)key.Stream], 0)));
             chunk.AddDroppedInputMessages(droppedInputs);
+            string stage = "BUILD";
             try
             {
                 TelemetryChunkEnvelope envelope = chunk.Build();
+                stage = "COMMIT";
                 TelemetryChunkCommitOutcome outcome = _commit(envelope);
                 _chunks.Remove(key);
+                _retryAfter.Remove(key);
                 if (outcome.Disposition == TelemetryChunkCommitDisposition.CONFLICT_QUARANTINED)
                 {
+                    PreserveFailedSource(key, chunk);
                     Interlocked.Increment(ref _commitConflictByStream[(int)key.Stream]);
                     Interlocked.Increment(ref _commitFailures);
                     return;
@@ -566,9 +600,10 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             }
             catch (Exception exception)
             {
-                Interlocked.Add(ref _droppedInputByStream[(int)key.Stream], droppedInputs);
+                // droppedInputs already belong to the retained chunk. Restoring them
+                // to the stream counter would count them twice on every retry.
                 Interlocked.Increment(ref _commitFailures);
-                if (exception is JsonException || exception is NotSupportedException)
+                if (exception is JsonException || exception is NotSupportedException || exception is CompactTelemetryFormatException)
                 {
                     Interlocked.Increment(ref _serializationLossByStream[(int)key.Stream]);
                 }
@@ -580,7 +615,40 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 {
                     Interlocked.Increment(ref _workerLossByStream[(int)key.Stream]);
                 }
+                _diagnostics.Report(exception, Identity, stage, key.Stream, key.Index);
+                PreserveFailedSource(key, chunk);
                 throw;
+            }
+        }
+
+        private void PreserveFailedSource((TelemetryStreamType Stream, int Index) key, TelemetryChunkAccumulator chunk)
+        {
+            if (_preservedFailures.Contains(key)) return;
+            try
+            {
+                // Recovery evidence only, never an upload artifact or a durable ACK.
+                // Reuse P023 serialization for an input that cannot yet become valid A2CT.
+                byte[] source = TelemetryChunkSerializer.Serialize(chunk.Build());
+                string directory = Path.Combine(SessionDirectory, "failed-chunks", key.Stream.ToString());
+                Directory.CreateDirectory(directory);
+                string path = Path.Combine(directory, key.Index.ToString("D8") + "-"
+                    + TelemetryChunkSerializer.Sha256(source) + ".source.json.gz");
+                if (!File.Exists(path))
+                {
+                    string temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
+                    using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.WriteThrough))
+                    {
+                        byte[] compressed = TelemetryChunkSerializer.Gzip(source);
+                        file.Write(compressed);
+                        file.Flush(true);
+                    }
+                    File.Move(temporary, path);
+                }
+                _preservedFailures.Add(key);
+            }
+            catch (Exception exception)
+            {
+                _diagnostics.Report(exception, Identity, "PRESERVE_FAILED_SOURCE", key.Stream, key.Index);
             }
         }
 

@@ -63,6 +63,7 @@ namespace AMS2LeagueClient.Runtime
                     ChunkDurationMs = 300_000
                 },
                 archiveFormat: TelemetryArchiveFormat.COMPACT_A2CT_V1);
+            _futureTelemetry.FailureDiagnostic = details => LogInfoSafely("ARCHIVE_FAILURE", details);
             _futureTelemetry.IdentityStarted += BindWitnessArchiveIdentity;
             _telemetryUploadQueue = new TelemetryChunkUploadQueue(_futureTelemetry.ArchiveRoot);
             _recordStore = new ActivityRecordStore(root);
@@ -94,6 +95,8 @@ namespace AMS2LeagueClient.Runtime
 
             if (uploadTransport != null)
             {
+                if (uploadTransport is Cafe24ActivityUploadTransport cafe24)
+                    cafe24.FailureDiagnostic = details => LogInfoSafely("UPLOAD_FORBIDDEN", details);
                 _uploadTransportDisposable = uploadTransport as IDisposable;
                 _uploadWorker = new ActivityUploadWorker(_uploadQueue, uploadTransport);
                 if (uploadTransport is ITelemetryChunkUploadTransport telemetryTransport)

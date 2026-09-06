@@ -37,8 +37,7 @@ namespace AMS2LeagueClient.Runtime
         private readonly OverlayVisibilityController _visibilityController = new OverlayVisibilityController();
         private readonly MultiplayerWaitingOverlayController _multiplayerOverlayController = new MultiplayerWaitingOverlayController();
         private readonly RelativeDistanceTrendTracker _relativeDistanceTrendTracker = new RelativeDistanceTrendTracker();
-        private readonly ParticipantLapClock _participantLapClock = new ParticipantLapClock();
-        private IReadOnlyDictionary<int, float> _participantLapTimes = new Dictionary<int, float>();
+        private readonly InvalidLapDisplayTracker _invalidLapDisplayTracker = new InvalidLapDisplayTracker();
         private readonly object _readerGate = new object();
         private readonly object _telemetryGate = new object();
         private readonly Channel<TelemetryLogEntry> _telemetryLogChannel;
@@ -304,6 +303,7 @@ namespace AMS2LeagueClient.Runtime
                 int pid = Volatile.Read(ref _processId);
                 if (pid < 0)
                 {
+                    _invalidLapDisplayTracker.Observe(null, _sessionTracker.Generation);
                     ApplyVisibility(new OverlayVisibilityDecision(false, "WAIT_PROCESS"), null, null, null, null);
                     return;
                 }
@@ -312,11 +312,11 @@ namespace AMS2LeagueClient.Runtime
                 LogWindowChanges(window);
 
                 TelemetrySnapshot? snapshot = Volatile.Read(ref _latest);
-                _participantLapTimes = _participantLapClock.Observe(snapshot);
+                _invalidLapDisplayTracker.Observe(snapshot, _sessionTracker.Generation);
                 DateTimeOffset now = DateTimeOffset.UtcNow;
                 MultiplayerOverlayDecision? multiplayerDecision = snapshot == null
                     ? null
-                    : _multiplayerOverlayController.Observe(snapshot, _sessionTracker.Generation, now);
+                    : _multiplayerOverlayController.Observe(snapshot, _sessionTracker.Generation, now, _status.SessionPlayMode);
                 LocalParticipantResolution? local = snapshot == null ? null : _localResolver.Resolve(snapshot);
                 bool gameplayValid = snapshot != null && local != null && local.IsValid && local.Participant != null;
                 bool waitingValid = multiplayerDecision?.Mode == MultiplayerOverlayMode.Waiting
@@ -384,7 +384,7 @@ namespace AMS2LeagueClient.Runtime
                     return;
                 }
 
-                string waitingKey = "WAITING|" + waiting.SessionLabel + "|" + waiting.ParticipantCountText
+                string waitingKey = "WAITING|" + waiting.Title + "|" + waiting.SessionLabel + "|" + waiting.ParticipantCountText
                     + "|" + waiting.RemainingLabel + "|" + waiting.RemainingValue;
                 if (waitingKey != _lastPresentationKey)
                 {
@@ -445,7 +445,8 @@ namespace AMS2LeagueClient.Runtime
                     + " confidence=" + detected.Confidence);
             }
 
-            RaceEventUpdate eventUpdate = _eventEngine.Observe(snapshot, league, _sessionTracker.Generation, now, raceControlUpdate.OverlayState);
+            RaceEventUpdate eventUpdate = _eventEngine.Observe(snapshot, league, _sessionTracker.Generation, now, raceControlUpdate.OverlayState,
+                _invalidLapDisplayTracker.OutLapParticipants);
             foreach (OverlayEvent detected in eventUpdate.DetectedEvents)
             {
                 _logger.Info("EVENT_DETECTED", "type=" + detected.Type + " priority=" + detected.Priority + " source=" + detected.SourceKind);
@@ -486,7 +487,9 @@ namespace AMS2LeagueClient.Runtime
                 multiplayerDecision.EffectiveRemainingSeconds,
                 multiplayerDecision.RemainingDisplayTextOverride)
                 + "|towerRows=" + rankingRowCapacity.ToString(CultureInfo.InvariantCulture)
-                + (_participantLapTimes.Count > 0 ? "|lapTick=" + snapshot.CapturedAt.UtcTicks : string.Empty);
+                // Opponents' game timing must refresh even before our first
+                // observed line crossing or while the local player's clock is stopped.
+                + "|towerSnapshot=" + snapshot.SequenceNumber.ToString(CultureInfo.InvariantCulture);
             if (_diagnostic)
             {
                 presentationKey += "|rates=" + _snapshotRate.ToString("0.0", CultureInfo.InvariantCulture) + "/" + _uiRate.ToString("0.0", CultureInfo.InvariantCulture);
@@ -510,8 +513,9 @@ namespace AMS2LeagueClient.Runtime
                     eventTimeRemainingOverride: multiplayerDecision.EffectiveRemainingSeconds,
                     eventTimeRemainingTextOverride: multiplayerDecision.RemainingDisplayTextOverride,
                     rankingRowCapacity: rankingRowCapacity,
-                    participantLapTimes: _participantLapTimes);
+                    outLapParticipants: _invalidLapDisplayTracker.OutLapParticipants);
                 _relativeDistanceTrendTracker.Apply(timing, _sessionTracker.Generation);
+                _invalidLapDisplayTracker.Apply(timing, snapshot, _sessionTracker.Generation);
                 _overlay.SetViewModel(OverlayShellViewModel.Build(snapshot, timing, eventUpdate.CurrentEvent, false, raceControl: raceControlUpdate));
                 Interlocked.Increment(ref _uiUpdateCount);
             }

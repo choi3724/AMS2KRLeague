@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using AMS2LeagueClient.Core.Session;
 using AMS2LeagueClient.Core.Telemetry;
 
 namespace AMS2LeagueClient.Core.Presentation
@@ -38,8 +39,10 @@ namespace AMS2LeagueClient.Core.Presentation
                 _behindLap.Reset();
             }
 
-            RelativeDistanceTrend ahead = _ahead.Observe(viewModel.AheadParticipantIndex, viewModel.AheadDistanceMeters);
-            RelativeDistanceTrend behind = _behind.Observe(viewModel.BehindParticipantIndex, viewModel.BehindDistanceMeters);
+            RelativeDistanceTrend ahead = _ahead.Observe(viewModel.AheadParticipantIndex, viewModel.AheadDistanceMeters,
+                viewModel.AheadDistance.StartsWith("~", StringComparison.Ordinal));
+            RelativeDistanceTrend behind = _behind.Observe(viewModel.BehindParticipantIndex, viewModel.BehindDistanceMeters,
+                viewModel.BehindDistance.StartsWith("~", StringComparison.Ordinal));
             ApplyVisual(ahead, true, out string aheadArrow, out string aheadColor);
             ApplyVisual(behind, false, out string behindArrow, out string behindColor);
             viewModel.AheadDistanceTrendArrow = aheadArrow;
@@ -48,8 +51,9 @@ namespace AMS2LeagueClient.Core.Presentation
             viewModel.BehindDistanceColor = behindColor;
             int aheadLaps = _aheadLap.Observe(viewModel.AheadParticipantKey, viewModel.AheadLapGapCandidate);
             int behindLaps = _behindLap.Observe(viewModel.BehindParticipantKey, viewModel.BehindLapGapCandidate);
-            if (aheadLaps > 0) viewModel.AheadGap = "LAP " + aheadLaps.ToString(CultureInfo.InvariantCulture);
-            if (behindLaps > 0) viewModel.BehindGap = "LAP " + behindLaps.ToString(CultureInfo.InvariantCulture);
+            // Lap difference is independent of the game-provided time gap.
+            viewModel.AheadLapGap = aheadLaps > 0 ? "LAP " + aheadLaps.ToString(CultureInfo.InvariantCulture) : string.Empty;
+            viewModel.BehindLapGap = behindLaps > 0 ? "LAP " + behindLaps.ToString(CultureInfo.InvariantCulture) : string.Empty;
         }
 
         public void Reset()
@@ -86,18 +90,20 @@ namespace AMS2LeagueClient.Core.Presentation
             private int _participantIndex = -1;
             private int? _meters;
             private RelativeDistanceTrend _trend;
+            private bool _worldDistance;
 
-            public RelativeDistanceTrend Observe(int participantIndex, int? meters)
+            public RelativeDistanceTrend Observe(int participantIndex, int? meters, bool worldDistance)
             {
                 if (participantIndex < 0 || !meters.HasValue)
                 {
                     Reset();
                     return RelativeDistanceTrend.None;
                 }
-                if (_participantIndex != participantIndex || !_meters.HasValue)
+                if (_participantIndex != participantIndex || !_meters.HasValue || _worldDistance != worldDistance)
                 {
                     _participantIndex = participantIndex;
                     _meters = meters;
+                    _worldDistance = worldDistance;
                     _trend = RelativeDistanceTrend.None;
                     return _trend;
                 }
@@ -186,6 +192,11 @@ namespace AMS2LeagueClient.Core.Presentation
         public static TrackProgressDistance Unknown()
             => new TrackProgressDistance(false, 0, "—", null);
 
+        // World-space proximity is approximate, not cumulative track/lap progress.
+        public static TrackProgressDistance FromWorldMeters(double signedMeters)
+            => new TrackProgressDistance(true, signedMeters,
+                "~" + Math.Round(Math.Abs(signedMeters), MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture) + "m", null);
+
         public static TrackProgressDistance FromMeters(double signedMeters, float trackLength)
         {
             double absoluteMeters = Math.Abs(signedMeters);
@@ -262,6 +273,9 @@ namespace AMS2LeagueClient.Core.Presentation
 
     public sealed class TrackProximityResolver
     {
+        private const double GridRangeMeters = 150;
+        private readonly ParticipantRoleClassifier _roles = new ParticipantRoleClassifier();
+
         public TrackProximity Resolve(
             float trackLength,
             ParticipantSnapshot local,
@@ -269,18 +283,36 @@ namespace AMS2LeagueClient.Core.Presentation
         {
             if (local == null) throw new ArgumentNullException(nameof(local));
             if (participants == null) throw new ArgumentNullException(nameof(participants));
+            // PitMode is observed location/state; a pit request (PitSchedule) is not.
+            if (!local.KnownPitMode.HasValue) return Unknown();
+            bool inPit = local.KnownPitMode != PitMode.None;
+            ParticipantSnapshot[] opponents = participants
+                .Where(item => item.IsActive && item.Index != local.Index && _roles.IsLeagueDriver(item) && item.KnownPitMode.HasValue
+                    && (item.KnownPitMode != PitMode.None) == inPit)
+                .ToArray();
+            // Pit/garage lap progress may be unset, retained or projected onto the
+            // main circuit. Never use that progress to select a car on the parallel track.
+            if (inPit) return ResolveWorldProximity(local, opponents, inPit: true);
+            // AMS2 defines lap distance 0 as UNSET. The grid can stay at zero until
+            // each car crosses the line; classification order is not physical proximity.
+            if (local.LapsCompleted == 0 && local.CurrentLap <= 1
+                && (HasUnstartedProgress(local, trackLength)
+                    || (local.CurrentLapDistance <= GridRangeMeters && opponents.Any(item => HasUnstartedProgress(item, trackLength)))))
+            {
+                return ResolveWorldProximity(local, opponents, inPit: false);
+            }
             if (!IsValidLapDistance(local.CurrentLapDistance, trackLength))
             {
                 return Unknown();
             }
 
-            ProximityCandidate[] candidates = participants
-                .Where(item => item.IsActive && item.Index != local.Index)
-                .Where(item => IsValidLapDistance(item.CurrentLapDistance, trackLength))
+            ProximityCandidate[] candidates = opponents
+                .Where(item => IsValidLapDistance(item.CurrentLapDistance, trackLength) && !HasUnstartedProgress(item, trackLength))
                 .Select(item => new ProximityCandidate(
                     item,
                     ForwardDistance(local.CurrentLapDistance, item.CurrentLapDistance, trackLength),
                     ForwardDistance(item.CurrentLapDistance, local.CurrentLapDistance, trackLength)))
+                .Where(item => item.ForwardMeters > 0.01 && item.BehindMeters > 0.01)
                 .ToArray();
 
             if (candidates.Length == 0)
@@ -303,6 +335,54 @@ namespace AMS2LeagueClient.Core.Presentation
                 behind.Participant,
                 TrackProgressDistance.FromMeters(-behind.BehindMeters, trackLength));
         }
+
+        private static bool HasUnstartedProgress(ParticipantSnapshot participant, float trackLength)
+            => participant.LapsCompleted == 0 && participant.CurrentLap <= 1
+                && (!IsValidLapDistance(participant.CurrentLapDistance, trackLength) || participant.CurrentLapDistance <= 0.01f);
+
+        private static TrackProximity ResolveWorldProximity(ParticipantSnapshot local, ParticipantSnapshot[] opponents, bool inPit)
+        {
+            if (!HasWorldPose(local)) return Unknown();
+            // AMS2 yaw 0 faces -Z; measured moving SHM samples confirm (-sin(yaw), -cos(yaw)).
+            double forwardX = -Math.Sin(local.Orientation.Y);
+            double forwardZ = -Math.Cos(local.Orientation.Y);
+            ParticipantSnapshot? ahead = null, behind = null;
+            double aheadMeters = double.PositiveInfinity, behindMeters = double.PositiveInfinity;
+            foreach (ParticipantSnapshot item in opponents)
+            {
+                if (!HasWorldPose(item) || (item.KnownRaceState != RaceState.NotStarted && item.KnownRaceState != RaceState.Racing)) continue;
+                double x = (double)item.WorldPosition.X - local.WorldPosition.X;
+                double y = (double)item.WorldPosition.Y - local.WorldPosition.Y;
+                double z = (double)item.WorldPosition.Z - local.WorldPosition.Z;
+                double along = x * forwardX + z * forwardZ;
+                double across = x * forwardZ - z * forwardX;
+                double meters = Math.Sqrt(x * x + y * y + z * z);
+                // ponytail: nearby world corridor, not a pit/track topology solver.
+                // Missing/ambiguous geometry stays unknown; never fall back across areas.
+                // Garage cars can face out of their boxes rather than along the lane.
+                if (meters > GridRangeMeters || Math.Abs(across) > 15 || Math.Abs(y) > 6
+                    || Math.Abs(along) <= 0.5
+                    || (!inPit && Math.Cos(item.Orientation.Y - local.Orientation.Y) < 0.5)) continue;
+                if (along > 0 && meters < aheadMeters)
+                {
+                    ahead = item;
+                    aheadMeters = meters;
+                }
+                if (along < 0 && meters < behindMeters)
+                {
+                    behind = item;
+                    behindMeters = meters;
+                }
+            }
+            return new TrackProximity(
+                ahead, ahead == null ? TrackProgressDistance.Unknown() : TrackProgressDistance.FromWorldMeters(aheadMeters),
+                behind, behind == null ? TrackProgressDistance.Unknown() : TrackProgressDistance.FromWorldMeters(-behindMeters));
+        }
+
+        private static bool HasWorldPose(ParticipantSnapshot participant)
+            => IsFinite(participant.WorldPosition.X) && IsFinite(participant.WorldPosition.Y) && IsFinite(participant.WorldPosition.Z)
+                && IsFinite(participant.Orientation.Y)
+                && (participant.WorldPosition.X != 0 || participant.WorldPosition.Y != 0 || participant.WorldPosition.Z != 0);
 
         private static TrackProximity Unknown()
             => new TrackProximity(

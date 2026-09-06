@@ -7,33 +7,58 @@
              SnapsToDevicePixels="True" UseLayoutRounding="True" IsHitTestVisible="False">
     <Border Visibility="{Binding IsBottomGapPanelVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
             Background="{StaticResource SecondaryPanelBackgroundBrush}" BorderBrush="#6257D5FF" BorderThickness="1" CornerRadius="8" Padding="10,7" ClipToBounds="True">
-        <StackPanel>
-            <Grid x:Name="AheadRow" Height="44">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+            <Grid x:Name="AheadRow">
                 <Grid.RenderTransform><TranslateTransform /></Grid.RenderTransform>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="27"/><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="86"/><ColumnDefinition Width="82"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="27"/><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="112"/><ColumnDefinition Width="105"/></Grid.ColumnDefinitions>
                 <TextBlock Text="▲" Foreground="#FFB454" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding AheadPosition}" Foreground="#FFDBA5" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" FontWeight="Bold" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="{Binding AheadName}" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="3" Text="{Binding AheadGap}" Foreground="#FFCC86" FontSize="{x:Static core:OverlayUiMetrics.FontTitle}" FontWeight="Bold" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                <TextBlock x:Name="AheadNameText" Grid.Column="2" Text="{Binding AheadName}" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <Viewbox x:Name="AheadGapPanel" Grid.Column="3" Stretch="Uniform" StretchDirection="DownOnly" Margin="8,0,4,0" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <StackPanel>
+                        <TextBlock x:Name="AheadLapGapText" Text="{Binding AheadLapGap}" Foreground="#FFDBA5" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" HorizontalAlignment="Right">
+                            <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}"><Style.Triggers><DataTrigger Binding="{Binding AheadLapGap}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock x:Name="AheadTimeGapText" Text="{Binding AheadGap}" Foreground="#FFCC86" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" HorizontalAlignment="Right">
+                            <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}"><Style.Triggers>
+                                <DataTrigger Binding="{Binding AheadGap}" Value="—"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                <MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding AheadGap}" Value="—"/><Condition Binding="{Binding AheadLapGap}" Value=""/></MultiDataTrigger.Conditions><Setter Property="Visibility" Value="Visible"/></MultiDataTrigger>
+                            </Style.Triggers></Style></TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Viewbox>
                 <StackPanel x:Name="AheadDistancePanel" Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" RenderTransformOrigin="1,0.5">
                     <StackPanel.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></StackPanel.RenderTransform>
                     <TextBlock Text="{Binding AheadDistanceTrendArrow}" Foreground="{Binding AheadDistanceColor}" FontSize="{x:Static core:OverlayUiMetrics.FontTitle}" FontWeight="Bold" Margin="0,0,4,0" />
                     <TextBlock Text="{Binding AheadDistance}" Foreground="{Binding AheadDistanceColor}" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" FontWeight="Bold" Style="{StaticResource HudNumericText}" />
                 </StackPanel>
             </Grid>
-            <Grid x:Name="BehindRow" Height="44">
+            <Grid x:Name="BehindRow" Grid.Row="1">
                 <Grid.RenderTransform><TranslateTransform /></Grid.RenderTransform>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="27"/><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="86"/><ColumnDefinition Width="82"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="27"/><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="112"/><ColumnDefinition Width="105"/></Grid.ColumnDefinitions>
                 <TextBlock Text="▼" Foreground="#57D5FF" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding BehindPosition}" Foreground="#A6EDFF" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" FontWeight="Bold" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="{Binding BehindName}" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="3" Text="{Binding BehindGap}" Foreground="#7FE4FF" FontSize="{x:Static core:OverlayUiMetrics.FontTitle}" FontWeight="Bold" Style="{StaticResource HudNumericText}" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                <TextBlock x:Name="BehindNameText" Grid.Column="2" Text="{Binding BehindName}" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <Viewbox x:Name="BehindGapPanel" Grid.Column="3" Stretch="Uniform" StretchDirection="DownOnly" Margin="8,0,4,0" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <StackPanel>
+                        <TextBlock x:Name="BehindLapGapText" Text="{Binding BehindLapGap}" Foreground="#A6EDFF" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" HorizontalAlignment="Right">
+                            <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}"><Style.Triggers><DataTrigger Binding="{Binding BehindLapGap}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock x:Name="BehindTimeGapText" Text="{Binding BehindGap}" Foreground="#7FE4FF" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" HorizontalAlignment="Right">
+                            <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}"><Style.Triggers>
+                                <DataTrigger Binding="{Binding BehindGap}" Value="—"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                <MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding BehindGap}" Value="—"/><Condition Binding="{Binding BehindLapGap}" Value=""/></MultiDataTrigger.Conditions><Setter Property="Visibility" Value="Visible"/></MultiDataTrigger>
+                            </Style.Triggers></Style></TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Viewbox>
                 <StackPanel x:Name="BehindDistancePanel" Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" RenderTransformOrigin="1,0.5">
                     <StackPanel.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></StackPanel.RenderTransform>
                     <TextBlock Text="{Binding BehindDistanceTrendArrow}" Foreground="{Binding BehindDistanceColor}" FontSize="{x:Static core:OverlayUiMetrics.FontTitle}" FontWeight="Bold" Margin="0,0,4,0" />
                     <TextBlock Text="{Binding BehindDistance}" Foreground="{Binding BehindDistanceColor}" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" FontWeight="Bold" Style="{StaticResource HudNumericText}" />
                 </StackPanel>
             </Grid>
-        </StackPanel>
+        </Grid>
     </Border>
 </UserControl>

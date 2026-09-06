@@ -14,9 +14,12 @@ namespace AMS2LeagueClient.Core.Presentation
         Waiting
     }
 
+    // Display selection, never an authority or capture/upload policy signal.
+    public enum SessionPlayMode { Unknown, SinglePlayer, Multiplayer }
+
     public sealed class MultiplayerWaitingOverlayViewModel
     {
-        public string Title { get; set; } = "멀티플레이어 세션 대기";
+        public string Title { get; set; } = "세션 대기 · 모드 미확인";
         public string SessionLabel { get; set; } = "—";
         public string ParticipantCountText { get; set; } = "리그 — / 원본 —";
         public string RemainingLabel { get; set; } = "상태";
@@ -47,7 +50,7 @@ namespace AMS2LeagueClient.Core.Presentation
     }
 
     /// <summary>
-    /// Selects the compact multiplayer waiting surface without guessing session
+    /// Selects the compact session waiting surface without guessing session
     /// state. It also retains a valid timer for at most three seconds inside the
     /// same observed game/session generation to absorb a single transient -1.
     /// </summary>
@@ -60,7 +63,8 @@ namespace AMS2LeagueClient.Core.Presentation
         private float? _lastValidRemaining;
         private DateTimeOffset _lastValidRemainingAt;
 
-        public MultiplayerOverlayDecision Observe(TelemetrySnapshot snapshot, int sessionGeneration, DateTimeOffset now)
+        public MultiplayerOverlayDecision Observe(TelemetrySnapshot snapshot, int sessionGeneration, DateTimeOffset now,
+            SessionPlayMode playMode = SessionPlayMode.Unknown)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
 
@@ -76,7 +80,6 @@ namespace AMS2LeagueClient.Core.Presentation
                 .Take(rawParticipantCount)
                 .Where(item => item.IsActive)
                 .ToArray();
-            bool multiplayer = active.Length > 1;
             bool remainingValid = IsFiniteNonNegative(snapshot.EventTimeRemaining);
             bool waitingGameState = snapshot.KnownGameState == GameState.InGameMenuTimeTicking;
             bool notStarted = snapshot.RaceStateRaw == (uint)RaceState.NotStarted
@@ -85,19 +88,29 @@ namespace AMS2LeagueClient.Core.Presentation
                 && !remainingValid
                 && notStarted;
 
-            if (multiplayer && (waitingGameState || endTransition))
+            if (active.Length > 0 && (waitingGameState || endTransition))
             {
                 int leagueCount = active.Count(_roles.IsLeagueDriver);
-                string sessionLabel = snapshot.KnownSessionState == SessionState.Invalid
-                    ? "INVALID"
-                    : snapshot.KnownSessionState.HasValue
-                        ? OverlayTextCatalog.Korean.SessionName(snapshot.KnownSessionState)
-                        : StateText.Session(snapshot.SessionStateRaw);
+                string sessionLabel = snapshot.KnownSessionState switch
+                {
+                    SessionState.Practice => "자유 연습 주행",
+                    SessionState.Test => "테스트 주행",
+                    SessionState.Invalid => "세션 전환 중",
+                    null => "세션 미확인",
+                    _ => OverlayTextCatalog.Korean.SessionName(snapshot.KnownSessionState)
+                };
                 return new MultiplayerOverlayDecision(
                     MultiplayerOverlayMode.Waiting,
-                    waitingGameState ? "MULTIPLAYER_MENU_WAITING" : "MULTIPLAYER_SESSION_TRANSITION",
+                    waitingGameState ? "SESSION_MENU_WAITING" : "SESSION_TRANSITION",
                     new MultiplayerWaitingOverlayViewModel
                     {
+                        // SHM v14 has no authoritative online flag. AI count and privacy are not mode evidence.
+                        Title = playMode switch
+                        {
+                            SessionPlayMode.SinglePlayer => "싱글플레이어 세션 대기",
+                            SessionPlayMode.Multiplayer => "멀티플레이어 세션 대기",
+                            _ => "세션 대기 · 모드 미확인"
+                        },
                         SessionLabel = sessionLabel,
                         ParticipantCountText = "리그 " + leagueCount.ToString(CultureInfo.InvariantCulture)
                             + " / 원본 " + rawParticipantCount.ToString(CultureInfo.InvariantCulture),

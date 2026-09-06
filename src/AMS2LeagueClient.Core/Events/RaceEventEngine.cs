@@ -38,7 +38,7 @@ namespace AMS2LeagueClient.Core.Events
         private float? _raceFastest;
         private PitMode? _lastPitMode;
         private RaceState? _lastRaceState;
-        private bool _lastLapInvalid;
+        private bool _invalidLapNotified;
         private bool _finalLapEmitted;
         private bool _openingStartEmitted;
         private int _stableLeaderIndex = -1;
@@ -59,7 +59,8 @@ namespace AMS2LeagueClient.Core.Events
             LeagueClassification league,
             int generation,
             DateTimeOffset now,
-            BroadcastOverlayState overlayState = BroadcastOverlayState.NormalRacing)
+            BroadcastOverlayState overlayState = BroadcastOverlayState.NormalRacing,
+            IReadOnlyCollection<int>? outLapParticipants = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (league == null) throw new ArgumentNullException(nameof(league));
@@ -84,6 +85,7 @@ namespace AMS2LeagueClient.Core.Events
             if (stateReset)
             {
                 Initialize(snapshot, league, local, generation);
+                DetectInvalidLap(snapshot, local, detected, now, outLapParticipants);
                 return new RaceEventUpdate(detected, _queue.Tick(now), _queue.WaitingCount, true);
             }
 
@@ -101,7 +103,7 @@ namespace AMS2LeagueClient.Core.Events
             if (!EventSuppressionPolicy.ShouldSuppress(overlayState, OverlayEventType.PersonalBest)) DetectPersonalBest(local, detected, now);
             DetectRaceFastest(league, detected, now);
             DetectFinalLap(snapshot, league, local, detected, now);
-            DetectInvalidLap(snapshot, local, detected, now);
+            DetectInvalidLap(snapshot, local, detected, now, outLapParticipants);
             if (!EventSuppressionPolicy.ShouldSuppress(overlayState, OverlayEventType.Battle)) DetectBattle(snapshot, league, local, detected, now);
 
             _lastSnapshotAt = snapshot.CapturedAt;
@@ -127,7 +129,7 @@ namespace AMS2LeagueClient.Core.Events
             _raceFastest = null;
             _lastPitMode = null;
             _lastRaceState = null;
-            _lastLapInvalid = false;
+            _invalidLapNotified = false;
             _finalLapEmitted = false;
             _openingStartEmitted = false;
             _stableLeaderIndex = -1;
@@ -160,7 +162,7 @@ namespace AMS2LeagueClient.Core.Events
             _raceFastest = fastest == null ? null : Positive(fastest.Source.BestLapTime);
             _lastPitMode = local.KnownPitMode;
             _lastRaceState = local.KnownRaceState;
-            _lastLapInvalid = local.LapInvalidated || snapshot.LapInvalidated;
+            _invalidLapNotified = false;
             _finalLapEmitted = snapshot.LapsInEvent > 0 && local.CurrentLap >= snapshot.LapsInEvent;
             _openingStartEmitted = false;
             LeagueParticipant? leader = league.Participants.FirstOrDefault(item => item.LeaguePosition == 1);
@@ -512,24 +514,27 @@ namespace AMS2LeagueClient.Core.Events
             TelemetrySnapshot snapshot,
             ParticipantSnapshot local,
             List<OverlayEvent> detected,
-            DateTimeOffset now)
+            DateTimeOffset now,
+            IReadOnlyCollection<int>? outLapParticipants)
         {
-            bool invalid = local.LapInvalidated || snapshot.LapInvalidated;
-            if (invalid && !_lastLapInvalid)
+            if (local.CurrentLap != _lastCurrentLap || local.LapsCompleted != _lastLapsCompleted) _invalidLapNotified = false;
+            if (local.KnownRaceState != RaceState.Racing) return;
+            bool invalid = InvalidLapDisplayTracker.ShouldShowInvalidLap(snapshot, local, isLocal: true, outLapParticipants: outLapParticipants);
+            if (invalid && !_invalidLapNotified)
             {
                 Emit(new OverlayEvent(
                     OverlayEventType.InvalidLap,
-                    OverlayEventPriority.Low,
+                    OverlayEventPriority.Critical,
                     now,
-                    TimeSpan.FromSeconds(2),
-                    TimeSpan.FromSeconds(8),
+                    TimeSpan.FromSeconds(4),
+                    TimeSpan.FromSeconds(12),
                     _text.Get(OverlayTextKey.InvalidLap),
                     "LAP " + local.CurrentLap,
                     string.Empty,
                     "LOCAL_LAP_INVALIDATED"), detected, now);
             }
 
-            _lastLapInvalid = invalid;
+            if (invalid) _invalidLapNotified = true;
         }
 
         private void DetectBattle(
@@ -539,8 +544,10 @@ namespace AMS2LeagueClient.Core.Events
             List<OverlayEvent> detected,
             DateTimeOffset now)
         {
+            // Pit-relative proximity is useful to the driver, but not a racing battle.
+            if (local.KnownPitMode != PitMode.None) return;
             if (local.LapsCompleted == 0 && local.CurrentLapDistance < 100.0f) return;
-            TrackProximity proximity = new TrackProximityResolver().Resolve(snapshot.TrackLength, local, league.Participants.Select(item => item.Source));
+            TrackProximity proximity = new TrackProximityResolver().Resolve(snapshot.TrackLength, local, snapshot.Participants);
             ParticipantSnapshot? physicalAhead = proximity.Ahead;
             LeagueParticipant? ahead = physicalAhead == null ? null : league.Participants.FirstOrDefault(item => item.Source.Index == physicalAhead.Index);
             if (ahead == null || league.Ahead?.Source.Index != ahead.Source.Index || !league.CanUseAheadGameSplit) return;

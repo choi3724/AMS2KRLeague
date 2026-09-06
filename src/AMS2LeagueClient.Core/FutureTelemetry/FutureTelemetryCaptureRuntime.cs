@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using AMS2LeagueClient.Core.Telemetry;
+using AMS2LeagueClient.Core.Diagnostics;
 
 namespace AMS2LeagueClient.Core.FutureTelemetry
 {
@@ -59,6 +60,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             IReadOnlyList<TelemetryChunkCommitOutcome>>? _compactAttemptIntegrityCommit;
         private readonly Channel<RuntimeCaptureMessage> _channel;
         private readonly Task _worker;
+        private readonly ArchiveFailureDiagnostics _diagnostics = new ArchiveFailureDiagnostics();
         private readonly object _ledgerGate = new object();
         private readonly Dictionary<string, AttemptLedgerState> _attemptLedgers =
             new Dictionary<string, AttemptLedgerState>(StringComparer.Ordinal);
@@ -173,6 +175,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         /// SessionWitness integration must reuse it instead of generating another ID.
         /// </summary>
         public event Action<TelemetryArchiveIdentity>? IdentityStarted;
+        public Action<string>? FailureDiagnostic { set => _diagnostics.Write = value; }
 
         public TelemetryArchiveIdentity? CurrentIdentity
         {
@@ -398,8 +401,9 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                     Interlocked.Increment(ref _completedAttempts);
                 }
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                _diagnostics.Report(exception, closingIdentity, "CLOSE");
                 ledger.AddFailure(TelemetryStreamType.SESSION_METADATA, LossStage.FINALIZE, 1);
                 ledger.MarkFinalizeAcknowledged(false);
                 TryPersistLedger(ledger);
@@ -451,7 +455,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 && snapshot.RaceStateRaw == (uint)RaceState.NotStarted;
         }
 
-        private static bool IsCaptureScope(TelemetrySnapshot snapshot)
+        internal static bool IsCaptureScope(TelemetrySnapshot snapshot)
         {
             if (snapshot.Version != SharedMemoryLayout.SupportedVersion
                 || !SnapshotValidator.IsParticipantCountValid(snapshot.NumParticipants)
@@ -487,6 +491,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                         {
                             if (archive != null) await DisposeArchiveAsync(archive).ConfigureAwait(false);
                             archive = _archiveFactory(_archiveRoot, message.Identity, _options);
+                            archive.FailureDiagnostic = value => _diagnostics.Write?.Invoke(value);
                             currentAttemptId = message.Identity.AttemptId;
                         }
                         Capture(archive, message.Batch);
@@ -551,6 +556,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                                 }
                                 catch (Exception exception)
                                 {
+                                    _diagnostics.Report(exception, message.Identity, "INTEGRITY");
                                     Interlocked.Increment(ref _backgroundFailures);
                                     ledger.AddFailure(
                                         TelemetryStreamType.SESSION_METADATA,
@@ -590,6 +596,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                     }
                     catch (Exception exception)
                     {
+                        _diagnostics.Report(exception, message.Identity, message.ClosesAttempt ? "RUNTIME_FINALIZE" : "RUNTIME_PROCESS");
                         Interlocked.Increment(ref _backgroundFailures);
                         TelemetryArchiveCompletionReport? report = archive?.CompletionReport;
                         if (message.ClosesAttempt && report != null)
@@ -627,8 +634,9 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                     {
                         await DisposeArchiveAsync(archive).ConfigureAwait(false);
                     }
-                    catch
+                    catch (Exception exception)
                     {
+                        _diagnostics.Report(exception, archive.Identity, "RUNTIME_DISPOSE");
                         Interlocked.Increment(ref _backgroundFailures);
                     }
                 }
@@ -644,10 +652,13 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
 
         private async Task DisposeArchiveAsync(LocalDurableTelemetryArchive archive)
         {
-            await archive.DisposeAsync().ConfigureAwait(false);
-            TelemetryArchiveRuntimeCounters counters = archive.Counters;
-            Interlocked.Add(ref _committedChunks, counters.CommittedChunks);
-            Interlocked.Add(ref _archiveDroppedMessages, counters.DroppedMessages);
+            try { await archive.DisposeAsync().ConfigureAwait(false); }
+            finally
+            {
+                TelemetryArchiveRuntimeCounters counters = archive.Counters;
+                Interlocked.Add(ref _committedChunks, counters.CommittedChunks);
+                Interlocked.Add(ref _archiveDroppedMessages, counters.DroppedMessages);
+            }
         }
 
         private static void ApplyArchiveReport(
@@ -682,7 +693,8 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
 
         private static LossStage StageFor(Exception exception)
         {
-            if (exception is JsonException || exception is NotSupportedException) return LossStage.SERIALIZATION;
+            if (exception is JsonException || exception is NotSupportedException
+                || exception is AMS2LeagueClient.Core.CompactTelemetry.CompactTelemetryFormatException) return LossStage.SERIALIZATION;
             if (exception is IOException || exception is UnauthorizedAccessException) return LossStage.DISK;
             return LossStage.WORKER;
         }
@@ -736,6 +748,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 exception is JsonException ||
                 exception is NotSupportedException)
             {
+                _diagnostics.Report(exception, ledger.Identity, "LEDGER_WRITE");
                 return false;
             }
         }
@@ -867,6 +880,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             }
 
             public int AttemptNumber => _identity.AttemptNumber;
+            public TelemetryArchiveIdentity Identity => _identity;
 
             public void AddAccepted(IEnumerable<TelemetryStreamType> streams)
             {

@@ -27,7 +27,7 @@ namespace AMS2LeagueClient.Core.Presentation
 
             if (!float.IsNaN(directSplitSeconds) && !float.IsInfinity(directSplitSeconds) && directSplitSeconds >= 0.0f)
             {
-                return new GapDisplay("+" + directSplitSeconds.ToString("0.000", CultureInfo.InvariantCulture), GapSource.GameSplit);
+                return new GapDisplay("+" + directSplitSeconds.ToString("0.000", CultureInfo.InvariantCulture) + "s", GapSource.GameSplit);
             }
 
             return new GapDisplay("—", GapSource.Unknown);

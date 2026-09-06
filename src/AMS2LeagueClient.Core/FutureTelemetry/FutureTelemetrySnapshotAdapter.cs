@@ -941,7 +941,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 ParticipantRef = identity?.ParticipantRef,
                 Lap = participant == null ? (int?)null : ToInt(participant.CurrentLap),
                 Sector = participant?.CurrentSector,
-                LapDistanceMeters = participant == null ? null : FiniteOrNull(participant.CurrentLapDistance),
+                LapDistanceMeters = participant == null ? null : NonNegativeFiniteOrNull(participant.CurrentLapDistance),
                 WorldX = participant == null ? null : FiniteOrNull(participant.WorldPosition.X),
                 WorldY = participant == null ? null : FiniteOrNull(participant.WorldPosition.Y),
                 WorldZ = participant == null ? null : FiniteOrNull(participant.WorldPosition.Z),

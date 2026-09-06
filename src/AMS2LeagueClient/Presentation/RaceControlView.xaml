@@ -14,14 +14,11 @@
                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Grid x:Name="Heading" Grid.ColumnSpan="2">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="TitleText" Text="{Binding Title}" Foreground="{Binding Accent}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" TextWrapping="Wrap" Margin="0,0,8,0" />
-                    <Border Grid.Column="1" Background="#332B3A49" CornerRadius="5" Padding="6,1" VerticalAlignment="Top" Visibility="{Binding IsExpanded, Converter={StaticResource BooleanToVisibilityConverter}}"><TextBlock x:Name="CountText" Text="{Binding CountText}" Foreground="#DDE7F1" FontWeight="SemiBold" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}" Style="{StaticResource HudNumericText}"/></Border>
+                    <TextBlock x:Name="TitleText" Text="{Binding Title}" Foreground="{Binding Accent}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" TextWrapping="Wrap" Margin="0,0,8,0" />
                 </Grid>
                 <StackPanel x:Name="ExpandedContent" Grid.Row="1" Grid.ColumnSpan="2" Visibility="{Binding IsExpanded, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,4,0,0">
                     <TextBlock x:Name="DriverText" Text="{Binding DriverLine}" Foreground="White" FontWeight="SemiBold" FontSize="{x:Static core:OverlayUiMetrics.FontEmphasis}" TextWrapping="Wrap" />
-                    <TextBlock x:Name="MessageText" Text="{Binding Message}" Foreground="{Binding Accent}" FontWeight="Bold" FontSize="17" TextWrapping="Wrap" />
-                    <TextBlock x:Name="HistoryText" Text="{Binding HistoryText}" Foreground="#8FA4B8" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}" Margin="0,5,0,0" TextWrapping="Wrap" />
+                    <TextBlock x:Name="MessageText" Text="{Binding Message}" Foreground="{Binding Accent}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock x:Name="StateLabelText" Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding StateLabel}" Foreground="{Binding Accent}" FontWeight="SemiBold" FontSize="{x:Static core:OverlayUiMetrics.FontBody}" Margin="0,4,0,0" HorizontalAlignment="Right" TextWrapping="Wrap" RenderTransformOrigin="1,0.5">
                     <TextBlock.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></TextBlock.RenderTransform>

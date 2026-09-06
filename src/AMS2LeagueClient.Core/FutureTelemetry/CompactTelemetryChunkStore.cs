@@ -40,6 +40,8 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         private readonly long _replayBattleIntervalMs;
         private int _participantDictionaryRevision;
         private int _participantDictionaryEmittedRevision;
+        private readonly Dictionary<(TelemetryStreamType, int), IReadOnlyList<CompactArtifact>> _pendingArtifacts =
+            new Dictionary<(TelemetryStreamType, int), IReadOnlyList<CompactArtifact>>();
 
         public CompactTelemetryChunkStore(string root, TelemetryArchiveIdentity identity)
             : this(root, identity, null)
@@ -73,8 +75,14 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 outcomes.Add(_legacyStore.Commit(source));
             }
 
+            var key = (source.StreamType, source.ChunkIndex);
+            if (!_pendingArtifacts.TryGetValue(key, out IReadOnlyList<CompactArtifact>? artifacts))
+            {
+                artifacts = BuildArtifacts(source).ToArray();
+                _pendingArtifacts.Add(key, artifacts);
+            }
             int artifactIndex = 0;
-            foreach (CompactArtifact artifact in BuildArtifacts(source))
+            foreach (CompactArtifact artifact in artifacts)
             {
                 uint sequence = checked((uint)(source.ChunkIndex * SequenceStride
                     + ((int)source.StreamType * 6) + artifactIndex));
@@ -86,6 +94,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             {
                 throw new InvalidDataException("Telemetry source chunk produced no durable output.");
             }
+            _pendingArtifacts.Remove(key);
             return Aggregate(outcomes);
         }
 
@@ -582,6 +591,23 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         }
 
         private TelemetryChunkCommitOutcome CommitArtifact(
+            TelemetryChunkEnvelope source,
+            CompactArtifact artifact,
+            uint sequence)
+        {
+            try { return CommitArtifactCore(source, artifact, sequence); }
+            catch (Exception exception)
+            {
+                exception.Data["ArchiveSchemaId"] = (ushort)artifact.SchemaId;
+                exception.Data["ArchiveSequence"] = sequence;
+                // A failed artifact may have been the sole dictionary carrier. Ensure
+                // subsequent healthy chunks can publish it; cached retries stay exact.
+                if (artifact.Participants != null) _participantDictionaryEmittedRevision = -1;
+                throw;
+            }
+        }
+
+        private TelemetryChunkCommitOutcome CommitArtifactCore(
             TelemetryChunkEnvelope source,
             CompactArtifact artifact,
             uint sequence)

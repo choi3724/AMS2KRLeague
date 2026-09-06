@@ -31,7 +31,10 @@ namespace AMS2LeagueClient.Presentation
         private void FitTextToCard()
         {
             if (ActualWidth <= 0 || ActualHeight <= 0) return;
-            bool expanded = (DataContext as RaceControlViewModel)?.IsExpanded == true;
+            var model = DataContext as RaceControlViewModel;
+            bool expanded = model?.IsExpanded == true;
+            DriverText.Visibility = string.IsNullOrEmpty(model?.DriverLine) ? Visibility.Collapsed : Visibility.Visible;
+            StateLabelText.Visibility = string.IsNullOrEmpty(model?.StateLabel) ? Visibility.Collapsed : Visibility.Visible;
             bool wide = ActualWidth >= ActualHeight * 3.5;
             bool inline = wide || (!expanded && ActualWidth >= 250 && ActualWidth >= ActualHeight * 2);
             Panel.Padding = wide ? new Thickness(10, 3, 10, 3) : new Thickness(14, 8, 14, 8);
@@ -46,16 +49,14 @@ namespace AMS2LeagueClient.Presentation
             Grid.SetRow(StateLabelText, inline ? (expanded ? 1 : 0) : 2);
             Grid.SetColumn(StateLabelText, inline && !expanded ? 1 : 0);
             Grid.SetColumnSpan(StateLabelText, inline ? 1 : 2);
-            HistoryText.Visibility = ActualHeight >= 120 && !wide ? Visibility.Visible : Visibility.Collapsed;
             ExpandedContent.Margin = wide ? new Thickness(10, 0, 0, 0) : new Thickness(0, 4, 0, 0);
             double designWidth = expanded ? OverlayUiMetrics.RaceControlExpandedWidth : OverlayUiMetrics.RaceControlCompactWidth;
             double designHeight = expanded ? OverlayUiMetrics.RaceControlExpandedHeight : OverlayUiMetrics.RaceControlCompactHeight;
             double scale = Math.Clamp(Math.Sqrt(ActualWidth * ActualHeight / (designWidth * designHeight)), 0.5, 3);
             Body.Width = Math.Max(1, ActualWidth - Panel.Padding.Left - Panel.Padding.Right
                 - Panel.BorderThickness.Left - Panel.BorderThickness.Right);
-            TitleText.FontSize = DriverText.FontSize = OverlayUiMetrics.FontEmphasis * scale;
-            MessageText.FontSize = 17 * scale;
-            HistoryText.FontSize = CountText.FontSize = OverlayUiMetrics.FontTiny * scale;
+            TitleText.FontSize = MessageText.FontSize = OverlayUiMetrics.FontValue * scale;
+            DriverText.FontSize = OverlayUiMetrics.FontEmphasis * scale;
             StateLabelText.FontSize = OverlayUiMetrics.FontBody * scale;
             StateLabelText.MaxWidth = Body.Width * (inline ? (expanded ? 0.3 : 0.45) : 1);
         }

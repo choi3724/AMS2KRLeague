@@ -3,12 +3,15 @@
         <Border.RenderTransform><TranslateTransform /></Border.RenderTransform>
         <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Border x:Name="EventSweep" Grid.ColumnSpan="4" Margin="-14,-12,-18,-12" Opacity="0" IsHitTestVisible="False" Background="{Binding Accent}" RenderTransformOrigin="0,0.5">
+                <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></Border.RenderTransform>
+            </Border>
             <!-- Broadcast accent bar grows from the top when a card is presented. -->
             <Border x:Name="AccentBar" Width="6" CornerRadius="3" Background="{Binding Accent}" Margin="0,0,12,0" RenderTransformOrigin="0.5,0">
                 <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></Border.RenderTransform>
             </Border>
             <TextBlock Grid.Column="1" Text="{Binding Arrow}" Foreground="{Binding Accent}" FontSize="25" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0" />
-            <StackPanel x:Name="Body" Grid.Column="2">
+            <StackPanel x:Name="Body" Grid.Column="2" VerticalAlignment="Center">
                 <StackPanel.RenderTransform><TranslateTransform /></StackPanel.RenderTransform>
                 <TextBlock Text="{Binding Title}" Foreground="{Binding Accent}" FontSize="{x:Static core:OverlayUiMetrics.FontTitle}" FontWeight="Bold"/>
                 <TextBlock Text="{Binding PrimaryText}" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontValue}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>

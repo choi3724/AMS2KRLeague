@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using AMS2LeagueClient.Core.Events;
 using AMS2LeagueClient.Core.Localization;
 using AMS2LeagueClient.Core.RaceControl;
@@ -27,6 +26,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string Accent { get; set; } = "#82F1D0";
         public string Arrow { get; set; } = string.Empty;
         public bool IsDemo { get; set; }
+        public bool FlashOnEntry { get; set; }
 
         public static EventCardViewModel FromEvent(OverlayEvent? item, bool demo, OverlayViewModel? timing = null)
         {
@@ -42,8 +42,9 @@ namespace AMS2LeagueClient.Core.Presentation
                 SecondaryText = item.Type == OverlayEventType.Battle && timing != null
                     ? timing.AheadGap + " · " + timing.AheadDistance
                     : item.SecondaryText,
-                Accent = down ? "#FF7777" : critical ? "#FFD166" : "#82F1D0",
+                Accent = down || item.Type == OverlayEventType.InvalidLap ? "#FF7777" : critical ? "#FFD166" : "#82F1D0",
                 Arrow = item.Type == OverlayEventType.PositionGained ? "▲" : down ? "▼" : string.Empty,
+                FlashOnEntry = item.Type == OverlayEventType.RaceFastestLap || item.Type == OverlayEventType.LeaderChange,
                 IsDemo = demo
             };
         }
@@ -60,8 +61,6 @@ namespace AMS2LeagueClient.Core.Presentation
         public string DriverLine { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
         public string StateLabel { get; set; } = string.Empty;
-        public string HistoryText { get; set; } = string.Empty;
-        public string CountText { get; set; } = "0";
 
         public static RaceControlViewModel FromEvent(OverlayEvent? item)
         {
@@ -81,30 +80,23 @@ namespace AMS2LeagueClient.Core.Presentation
             RaceControlEvent? item = update.ActiveEvent;
             BroadcastOverlayState displayState = update.OverlayState & ~BroadcastOverlayState.SessionTransition;
             bool stateVisible = displayState != BroadcastOverlayState.NormalRacing;
-            // History is retained for diagnostics and for an expanded live card,
-            // but must not keep an empty compact card alive after the event ends.
+            // History remains in RaceControlUpdate, not in the on-screen card.
+            // It must not keep an empty card alive after the event ends.
             bool visible = item != null || stateVisible;
             string accent = AccentFor(item, update.OverlayState);
             string driver = item == null || item.ParticipantIndex < 0
                 ? string.Empty
                 : "P" + item.LeaguePosition + " " + item.Driver;
-            string history = string.Join("\n", update.History.Take(3).Select(historyItem =>
-                historyItem.DetectedAt.ToLocalTime().ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)
-                + "  "
-                + (historyItem.ParticipantIndex >= 0 ? historyItem.Driver + "  " : string.Empty)
-                + historyItem.Message));
             return new RaceControlViewModel
             {
                 IsVisible = visible,
                 IsExpanded = item != null,
                 EventId = item?.Id ?? "STATE:" + StateTextFor(displayState),
-                Text = item?.Title ?? "레이스 컨트롤 " + update.History.Count,
+                Text = item?.Title ?? "레이스 컨트롤",
                 Title = item?.Title ?? "레이스 컨트롤",
                 DriverLine = driver,
                 Message = item?.Message ?? StateTextFor(update.OverlayState),
                 StateLabel = StateTextFor(update.OverlayState),
-                HistoryText = history,
-                CountText = update.History.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 Accent = accent
             };
         }

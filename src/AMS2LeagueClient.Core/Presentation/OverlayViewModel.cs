@@ -96,6 +96,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public string BehindPosition { get; set; } = "P—";
         public string BehindName { get; set; } = "뒤차 없음";
         public string BehindGap { get; set; } = "—";
+        public string AheadLapGap { get; set; } = string.Empty;
+        public string BehindLapGap { get; set; } = string.Empty;
         public int? AheadLapGapCandidate { get; set; }
         public int? BehindLapGapCandidate { get; set; }
         public string AheadParticipantKey { get; set; } = string.Empty;
@@ -116,6 +118,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string LastLapText { get; set; } = "—";
         public string BestLapText { get; set; } = "—";
         public string CurrentLapText { get; set; } = "—";
+        public string CurrentLapColor { get; set; } = "#FFFFFF";
         public string Sector1Text { get; set; } = "—";
         public string Sector2Text { get; set; } = "—";
         public string Sector3Text { get; set; } = "—";
@@ -186,7 +189,8 @@ namespace AMS2LeagueClient.Core.Presentation
             float? eventTimeRemainingOverride = null,
             string? eventTimeRemainingTextOverride = null,
             int rankingRowCapacity = MaxRankingRows,
-            IReadOnlyDictionary<int, float>? participantLapTimes = null)
+            IReadOnlyDictionary<int, float>? participantLapTimes = null, // Legacy probe argument; best laps never use observed clocks.
+            IReadOnlyCollection<int>? outLapParticipants = null)
         {
             rankingRowCapacity = LeftTowerLayoutMetrics.ClampRankingRows(rankingRowCapacity);
             OverlayTextCatalog catalog = text ?? OverlayTextCatalog.Korean;
@@ -195,9 +199,9 @@ namespace AMS2LeagueClient.Core.Presentation
             TrackProximity proximity = new TrackProximityResolver().Resolve(
                 snapshot.TrackLength,
                 local,
-                league.Participants.Select(item => item.Source));
-            ParticipantSnapshot? ahead = proximity.Ahead ?? league.Ahead?.Source;
-            ParticipantSnapshot? behind = proximity.Behind ?? league.Behind?.Source;
+                snapshot.Participants); // Physical neighbours can be unranked while waiting in their pit boxes.
+            ParticipantSnapshot? ahead = proximity.Ahead;
+            ParticipantSnapshot? behind = proximity.Behind;
             LeagueParticipant? aheadLeague = LeagueParticipantOf(league, ahead);
             LeagueParticipant? behindLeague = LeagueParticipantOf(league, behind);
             bool aheadMatchesGameSplit = ahead != null
@@ -225,7 +229,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 local.Index,
                 broadcastStates,
                 league.FastestLapParticipant?.Source.Index,
-                participantLapTimes);
+                outLapParticipants);
             IReadOnlyList<RankingRowViewModel> rankingRows = SelectRankingRows(allRankingRows, rankingRowCapacity);
             bool playerPinnedAfterLeaders = league.Local?.LeaguePosition > rankingRowCapacity;
             float displayedEventTimeRemaining = eventTimeRemainingOverride ?? snapshot.EventTimeRemaining;
@@ -245,7 +249,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 AheadPosition = PositionOf(aheadLeague),
                 AheadName = NameOf(ahead, noCar),
                 AheadGap = aheadGap.Text,
-                AheadLapGapCandidate = aheadProgress.LapGap,
+                AheadLapGapCandidate = snapshot.KnownSessionState == Telemetry.SessionState.Race
+                    && proximity.AheadDistance.LapGap.HasValue ? aheadProgress.LapGap : null,
                 AheadParticipantKey = ParticipantKey(ahead),
                 AheadDistance = proximity.AheadDistance.Text,
                 AheadParticipantIndex = ahead?.Index ?? -1,
@@ -255,7 +260,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 BehindPosition = PositionOf(behindLeague),
                 BehindName = NameOf(behind, noCar),
                 BehindGap = behindGap.Text,
-                BehindLapGapCandidate = behindProgress.LapGap,
+                BehindLapGapCandidate = snapshot.KnownSessionState == Telemetry.SessionState.Race
+                    && proximity.BehindDistance.LapGap.HasValue ? behindProgress.LapGap : null,
                 BehindParticipantKey = ParticipantKey(behind),
                 BehindDistance = proximity.BehindDistance.Text,
                 BehindParticipantIndex = behind?.Index ?? -1,
@@ -269,7 +275,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 Sector1Text = FormatSectorTime(PreferParticipantTime(local.CurrentSector1Time, snapshot.CurrentSector1Time), 1, snapshot.NumSectors, local.CurrentSector),
                 Sector2Text = FormatSectorTime(PreferParticipantTime(local.CurrentSector2Time, snapshot.CurrentSector2Time), 2, snapshot.NumSectors, local.CurrentSector),
                 Sector3Text = FormatSectorTime(PreferParticipantTime(local.CurrentSector3Time, snapshot.CurrentSector3Time), 3, snapshot.NumSectors, local.CurrentSector),
-                CurrentLapStateText = local.LapInvalidated || snapshot.LapInvalidated ? catalog.Get(OverlayTextKey.CurrentLapInvalid) : catalog.Get(OverlayTextKey.GameTelemetry),
+                CurrentLapStateText = InvalidLapDisplayTracker.ShouldShowInvalidLap(snapshot, local, isLocal: true, outLapParticipants: outLapParticipants)
+                    ? catalog.Get(OverlayTextKey.CurrentLapInvalid) : catalog.Get(OverlayTextKey.GameTelemetry),
                 ShmVersion = snapshot.Version.ToString(CultureInfo.InvariantCulture),
                 BuildVersion = snapshot.BuildVersion.ToString(CultureInfo.InvariantCulture),
                 GameState = StateText.Game(snapshot.GameStateRaw),
@@ -382,7 +389,7 @@ namespace AMS2LeagueClient.Core.Presentation
             int localIndex,
             IReadOnlyDictionary<int, ParticipantBroadcastState>? broadcastStates,
             int? fastestIndex,
-            IReadOnlyDictionary<int, float>? participantLapTimes)
+            IReadOnlyCollection<int>? outLapParticipants)
         {
             return league.Participants
                 .Select(item =>
@@ -391,6 +398,13 @@ namespace AMS2LeagueClient.Core.Presentation
                     bool dimmed = ParticipantRowStateResolver.ShouldDim(displayState);
                     bool player = item.Source.Index == localIndex;
                     ClassBadgeStyle classBadge = ClassBadgePalette.Resolve(item.Source.VehicleClass);
+                    string terminal = item.Source.KnownRaceState switch
+                    {
+                        RaceState.Disqualified => "DSQ", RaceState.Retired => "RET",
+                        RaceState.Dnf => "DNF", RaceState.Finished => "FIN", _ => string.Empty
+                    };
+                    int? visibleFastestIndex = snapshot.KnownSessionState == Telemetry.SessionState.Race
+                        && item.Source.KnownRaceState == RaceState.Racing && item.Source.LapsCompleted < 2 ? null : fastestIndex;
                     return new RankingRowViewModel
                     {
                         ParticipantIndex = item.Source.Index,
@@ -398,12 +412,8 @@ namespace AMS2LeagueClient.Core.Presentation
                         Name = string.IsNullOrWhiteSpace(item.Source.Name) ? "—" : item.Source.Name,
                         Class = CompactClass(item.Source.VehicleClass),
                         Lap = "L" + (item.Source.CurrentLap > 0 ? item.Source.CurrentLap : item.Source.LapsCompleted + 1),
-                        CurrentTime = FormatParticipantCurrentTime(
-                            snapshot.KnownSessionState,
-                            item.Source,
-                            player && snapshot.ViewedParticipantIndex == item.Source.Index ? snapshot.CurrentTime : (float?)null,
-                            participantLapTimes != null && participantLapTimes.TryGetValue(item.Source.Index, out float measured)
-                                ? measured : (float?)null),
+                        // Keep the binding name, but the tower is now participant best-lap only.
+                        CurrentTime = TowerLapText(snapshot, item.Source, outLapParticipants),
                         IsPlayer = player,
                         DisplayState = displayState,
                         IsDimmed = dimmed,
@@ -417,55 +427,33 @@ namespace AMS2LeagueClient.Core.Presentation
                         ClassBackground = dimmed ? "#394652" : classBadge.Background,
                         ClassForeground = dimmed ? "#AAB4BE" : classBadge.Foreground,
                         TimeForeground = dimmed ? OverlayUiPalette.InactiveTime : OverlayUiPalette.ActiveTime,
-                        Status = StatusOf(item.Source.Index, broadcastStates, fastestIndex),
-                        StatusColor = StatusColorOf(item.Source.Index, broadcastStates, fastestIndex)
+                        Status = terminal.Length > 0 ? terminal : StatusOf(item.Source.Index, broadcastStates, visibleFastestIndex),
+                        StatusColor = terminal.Length > 0 ? (dimmed ? "#FF7777" : "#91A5B8")
+                            : StatusColorOf(item.Source.Index, broadcastStates, visibleFastestIndex)
                     };
                 })
                 .ToArray();
         }
 
-        internal static string FormatParticipantCurrentTime(
-            SessionState? sessionState,
-            ParticipantSnapshot participant,
-            float? localCurrentTime,
-            float? observedLapTime = null)
+        private static string TowerLapText(TelemetrySnapshot snapshot, ParticipantSnapshot driver, IReadOnlyCollection<int>? outLapParticipants)
         {
-            switch (participant.KnownRaceState)
+            bool racing = driver.IsActive && driver.KnownRaceState == RaceState.Racing;
+            // The opening race lap is excluded from this display. Complete lap 2
+            // before showing the game's best; never substitute a locally measured time.
+            if (racing && snapshot.KnownSessionState == Telemetry.SessionState.Race && driver.LapsCompleted < 2)
+                return driver.LapsCompleted == 0 ? "아웃랩" : "레이스 중";
+            if (IsPositiveFinite(driver.BestLapTime)) return FormatLapTime(driver.BestLapTime);
+            if (InvalidLapDisplayTracker.IsOutLap(snapshot.KnownSessionState, driver, outLapParticipants)) return "아웃랩";
+            if (!racing) return "--";
+            if (driver.KnownPitMode != PitMode.None && driver.KnownPitMode != PitMode.DrivingOutOfPits) return "--";
+            switch (snapshot.KnownSessionState)
             {
-                case RaceState.Disqualified:
-                    return "DSQ";
-                case RaceState.Retired:
-                    return "RET";
-                case RaceState.Dnf:
-                    return "DNF";
-                case RaceState.Finished:
-                    if (sessionState == AMS2LeagueClient.Core.Telemetry.SessionState.Practice
-                        || sessionState == AMS2LeagueClient.Core.Telemetry.SessionState.Qualify
-                        || sessionState == AMS2LeagueClient.Core.Telemetry.SessionState.Test
-                        || sessionState == AMS2LeagueClient.Core.Telemetry.SessionState.TimeAttack)
-                    {
-                        return IsPositiveFinite(participant.BestLapTime)
-                            ? FormatLapTime(participant.BestLapTime)
-                            : "--";
-                    }
-
-                    // AMS2 does not expose a reliable official per-driver race
-                    // time here. Never present the retained partial-sector sum
-                    // as a final time after this participant has finished.
-                    return "FIN";
+                case Telemetry.SessionState.Practice:
+                case Telemetry.SessionState.Qualify:
+                case Telemetry.SessionState.Test: return "랩 타임 주행 중";
+                case Telemetry.SessionState.Race: return "레이스 중";
+                default: return "--";
             }
-
-            if (!participant.IsActive || participant.KnownRaceState != RaceState.Racing) return "--";
-            if (localCurrentTime.HasValue && IsPositiveFinite(localCurrentTime.Value))
-            {
-                return FormatLapTime(localCurrentTime.Value);
-            }
-
-            if (observedLapTime.HasValue && IsPositiveFinite(observedLapTime.Value))
-                return "~" + FormatLapTime(observedLapTime.Value);
-            // Sector arrays can contain shared race-start elapsed values, not
-            // individual lap starts. Never sum them into a fabricated live lap.
-            return IsPositiveFinite(participant.LastLapTime) ? "L" + FormatLapTime(participant.LastLapTime) : "--";
         }
 
         private static string StatusOf(

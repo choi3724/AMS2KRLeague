@@ -4,8 +4,8 @@
         xmlns:local="clr-namespace:AMS2LeagueClient.Presentation"
         xmlns:core="clr-namespace:AMS2LeagueClient.Core.Presentation;assembly=AMS2LeagueClient.Core"
         Title="{Binding VersionText}"
-        Width="980" Height="800"
-        MinWidth="860" MinHeight="760"
+        Width="980" Height="840"
+        MinWidth="860" MinHeight="820"
         ShowActivated="True"
         WindowStartupLocation="CenterScreen"
         Background="#07101A">
@@ -18,6 +18,17 @@
         </Grid.Background>
         <local:ClientStatusView HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,28,0,0" />
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,42">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8">
+                <TextBlock Text="대기 화면 플레이 모드" Foreground="#DDE7F1" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ComboBox x:Name="SessionPlayModeSelect" Width="175" SelectedValuePath="Tag"
+                          SelectedValue="{Binding SessionPlayMode, Mode=TwoWay}"
+                          ToolTip="SHM으로 싱글/멀티를 확정할 수 없어 직접 선택합니다. 화면 표시에만 적용되며 앱 재실행 시 초기화됩니다.">
+                    <ComboBoxItem Content="미확인" Tag="{x:Static core:SessionPlayMode.Unknown}" />
+                    <ComboBoxItem Content="싱글플레이어" Tag="{x:Static core:SessionPlayMode.SinglePlayer}" />
+                    <ComboBoxItem Content="멀티플레이어" Tag="{x:Static core:SessionPlayMode.Multiplayer}" />
+                </ComboBox>
+                <TextBlock Text="사용자 선택 · 표시 전용" Foreground="#91A5B8" VerticalAlignment="Center" Margin="8,0,0,0" />
+            </StackPanel>
             <StackPanel x:Name="LayoutVisibilityPanel" Margin="0,0,0,9">
                 <TextBlock Text="표시할 오버레이 · 체크를 해제하면 해당 화면을 즉시 끄고 설정을 저장합니다" Foreground="#9EB3C7" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,6" />
                 <WrapPanel HorizontalAlignment="Center">
