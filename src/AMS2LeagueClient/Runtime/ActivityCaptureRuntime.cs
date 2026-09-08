@@ -2,6 +2,9 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Text.Json;
+using AMS2LeagueClient.Core.Session;
+using AMS2LeagueClient.Core.Presentation;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using AMS2LeagueClient.Core.ActivityCapture;
@@ -23,6 +26,7 @@ namespace AMS2LeagueClient.Runtime
         private const int PersistenceAttemptLimit = 3;
         private readonly object _engineGate = new object();
         private readonly ActivityCaptureEngine _engine;
+        private readonly SessionPlayModeDetector _playModeDetector;
         private readonly SessionWitnessCaptureEngine _witnessEngine;
         private readonly FutureTelemetryCaptureRuntime _futureTelemetry;
         private readonly ActivityLocalParticipantResolver _localResolver = new ActivityLocalParticipantResolver();
@@ -41,17 +45,22 @@ namespace AMS2LeagueClient.Runtime
         private readonly Task _witnessTask;
         private readonly Task? _uploadTask;
         private bool _disposed;
+        private string _lastModeDiagnostic = string.Empty;
 
         public ActivityCaptureRuntime(
             string dataRoot,
             string installationId,
             string clientVersion,
             FileLogger logger,
-            IActivityUploadTransport? uploadTransport = null)
+            IActivityUploadTransport? uploadTransport = null,
+            SessionPlayModeDetector? playModeDetector = null)
         {
             if (string.IsNullOrWhiteSpace(dataRoot)) throw new ArgumentException("Activity data root is required.", nameof(dataRoot));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             string root = Path.GetFullPath(dataRoot);
+            _playModeDetector = playModeDetector ?? new SessionPlayModeDetector(
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Automobilista 2", "log"),
+                Path.Combine(root, "session-play-mode-history.json"));
             _engine = new ActivityCaptureEngine(installationId, clientVersion);
             _witnessEngine = new SessionWitnessCaptureEngine(installationId, clientVersion);
             _futureTelemetry = new FutureTelemetryCaptureRuntime(
@@ -65,10 +74,10 @@ namespace AMS2LeagueClient.Runtime
                 archiveFormat: TelemetryArchiveFormat.COMPACT_A2CT_V1);
             _futureTelemetry.FailureDiagnostic = details => LogInfoSafely("ARCHIVE_FAILURE", details);
             _futureTelemetry.IdentityStarted += BindWitnessArchiveIdentity;
-            _telemetryUploadQueue = new TelemetryChunkUploadQueue(_futureTelemetry.ArchiveRoot);
+            _telemetryUploadQueue = new TelemetryChunkUploadQueue(_futureTelemetry.ArchiveRoot, uploadEligibility: IsTelemetryUploadAllowed);
             _recordStore = new ActivityRecordStore(root);
             _witnessStore = new SessionWitnessStore(Path.Combine(root, "witness"));
-            _uploadQueue = new ActivityUploadQueue(Path.Combine(root, "upload-queue"));
+            _uploadQueue = new ActivityUploadQueue(Path.Combine(root, "upload-queue"), uploadEligibility: IsActivityUploadAllowed);
             _persistChannel = Channel.CreateUnbounded<ActivityCaptureUpdate>(new UnboundedChannelOptions
             {
                 SingleReader = true,
@@ -114,10 +123,7 @@ namespace AMS2LeagueClient.Runtime
             }
             _recordTask = Task.Run(PersistLoopAsync);
             _witnessTask = Task.Run(PersistWitnessLoopAsync);
-            if (_uploadWorker != null || _telemetryUploadWorker != null)
-            {
-                _uploadTask = Task.Run(() => UploadLoopAsync(_uploadCancellation.Token));
-            }
+            _uploadTask = Task.Run(() => UploadLoopAsync(_uploadCancellation.Token));
         }
 
         /// <summary>
@@ -131,6 +137,7 @@ namespace AMS2LeagueClient.Runtime
         }
 
         public TelemetryArchiveIdentity? CurrentTelemetryIdentity => _futureTelemetry.CurrentIdentity;
+        public SessionPlayMode DetectedPlayMode => _playModeDetector.CurrentMode;
 
         public void SetScheduledEvent(ScheduledLeagueEvent? scheduledEvent)
         {
@@ -356,6 +363,9 @@ namespace AMS2LeagueClient.Runtime
 
         private async Task PersistWitnessAsync(SessionWitnessRecord witness)
         {
+            _playModeDetector.Refresh();
+            witness.RaceMode = SessionPlayModeDetector.WireValue(_playModeDetector.Classify(witness.CaptureStartedAtUtc, witness.CaptureEndedAtUtc));
+            if (witness.Session.Activity != null) witness.Session.Activity.RaceMode = witness.RaceMode;
             Exception? lastError = null;
             for (int attempt = 1; attempt <= PersistenceAttemptLimit; attempt++)
             {
@@ -395,6 +405,8 @@ namespace AMS2LeagueClient.Runtime
 
         private async Task PersistRecordAsync(ActivityRecord record)
         {
+            _playModeDetector.Refresh();
+            record.ObservedConditions.RaceMode = SessionPlayModeDetector.WireValue(_playModeDetector.Classify(record.StartedAtUtc, record.EndedAtUtc));
             Exception? lastError = null;
             for (int attempt = 1; attempt <= PersistenceAttemptLimit; attempt++)
             {
@@ -463,12 +475,45 @@ namespace AMS2LeagueClient.Runtime
             }
         }
 
+        public bool IsTelemetryUploadAllowed(TelemetryPendingUploadMetadata metadata)
+        {
+            metadata.RaceMode = metadata.FirstCapturedAtUtc.HasValue && metadata.LastCapturedAtUtc.HasValue
+                ? SessionPlayModeDetector.WireValue(_playModeDetector.Classify(metadata.FirstCapturedAtUtc.Value, metadata.LastCapturedAtUtc.Value))
+                : "UNKNOWN";
+            return _playModeDetector.CanUpload(metadata.FirstCapturedAtUtc, metadata.LastCapturedAtUtc);
+        }
+
+        public bool IsActivityUploadAllowed(ActivityUploadItem item)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(item.PayloadUtf8);
+                var root = document.RootElement;
+                if (!root.TryGetProperty("raceMode", out var mode) || mode.GetString() != "MULTIPLAYER") return false;
+                bool witness = root.TryGetProperty("schema", out var schema) && schema.GetString() == "ams2-session-witness-v1";
+                if (!witness && schema.GetString() != "ams2-player-activity-v2") return false;
+                return root.TryGetProperty(witness ? "captureStartedAtUtc" : "startedAtUtc", out var start)
+                    && root.TryGetProperty(witness ? "captureEndedAtUtc" : "endedAtUtc", out var end)
+                    && start.TryGetDateTimeOffset(out var first) && end.TryGetDateTimeOffset(out var last)
+                    && _playModeDetector.CanUpload(first, last);
+            }
+            catch (Exception e) when (e is JsonException || e is InvalidOperationException || e is FormatException) { return false; }
+        }
+
         private async Task UploadLoopAsync(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
+                    _playModeDetector.Refresh();
+                    string modeDiagnostic = "mode=" + SessionPlayModeDetector.WireValue(DetectedPlayMode)
+                        + " source=AMS2_ONLINE_LOG detail=" + _playModeDetector.Diagnostic;
+                    if (_lastModeDiagnostic != modeDiagnostic)
+                    {
+                        _lastModeDiagnostic = modeDiagnostic;
+                        LogInfoSafely("SESSION_PLAY_MODE", modeDiagnostic);
+                    }
                     if (_uploadWorker != null)
                     {
                         ActivityUploadWorkerSummary summary =

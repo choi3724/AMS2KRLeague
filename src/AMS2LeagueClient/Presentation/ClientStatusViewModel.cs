@@ -19,9 +19,9 @@ namespace AMS2LeagueClient.Presentation
         private string _updateText = "업데이트: 확인 대기";
         private SessionPlayMode _sessionPlayMode;
 
-        public ClientStatusViewModel(string version = "0.4.1")
+        public ClientStatusViewModel(string version = "0.4.2")
         {
-            VersionText = "AMS2 리그 오버레이 " + (string.IsNullOrWhiteSpace(version) ? "0.4.1" : version);
+            VersionText = "AMS2 리그 오버레이 " + (string.IsNullOrWhiteSpace(version) ? "0.4.2" : version);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -37,7 +37,7 @@ namespace AMS2LeagueClient.Presentation
         public string AccountText { get => _accountText; set => Set(ref _accountText, value); }
         public string UpdateText { get => _updateText; set => Set(ref _updateText, value); }
         public string VersionText { get; }
-        // Not persisted: do not silently carry yesterday's room type into another game launch.
+        // Populated by automatic detection; there is no user mode selector.
         public SessionPlayMode SessionPlayMode
         {
             get => _sessionPlayMode;
@@ -47,8 +47,16 @@ namespace AMS2LeagueClient.Presentation
                 if (_sessionPlayMode == value) return;
                 _sessionPlayMode = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SessionPlayMode)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SessionPlayModeText)));
             }
         }
+
+        public string SessionPlayModeText => SessionPlayMode switch
+        {
+            SessionPlayMode.Multiplayer => "멀티플레이어 · 확인된 멀티 기록만 전송",
+            SessionPlayMode.SinglePlayer => "싱글플레이어 · 현재 기록은 로컬 보관",
+            _ => "모드 미확인 · 현재 기록 전송 보류"
+        };
 
         public void SetWaiting()
         {

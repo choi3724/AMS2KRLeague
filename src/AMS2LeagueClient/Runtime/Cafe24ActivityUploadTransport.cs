@@ -255,6 +255,8 @@ namespace AMS2LeagueClient.Runtime
             request.Headers.TryAddWithoutValidation("X-AMS2-Payload-SHA256", metadata.PayloadSha256);
             request.Headers.TryAddWithoutValidation("X-AMS2-Compressed-SHA256", metadata.CompressedSha256);
             request.Headers.TryAddWithoutValidation("X-AMS2-Chunk-Id", metadata.ChunkId);
+            request.Headers.TryAddWithoutValidation("X-AMS2-Race-Mode",
+                (metadata.RaceMode == "MULTIPLAYER" || metadata.RaceMode == "SINGLE_PLAYER") ? metadata.RaceMode : "UNKNOWN");
             request.Headers.TryAddWithoutValidation("X-AMS2-Session-Id", metadata.SessionId);
             request.Headers.TryAddWithoutValidation("X-AMS2-Session-Fingerprint", metadata.SessionFingerprint);
             request.Headers.TryAddWithoutValidation("X-AMS2-Witness-Id", metadata.WitnessId);

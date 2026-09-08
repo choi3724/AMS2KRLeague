@@ -97,14 +97,17 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         private readonly object _gate = new object();
         private readonly string _root;
         private readonly IPrivateTelemetryUploadAuthority? _privateUploadAuthority;
+        private readonly Func<TelemetryPendingUploadMetadata, bool>? _uploadEligibility;
 
         public TelemetryChunkUploadQueue(
             string root,
-            IPrivateTelemetryUploadAuthority? privateUploadAuthority = null)
+            IPrivateTelemetryUploadAuthority? privateUploadAuthority = null,
+            Func<TelemetryPendingUploadMetadata, bool>? uploadEligibility = null)
         {
             if (string.IsNullOrWhiteSpace(root)) throw new ArgumentException("Telemetry upload root is required.", nameof(root));
             _root = Path.GetFullPath(root);
             _privateUploadAuthority = privateUploadAuthority;
+            _uploadEligibility = uploadEligibility;
             Directory.CreateDirectory(_root);
         }
 
@@ -130,6 +133,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                         {
                             continue;
                         }
+                        if (_uploadEligibility != null && !_uploadEligibility(metadata)) continue;
                         if (metadata.Visibility == TelemetryVisibility.PRIVATE_DRIVER_ANALYTICS
                             && !IsPrivateUploadAuthorized(metadata))
                         {
@@ -242,6 +246,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 {
                     throw new InvalidDataException("Telemetry upload sidecar changed during delivery.");
                 }
+                metadata.RaceMode = item.Metadata.RaceMode == "MULTIPLAYER" || item.Metadata.RaceMode == "SINGLE_PLAYER" ? item.Metadata.RaceMode : "UNKNOWN";
                 metadata.Status = status;
                 metadata.AttemptCount = checked(metadata.AttemptCount + 1);
                 metadata.LastAttemptAtUtc = attemptedAtUtc;

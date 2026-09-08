@@ -24,6 +24,7 @@ namespace AMS2LeagueClient.Core.SessionWitness
                 schema = "ams2-session-witness-v1",
                 payloadVersion = 1,
                 witness.WitnessId,
+                raceMode = (witness.RaceMode == "MULTIPLAYER" || witness.RaceMode == "SINGLE_PLAYER") ? witness.RaceMode : "UNKNOWN",
                 witness.SessionFingerprint,
                 witness.CaptureSessionId,
                 witness.AttemptId,

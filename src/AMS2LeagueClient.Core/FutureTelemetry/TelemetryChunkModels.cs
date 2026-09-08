@@ -50,6 +50,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
 
     public sealed class TelemetryPendingUploadMetadata
     {
+        public string RaceMode { get; set; } = "UNKNOWN";
         public string Schema { get; set; } = "ams2-telemetry-upload-metadata-v1";
         public string Endpoint { get; set; } = "v1/telemetry/chunks";
         public string? Protocol { get; set; }

@@ -59,8 +59,19 @@ namespace AMS2LeagueClient.Tests
                 application.Shutdown();
                 return 0;
             }
+            int logsArgument = Array.IndexOf(args, "--verify-session-logs");
+            if (logsArgument >= 0 && logsArgument + 1 < args.Length)
+            {
+                AutomaticModeTests.VerifyRealLogs(args[logsArgument + 1]);
+                application.Shutdown();
+                return 0;
+            }
             var tests = new (string Name, Action Test)[]
             {
+                ("Automatic online log session boundaries", AutomaticModeTests.LogBoundaries),
+                ("Automatic mode rejects missing stale and replaced logs", AutomaticModeTests.LogFilesAndHistory),
+                ("Single and unknown queues cannot starve multiplayer uploads", AutomaticModeTests.UploadFiltering),
+                ("Result and replay race mode fields agree", AutomaticModeTests.ModeFields),
                 ("Korean labels and dedicated penalty column", KoreanLabelsAndPenaltyColumn),
                 ("Saved tower expands once and retains independent layout", LegacyTowerWidthMigration),
                 ("Release versions and metadata reject unsafe updates", ReleaseVersionAndMetadata),
@@ -111,7 +122,7 @@ namespace AMS2LeagueClient.Tests
                 ("Multiplayer menu shows waiting overlay", MultiplayerMenuShowsWaitingOverlay),
                 ("Multiplayer qualify-end transition shows waiting", MultiplayerQualifyEndShowsWaitingOverlay),
                 ("Waiting overlay includes single but excludes replay", WaitingOverlayIncludesSingleExcludesReplay),
-                ("Waiting mode is explicit and session labels follow SHM", WaitingModeAndSessionLabels),
+                ("Automatic mode display and session labels follow observed sources", WaitingModeAndSessionLabels),
                 ("Waiting overlay returns to gameplay", WaitingOverlayReturnsToGameplay),
                 ("Remaining timer fallback is bounded to generation", RemainingTimerFallbackBounded),
                 ("Waiting timer never fabricates countdown", WaitingTimerDoesNotFabricateCountdown),
@@ -1646,22 +1657,22 @@ namespace AMS2LeagueClient.Tests
             root.Measure(new Size(860, 780));
             root.Arrange(new Rect(0, 0, 860, 780));
             root.UpdateLayout();
-            var select = Named<ComboBox>(root, "SessionPlayModeSelect");
+            AssertFalse(Descendants<ComboBox>(root).Any());
+            var modeLabel = Named<TextBlock>(root, "SessionPlayModeLabel");
             AssertEqual(SessionPlayMode.Unknown, status.SessionPlayMode);
-            AssertEqual(SessionPlayMode.Unknown, select.SelectedValue);
-            foreach (SessionPlayMode mode in new[] { SessionPlayMode.SinglePlayer, SessionPlayMode.Multiplayer })
+            foreach (SessionPlayMode mode in new[] { SessionPlayMode.SinglePlayer, SessionPlayMode.Multiplayer, SessionPlayMode.Unknown })
             {
-                select.SelectedValue = mode;
+                status.SessionPlayMode = mode;
                 PumpDispatcher();
-                AssertEqual(mode, status.SessionPlayMode);
+                AssertEqual(status.SessionPlayModeText, modeLabel.Text);
             }
             status.SessionPlayMode = (SessionPlayMode)999;
             PumpDispatcher();
-            AssertEqual(SessionPlayMode.Unknown, select.SelectedValue);
+            AssertEqual(SessionPlayMode.Unknown, status.SessionPlayMode);
             var statusCard = Descendants<ClientStatusView>(root).Single();
-            AssertTrue(select.TransformToAncestor(root).Transform(new Point(0, 0)).Y >=
+            AssertTrue(modeLabel.TransformToAncestor(root).Transform(new Point(0, 0)).Y >=
                 statusCard.TransformToAncestor(root).Transform(new Point(0, statusCard.ActualHeight)).Y);
-            CaptureLayout(root, "status-mode-selector");
+            CaptureLayout(root, "status-automatic-mode");
             window.Close();
         }
 
@@ -1952,6 +1963,7 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual("Bearer " + token, handler.TelemetryCompatibilityAuthorization);
                 AssertEqual("gzip", handler.TelemetryContentEncoding);
                 AssertEqual("application/json", handler.TelemetryContentType);
+                AssertEqual("UNKNOWN", handler.TelemetryRaceMode);
                 AssertEqual("telemetry:" + item.Metadata.ChunkId, handler.TelemetryIdempotencyKey);
                 AssertEqual(item.Metadata.PayloadSha256, handler.TelemetryPayloadSha256);
                 AssertEqual(item.Metadata.CompressedSha256, handler.TelemetryCompressedSha256);
@@ -1974,7 +1986,8 @@ namespace AMS2LeagueClient.Tests
             WithTemporaryDirectory(directory =>
             {
                 string telemetryRoot = Path.Combine(directory, "future-telemetry");
-                string metadataPath = CreatePendingTelemetryChunk(telemetryRoot);
+                string metadataPath = CreatePendingTelemetryChunk(telemetryRoot, DateTimeOffset.UtcNow.AddMinutes(-1));
+                var detector = AutomaticModeTests.CreateMultiplayerDetector(directory);
                 var transport = new DualUploadFixtureTransport();
                 var logger = new FileLogger(Path.Combine(directory, "logs"));
                 using (var runtime = new ActivityCaptureRuntime(
@@ -1982,7 +1995,8 @@ namespace AMS2LeagueClient.Tests
                     "client-runtime-upload-fixture-0001",
                     "0.2.2",
                     logger,
-                    transport))
+                    transport,
+                    detector))
                 {
                     bool sent = SpinWait.SpinUntil(
                         () => ReadTelemetryStatus(metadataPath) == TelemetryUploadStatus.SENT,
@@ -1990,6 +2004,7 @@ namespace AMS2LeagueClient.Tests
                     AssertTrue(sent);
                 }
                 AssertEqual(1, transport.TelemetryCalls);
+                AssertEqual("MULTIPLAYER", TelemetryChunkSerializer.DeserializeMetadata(File.ReadAllBytes(metadataPath)).RaceMode);
                 AssertTrue(File.ReadAllText(logger.FilePath).Contains(
                     "FUTURE_TELEMETRY_UPLOAD_BATCH attempted=1 sent=1",
                     StringComparison.Ordinal));
@@ -2019,6 +2034,7 @@ namespace AMS2LeagueClient.Tests
 
                 AssertTrue(result.Success);
                 AssertEqual(Cafe24ActivityUploadTransport.CompactTelemetryContentType, handler.TelemetryContentType);
+                AssertEqual("UNKNOWN", handler.TelemetryRaceMode);
                 AssertEqual(item.Metadata.ChunkId, handler.TelemetryChunkId);
                 AssertEqual(item.Metadata.SessionId, handler.TelemetrySessionId);
                 AssertEqual(item.Metadata.AttemptId, handler.TelemetryAttemptId);
@@ -2094,7 +2110,7 @@ namespace AMS2LeagueClient.Tests
                 TelemetryChunkSerializer.SerializeMetadata(metadata));
         }
 
-        private static string CreatePendingTelemetryChunk(string telemetryRoot)
+        private static string CreatePendingTelemetryChunk(string telemetryRoot, DateTimeOffset? capturedAt = null)
         {
             TelemetryArchiveIdentity identity = TelemetryArchiveIdentityFactory.StartSession(
                 "client-test-telemetry-session-fingerprint",
@@ -2104,7 +2120,7 @@ namespace AMS2LeagueClient.Tests
             {
                 AssertTrue(archive.TryCaptureSessionMetadata(new SessionMetadataSample
                 {
-                    CapturedAtUtc = DateTimeOffset.UtcNow,
+                    CapturedAtUtc = capturedAt ?? DateTimeOffset.UtcNow,
                     SessionElapsedMs = 0,
                     GameBuild = 3398,
                     SharedMemoryVersion = 14,
@@ -2228,6 +2244,7 @@ namespace AMS2LeagueClient.Tests
             public string TelemetryAttemptId { get; private set; } = string.Empty;
             public string TelemetryVisibility { get; private set; } = string.Empty;
             public string TelemetryClientVersion { get; private set; } = string.Empty;
+            public string TelemetryRaceMode { get; private set; } = string.Empty;
             public byte[] TelemetryBody { get; private set; } = Array.Empty<byte>();
 
             protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -2266,6 +2283,7 @@ namespace AMS2LeagueClient.Tests
                     TelemetryAttemptId = Header(request, "X-AMS2-Attempt-Id");
                     TelemetryVisibility = Header(request, "X-AMS2-Visibility");
                     TelemetryClientVersion = Header(request, "X-AMS2-Client-Version");
+                    TelemetryRaceMode = Header(request, "X-AMS2-Race-Mode");
                     TelemetryBody = request.Content?.ReadAsByteArrayAsync(cancellationToken).GetAwaiter().GetResult()
                         ?? Array.Empty<byte>();
                     string chunkId = TelemetryIdempotencyKey.StartsWith("telemetry:", StringComparison.Ordinal)

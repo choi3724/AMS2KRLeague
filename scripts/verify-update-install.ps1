@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$BaselineZip,
     [Parameter(Mandatory = $true)][string]$BaselineSha256,
-    [string]$Version = '0.4.1'
+    [string]$BaselineVersion = '0.4.0',
+    [string]$Version = '0.4.2'
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -16,7 +17,7 @@ New-Item -ItemType Directory -Path $attempt -Force | Out-Null
 Expand-Archive -LiteralPath $BaselineZip -DestinationPath $installed
 $exe = Join-Path $installed 'AMS2LeagueClient.exe'
 $before = [Diagnostics.FileVersionInfo]::GetVersionInfo($exe).ProductVersion
-if ($before -ne '0.4.0') { throw 'Expected actual public v0.4.0 baseline' }
+if ($before -ne $BaselineVersion) { throw "Expected actual public v$BaselineVersion baseline, received $before" }
 $sentinel = Join-Path $installed 'user-preservation-check.txt'
 [IO.File]::WriteAllText($sentinel, 'preserve-user-file')
 $installer = Join-Path $attempt 'Setup.exe'

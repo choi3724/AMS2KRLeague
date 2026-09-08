@@ -15,6 +15,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
         private const string StateFileName = "state.json";
 
         private readonly object _gate = new object();
+        private readonly Func<ActivityUploadItem, bool>? _uploadEligibility;
         private readonly string _root;
         private readonly string _itemsRoot;
         private readonly string _stagingRoot;
@@ -26,10 +27,12 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
         public ActivityUploadQueue(
             string root,
             ActivityUploadQueueOptions? options = null,
-            IActivityUploadClock? clock = null)
+            IActivityUploadClock? clock = null,
+            Func<ActivityUploadItem, bool>? uploadEligibility = null)
         {
             if (string.IsNullOrWhiteSpace(root)) throw new ArgumentException("Queue root is required.", nameof(root));
             _root = Path.GetFullPath(root);
+            _uploadEligibility = uploadEligibility;
             _itemsRoot = Path.Combine(_root, "items");
             _stagingRoot = Path.Combine(_root, "staging");
             _options = (options ?? new ActivityUploadQueueOptions()).ValidatedCopy();
@@ -169,6 +172,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
             {
                 return ScanInternal()
                     .Where(item => IsDue(item.State, nowUtc))
+                    .Where(item => _uploadEligibility == null || _uploadEligibility(item))
                     .OrderBy(item => item.Metadata.CreatedAtUtc)
                     .ThenBy(item => item.Metadata.QueueItemId, StringComparer.Ordinal)
                     .Take(boundedMaximum)

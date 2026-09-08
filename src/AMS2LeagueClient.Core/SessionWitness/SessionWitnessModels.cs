@@ -47,6 +47,7 @@ namespace AMS2LeagueClient.Core.SessionWitness
 
     public sealed class SessionWitnessRecord
     {
+        public string RaceMode { get; set; } = "UNKNOWN";
         public string Schema { get; set; } = "ams2-session-witness-v1";
         public string WitnessId { get; set; } = string.Empty;
         public string SessionFingerprint { get; set; } = string.Empty;

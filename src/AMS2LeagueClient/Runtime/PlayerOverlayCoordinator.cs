@@ -300,6 +300,7 @@ namespace AMS2LeagueClient.Runtime
             try
             {
                 UpdateRates();
+                _status.SessionPlayMode = _activityCapture?.DetectedPlayMode ?? SessionPlayMode.Unknown;
                 int pid = Volatile.Read(ref _processId);
                 if (pid < 0)
                 {
