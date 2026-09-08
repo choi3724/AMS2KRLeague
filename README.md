@@ -2,7 +2,7 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-현재 개발 버전: **0.4.1** · 공개 Latest: **0.4.0** (0.4.1 게시 전)
+현재 버전 및 공개 Latest: **0.4.1**
 
 안정 기준선: **0.2.2**
 
@@ -32,7 +32,7 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 ## 실행 방법
 
-1. 0.4.1 후보는 로컬 `artifacts/AMS2-League-Overlay-0.4.1-Setup.exe`를 실행합니다. 공개 배포본은 [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 확인하며, 0.4.1 게시 전에는 0.4.0입니다.
+1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 `AMS2-League-Overlay-0.4.1-Setup.exe`를 다운로드하고 실행합니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
