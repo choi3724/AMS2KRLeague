@@ -421,10 +421,12 @@ namespace AMS2LeagueClient.Core.HostRecording
 
         private HostClassification? BuildClassification(TelemetrySnapshot snapshot, string kind)
         {
-            List<ParticipantSnapshot> rawActive = snapshot.Participants.Where(participant => participant.IsActive).ToList();
+            List<ParticipantSnapshot> rawActive = snapshot.Participants
+                .Where(participant => kind == "STARTING_GRID_DERIVED"
+                    ? participant.IsActive : HasParticipantEvidence(participant)).ToList();
             if (rawActive.Count == 0)
             {
-                AddIssue(HostIssueSeverity.Error, "MISSING_PARTICIPANT", kind + " contains no active participants.");
+                AddIssue(HostIssueSeverity.Error, "MISSING_PARTICIPANT", kind + " contains no participant evidence.");
                 return null;
             }
 
@@ -485,7 +487,7 @@ namespace AMS2LeagueClient.Core.HostRecording
                     changed = true;
                 }
 
-                if (participant.IsActive)
+                if (HasParticipantEvidence(participant))
                 {
                     if (life.Active && life.Name.Length > 0 && !string.Equals(life.Name, participant.Name, StringComparison.Ordinal))
                     {
@@ -493,7 +495,7 @@ namespace AMS2LeagueClient.Core.HostRecording
                         changed = true;
                         AddIssue(HostIssueSeverity.Error, "SLOT_REUSED", "Slot " + participant.Index + " changed from '" + life.Name + "' to '" + participant.Name + "'.");
                     }
-                    else if (!life.Active && life.Seen && string.Equals(life.Name, participant.Name, StringComparison.Ordinal))
+                    else if (participant.IsActive && !life.Active && life.Seen && string.Equals(life.Name, participant.Name, StringComparison.Ordinal))
                     {
                         life.Generation++;
                         changed = true;
@@ -502,7 +504,7 @@ namespace AMS2LeagueClient.Core.HostRecording
 
                     if (!life.Seen) life.FirstSeen = snapshot.CapturedAt;
                     life.Seen = true;
-                    life.Active = true;
+                    life.Active = participant.IsActive;
                     life.Name = participant.Name;
                     life.LastSeen = snapshot.CapturedAt;
                     life.LastRaceState = participant.RaceStateRaw;
@@ -569,7 +571,7 @@ namespace AMS2LeagueClient.Core.HostRecording
                 WindDirectionY = snapshot.WindDirectionY,
                 CloudBrightness = snapshot.CloudBrightness,
                 SnowDensity = snapshot.SnowDensity,
-                Participants = snapshot.Participants.Where(participant => participant.IsActive)
+                Participants = snapshot.Participants.Where(HasParticipantEvidence)
                     .Select(participant => ToEvidence(participant, snapshot.CapturedAt)).ToList()
             });
             while (_evidence.Count > MaximumEvidenceSnapshots)
@@ -686,7 +688,14 @@ namespace AMS2LeagueClient.Core.HostRecording
                 || after.CurrentLap + 1 < before.CurrentLap;
         }
 
-        private static bool AllDriversTerminal(IEnumerable<HostParticipantEvidence> participants)
+        // Inactive is not the same as absent: SHM keeps explicit FIN/RET/DNF/DSQ
+        // rows after a car stops. Empty slots and non-terminal inactive rows are
+        // not result evidence, and must not be promoted to a finish/retirement.
+        internal static bool HasParticipantEvidence(ParticipantSnapshot participant)
+            => participant.IsActive
+                || (!string.IsNullOrWhiteSpace(participant.Name) && IsTerminal(participant.RaceStateRaw));
+
+        internal static bool AllDriversTerminal(IEnumerable<HostParticipantEvidence> participants)
         {
             HostParticipantEvidence[] drivers = participants.Where(value => Roles.IsLeagueDriver(value.Vehicle, value.VehicleClass)).ToArray();
             return drivers.Length > 0 && drivers.All(value => IsTerminal(value.ResultStateRaw));

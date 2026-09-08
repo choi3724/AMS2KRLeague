@@ -220,7 +220,7 @@ namespace AMS2LeagueClient.Core.SessionWitness
             }
 
             var observedSlots = new HashSet<int>();
-            foreach (ParticipantSnapshot participant in snapshot.Participants.Where(value => value.IsActive))
+            foreach (ParticipantSnapshot participant in snapshot.Participants.Where(HostRecorderEngine.HasParticipantEvidence))
             {
                 observedSlots.Add(participant.Index);
                 if (!_participants.TryGetValue(participant.Index, out ParticipantState? previous)
@@ -340,13 +340,12 @@ namespace AMS2LeagueClient.Core.SessionWitness
 
             HostEvidenceSnapshot first = race[0];
             bool terminalAtFirst = IsTerminal(first.RaceStateRaw)
-                || (first.Participants.Count > 0 && first.Participants.All(value => IsTerminal(value.ResultStateRaw)));
+                || HostRecorderEngine.AllDriversTerminal(first.Participants);
             bool startObserved = !terminalAtFirst
                 && (first.RaceStateRaw == (uint)RaceState.NotStarted
                     || (IsFiniteNonNegative(first.CurrentTimeSeconds) && first.CurrentTimeSeconds <= 15));
             bool endObserved = session.RaceResult != null
-                && session.RaceResult.Participants.Count > 0
-                && session.RaceResult.Participants.All(value => IsTerminal(value.ResultStateRaw));
+                && HostRecorderEngine.AllDriversTerminal(session.RaceResult.Participants);
             if (startObserved && endObserved) return SessionWitnessCompleteness.FullSession;
             if (terminalAtFirst || (race.Count <= 2 && endObserved)) return SessionWitnessCompleteness.EndOnly;
             return SessionWitnessCompleteness.MidSession;

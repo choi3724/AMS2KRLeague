@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
 using AMS2LeagueClient.Core.FutureTelemetry;
+using AMS2LeagueClient.Core.HostRecording;
 using AMS2LeagueClient.Core.SessionWitness;
 using AMS2LeagueClient.Core.Telemetry;
 
@@ -27,6 +28,134 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Witness restart advances only the archive attempt", ArchiveRestartAdvancesAttempt);
             yield return new TestCase("Witness rejects archive identity changes during capture", ArchiveIdentityChangeFailsClosed);
             yield return new TestCase("Qualifying terminal state cannot become a race result on transition", QualifyingTerminalDoesNotBecomeRace);
+            yield return new TestCase("Safety car does not prevent full or end-only witness classification", SafetyCarCompletenessUsesDrivers);
+            yield return new TestCase("Inactive terminal drivers survive result, evidence, timeline and wire capture", InactiveTerminalDriversAreRetained);
+            yield return new TestCase("Inactive missing rows are not fabricated and stale results are not grid entries", InactiveRowsFailClosed);
+        }
+
+        private static ActivityFixtureSnapshot ResultFixture()
+            => new ActivityFixtureSnapshot
+            {
+                CapturedAtUtc = FixedTime(), RaceState = "NotStarted", CurrentTime = 0,
+                Participants = new List<ActivityFixtureParticipant>
+                {
+                    new ActivityFixtureParticipant { Name = "Driver Alpha", Position = 1, RaceState = "NotStarted" },
+                    new ActivityFixtureParticipant { Name = "Driver Beta", Position = 2, RaceState = "NotStarted" },
+                    new ActivityFixtureParticipant { Name = "Safety Car (AI)", Position = 0, RaceState = "Racing", Vehicle = "Camaro SafetyCar", VehicleClass = "SafetyCar" }
+                }
+            };
+
+        private static void SafetyCarCompletenessUsesDrivers()
+        {
+            foreach (bool endOnly in new[] { false, true })
+            {
+                var engine = new SessionWitnessCaptureEngine("safety-completeness", "test");
+                ActivityFixtureSnapshot fixture = ResultFixture();
+                if (!endOnly) engine.Observe(fixture.ToSnapshot(0));
+                fixture.CapturedAtUtc = FixedTime().AddMinutes(30);
+                // The root state can still be Racing while all competitors are done.
+                fixture.RaceState = "Racing";
+                fixture.CurrentTime = 1800;
+                fixture.Participants[0].RaceState = "Finished";
+                fixture.Participants[1].RaceState = "Retired";
+                engine.Observe(fixture.ToSnapshot(2));
+                fixture.CapturedAtUtc = fixture.CapturedAtUtc.AddSeconds(2);
+                engine.Observe(fixture.ToSnapshot(4));
+                AssertEx.True(engine.HasStableRaceResult);
+                SessionWitnessRecord witness = Required(engine.Close(fixture.CapturedAtUtc.AddSeconds(1), "TEST_END").FinalizedWitness);
+                AssertEx.Equal(endOnly ? SessionWitnessCompleteness.EndOnly : SessionWitnessCompleteness.FullSession, witness.CaptureCompleteness);
+                AssertEx.Equal(3, witness.Session.RaceResult!.Participants.Count);
+                AssertEx.Equal((uint)RaceState.Racing, witness.Session.RaceResult.Participants.Single(p => p.VehicleClass == "SafetyCar").ResultStateRaw);
+            }
+
+            foreach (bool onlySafetyCars in new[] { false, true })
+            {
+                var engine = new SessionWitnessCaptureEngine("unfinished-completeness", "test");
+                ActivityFixtureSnapshot fixture = ResultFixture();
+                if (onlySafetyCars) foreach (ActivityFixtureParticipant p in fixture.Participants) p.VehicleClass = "SafetyCar";
+                engine.Observe(fixture.ToSnapshot(0));
+                fixture.CapturedAtUtc = FixedTime().AddSeconds(40);
+                fixture.CurrentTime = 40;
+                fixture.RaceState = "Racing";
+                fixture.Participants[0].RaceState = "Finished";
+                fixture.Participants[1].RaceState = "Racing";
+                engine.Observe(fixture.ToSnapshot(2));
+                SessionWitnessRecord witness = Required(engine.Close(fixture.CapturedAtUtc.AddSeconds(1), "TEST_END").FinalizedWitness);
+                AssertEx.Equal(SessionWitnessCompleteness.MidSession, witness.CaptureCompleteness);
+            }
+        }
+
+        private static void InactiveTerminalDriversAreRetained()
+        {
+            foreach (RaceState terminal in new[] { RaceState.Finished, RaceState.Retired, RaceState.Dnf, RaceState.Disqualified })
+            {
+                var engine = new SessionWitnessCaptureEngine("inactive-terminal", "test");
+                ActivityFixtureSnapshot fixture = ResultFixture();
+                engine.Observe(fixture.ToSnapshot(0));
+                fixture.CapturedAtUtc = FixedTime().AddSeconds(2);
+                fixture.RaceState = "Racing";
+                fixture.CurrentTime = 2;
+                fixture.Participants[0].RaceState = "Racing";
+                fixture.Participants[1].RaceState = "Racing";
+                engine.Observe(fixture.ToSnapshot(2));
+                fixture.CapturedAtUtc = FixedTime().AddMinutes(30);
+                fixture.RaceState = "Finished";
+                fixture.CurrentTime = 1800;
+                fixture.Participants[0].RaceState = "Finished";
+                ActivityFixtureParticipant retired = fixture.Participants[1];
+                retired.Active = false;
+                retired.RaceState = terminal.ToString();
+                retired.LapsCompleted = 10;
+                retired.BestLapTime = 95.125f;
+                engine.Observe(fixture.ToSnapshot(4));
+                fixture.CapturedAtUtc = fixture.CapturedAtUtc.AddSeconds(2);
+                engine.Observe(fixture.ToSnapshot(6));
+                AssertEx.True(engine.HasStableRaceResult);
+                SessionWitnessRecord witness = Required(engine.Close(fixture.CapturedAtUtc.AddSeconds(1), "TEST_END").FinalizedWitness);
+                HostParticipantEvidence row = witness.Session.RaceResult!.Participants.Single(p => p.NameSnapshot == retired.Name);
+                AssertEx.False(row.Active);
+                AssertEx.False(row.Disappeared);
+                AssertEx.Equal((uint)terminal, row.ResultStateRaw);
+                AssertEx.Equal(10u, row.LapsCompleted);
+                AssertEx.Equal(95.125f, row.BestLapSeconds);
+                AssertEx.Equal(SessionWitnessCompleteness.FullSession, witness.CaptureCompleteness);
+                AssertEx.False(witness.Session.Issues.Any(i => i.Code == "PARTICIPANT_DISAPPEARED"));
+                AssertEx.True(witness.Session.Evidence.SelectMany(e => e.Participants).Any(p => p.NameSnapshot == retired.Name && !p.Active && p.ResultStateRaw == (uint)terminal));
+                AssertEx.True(witness.Events.Any(e => e.Kind == "PARTICIPANT_STATUS" && e.NameSnapshot == retired.Name && e.StateRaw == (uint)terminal));
+                AssertEx.False(witness.Events.Any(e => e.Kind == "PARTICIPANT_MISSING" && e.NameSnapshot == retired.Name));
+                using JsonDocument payload = JsonDocument.Parse(SessionWitnessUploadPayloadBuilder.Build(witness));
+                AssertEx.True(payload.RootElement.GetRawText().Contains("Driver Beta", StringComparison.Ordinal));
+            }
+        }
+
+        private static void InactiveRowsFailClosed()
+        {
+            var engine = new HostRecorderEngine("inactive-missing");
+            ActivityFixtureSnapshot fixture = ResultFixture();
+            engine.Observe(fixture.ToSnapshot(0));
+            fixture.CapturedAtUtc = FixedTime().AddSeconds(2);
+            fixture.RaceState = "Racing";
+            fixture.Participants[0].RaceState = "Racing";
+            fixture.Participants[1].Active = false;
+            fixture.Participants[1].RaceState = "Racing";
+            fixture.Participants.Add(new ActivityFixtureParticipant { Active = false, Name = "", Position = 0, RaceState = "Retired" });
+            engine.Observe(fixture.ToSnapshot(2));
+            HostSessionResult result = engine.Close(fixture.CapturedAtUtc.AddSeconds(1), "TEST_END").FinalizedSession!;
+            AssertEx.Equal(2, result.RaceResult!.Participants.Count);
+            AssertEx.True(result.Issues.Any(i => i.Code == "PARTICIPANT_DISAPPEARED"));
+
+            foreach (SessionState phase in new[] { SessionState.Qualify, SessionState.FormationLap })
+            {
+                engine = new HostRecorderEngine("inactive-phase");
+                fixture = ResultFixture();
+                fixture.SessionState = phase.ToString();
+                fixture.Participants[1].Active = false;
+                fixture.Participants[1].RaceState = "Retired";
+                engine.Observe(fixture.ToSnapshot(0));
+                result = engine.Close(fixture.CapturedAtUtc.AddSeconds(1), "TEST_END").FinalizedSession!;
+                HostClassification classification = phase == SessionState.Qualify ? result.Qualifying! : result.StartingGrid!;
+                AssertEx.Equal(phase == SessionState.Qualify ? 3 : 2, classification.Participants.Count);
+            }
         }
 
         private static void QualifyingTerminalDoesNotBecomeRace()
