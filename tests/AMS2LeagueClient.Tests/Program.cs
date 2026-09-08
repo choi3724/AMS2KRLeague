@@ -73,6 +73,7 @@ namespace AMS2LeagueClient.Tests
                 ("Single and unknown queues cannot starve multiplayer uploads", AutomaticModeTests.UploadFiltering),
                 ("Result and replay race mode fields agree", AutomaticModeTests.ModeFields),
                 ("Korean labels and dedicated penalty column", KoreanLabelsAndPenaltyColumn),
+                ("Tower shrinks and restores with participant count", TowerShrinksAndRestoresWithParticipants),
                 ("Saved tower expands once and retains independent layout", LegacyTowerWidthMigration),
                 ("Release versions and metadata reject unsafe updates", ReleaseVersionAndMetadata),
                 ("Update downloads verify exact bytes and recover from failures", UpdateDownloadValidation),

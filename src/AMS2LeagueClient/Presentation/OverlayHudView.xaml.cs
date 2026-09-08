@@ -50,7 +50,7 @@ namespace AMS2LeagueClient.Presentation
         public void SetViewModel(OverlayViewModel viewModel)
         {
             if (viewModel == null) throw new ArgumentNullException(nameof(viewModel));
-            double requiredHeight = LeftTowerLayoutMetrics.RequiredHeightForRows(viewModel.RankingRowCapacity, viewModel.IsDiagnostic);
+            double requiredHeight = LeftTowerLayoutMetrics.RequiredHeightForRows(Math.Min(viewModel.RankingRowCapacity, viewModel.RankingRows.Count), viewModel.IsDiagnostic);
             bool capacityChanged = Height != requiredHeight;
             Height = requiredHeight;
             DataContext = viewModel;

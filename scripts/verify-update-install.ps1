@@ -2,14 +2,14 @@ param(
     [Parameter(Mandatory = $true)][string]$BaselineZip,
     [Parameter(Mandatory = $true)][string]$BaselineSha256,
     [string]$BaselineVersion = '0.4.0',
-    [string]$Version = '0.4.2'
+    [string]$Version = '0.4.3'
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $proofRoot = Join-Path $repo ('work/update-install-proof-' + [guid]::NewGuid().ToString('N'))
 $resolvedProof = [IO.Path]::GetFullPath($proofRoot)
 if (-not $resolvedProof.StartsWith([IO.Path]::GetFullPath((Join-Path $repo 'work')) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid proof path' }
-if (@(Get-Process -Name AMS2,AMS2AVX,AMS2LeagueClient -ErrorAction SilentlyContinue).Count -gt 0) { throw 'Close the test overlay/game before running this isolated proof.' }
+$gameBefore = @(Get-Process -Name AMS2,AMS2AVX -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Id=$_.Id; StartTicks=$_.StartTime.ToUniversalTime().Ticks } })
 if ((Get-FileHash -LiteralPath $BaselineZip -Algorithm SHA256).Hash -ine $BaselineSha256) { throw 'Baseline ZIP hash mismatch' }
 $installed = Join-Path $proofRoot 'portable'
 $attempt = Join-Path $proofRoot 'attempt'
@@ -24,7 +24,7 @@ $installer = Join-Path $attempt 'Setup.exe'
 Copy-Item -LiteralPath (Join-Path $repo "artifacts/AMS2-League-Overlay-$Version-Setup.exe") -Destination $installer
 $helper = Join-Path $attempt 'ApplyUpdate.ps1'
 [IO.File]::WriteAllText($helper, [IO.File]::ReadAllText((Join-Path $repo 'src/AMS2LeagueClient/Runtime/ApplyUpdate.ps1')), [Text.UTF8Encoding]::new($true))
-$parent = Start-Process -FilePath $exe -ArgumentList ('--demo --auto-exit-seconds 12 --log-dir "' + (Join-Path $proofRoot 'before-logs') + '"') -WindowStyle Hidden -PassThru
+$parent = Start-Process -FilePath $exe -ArgumentList ('--capture-all "' + (Join-Path $proofRoot 'before-capture') + '" --log-dir "' + (Join-Path $proofRoot 'before-logs') + '"') -WindowStyle Hidden -PassThru
 $resultPath = Join-Path $proofRoot 'result.json'
 $restartCapture = Join-Path $proofRoot 'after-capture'
 $settings = @{
@@ -56,6 +56,7 @@ if ([IO.File]::ReadAllText($sentinel) -ne 'preserve-user-file') { throw 'User fi
 if (Test-Path -LiteralPath (Join-Path $installed 'unins000.exe')) { throw 'Portable update created an uninstaller' }
 $logs = Get-ChildItem -LiteralPath (Join-Path $proofRoot 'after-logs') -File | Get-Content
 if ($logs -match 'EXCEPTION') { throw 'Updated application logged an exception' }
-$summary = [ordered]@{ result = 'PASS'; from = $before; to = $after; helperExit = $worker.ExitCode; portablePreserved = $true; userFilePreserved = $true; restartedCaptureFiles = @(Get-ChildItem -LiteralPath $restartCapture -Filter '*.png').Count; proofDirectory = $proofRoot }
+$gamePreserved = @($gameBefore | Where-Object { $running=Get-Process -Id $_.Id -ErrorAction SilentlyContinue; $null -ne $running -and $running.StartTime.ToUniversalTime().Ticks -eq $_.StartTicks }).Count -eq $gameBefore.Count
+$summary = [ordered]@{ gameRunningDuringInstall = ($gameBefore.Count -gt 0); gameProcessesPreserved = $gamePreserved; result = 'PASS'; from = $before; to = $after; helperExit = $worker.ExitCode; portablePreserved = $true; userFilePreserved = $true; restartedCaptureFiles = @(Get-ChildItem -LiteralPath $restartCapture -Filter '*.png').Count; proofDirectory = $proofRoot }
 $summary | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $proofRoot 'summary.json') -Encoding UTF8
 $summary | ConvertTo-Json

@@ -48,6 +48,7 @@ namespace AMS2LeagueClient.Tests
             AssertEqual("완주", OverlayTextCatalog.Korean.RaceStateName(RaceState.Finished));
             AssertEqual("미완주", OverlayTextCatalog.Korean.RaceStateName(RaceState.Dnf));
             AssertEqual("미완주", StateText.TowerStatus("DNF"));
+            AssertEqual("최고속 랩", new RankingRowViewModel { Status = "BEST" }.StatusLabel);
             var chequered = new RaceControlUpdate(Array.Empty<RaceControlEvent>(), null, Array.Empty<RaceControlEvent>(), update.ParticipantStates, BroadcastOverlayState.Chequered, 1, false);
             AssertEqual("완주", RaceControlViewModel.FromUpdate(chequered).StateLabel);
             var tower = new OverlayHudView(); tower.SetViewModel(timing); LayoutTower(tower);

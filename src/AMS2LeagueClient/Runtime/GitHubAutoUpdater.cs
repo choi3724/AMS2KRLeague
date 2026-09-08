@@ -39,18 +39,6 @@ namespace AMS2LeagueClient.Runtime
             => !args.Any(arg => new[] { "--demo", "--demo-events", "--capture-all", "--auto-exit-seconds", "--updates-disabled" }
                 .Contains(arg, StringComparer.OrdinalIgnoreCase));
 
-        public static bool IsGameRunning()
-        {
-            // Fail closed: uncertain process inspection must never trigger an install during a race.
-            foreach (string name in new[] { "AMS2", "AMS2AVX" })
-            {
-                Process[] processes = Process.GetProcessesByName(name);
-                try { if (processes.Length > 0) return true; }
-                finally { foreach (Process process in processes) process.Dispose(); }
-            }
-            return false;
-        }
-
         private async Task RunAsync()
         {
             CancellationToken token = _stop.Token;
@@ -94,8 +82,8 @@ namespace AMS2LeagueClient.Runtime
                         string attempt = Path.Combine(_directory, Guid.NewGuid().ToString("N"));
                         var progress = new UpdateProgress(percent => _status("업데이트: " + update.Version + " 다운로드 중 · " + percent + "%"));
                         string installer = downloadedInstaller = await client.DownloadAsync(update, attempt, progress, token).ConfigureAwait(false);
-                        _status("업데이트: 다운로드 검증 완료 · 게임 종료 후 자동 설치합니다");
-                        while (IsGameRunning()) await Task.Delay(TimeSpan.FromSeconds(15), token).ConfigureAwait(false);
+                        _status("업데이트: 다운로드 검증 완료 · 오버레이를 저장하고 자동 설치합니다");
+
                         // The helper must be alive and holding the update lock before we release telemetry and exit.
                         if (await PrepareInstallerAsync(update, installer, attempt, token).ConfigureAwait(false))
                         {
@@ -152,7 +140,7 @@ namespace AMS2LeagueClient.Runtime
                 update.Version,
                 InstallDirectory = _installDirectory,
                 Executable = executable,
-                RestartArguments = string.Join(" ", _arguments.Select(QuoteArgument)),
+                RestartArguments = string.Join(" ", _arguments.Concat(new[] { "--background" }).Select(QuoteArgument)),
                 ResultPath = Path.Combine(_directory, "last-result.json")
             }), new UTF8Encoding(true), token).ConfigureAwait(false);
             var start = new ProcessStartInfo

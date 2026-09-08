@@ -229,7 +229,7 @@ namespace AMS2LeagueClient
                         message => Dispatcher.BeginInvoke(new Action(() => { if (!_cleanupStarted) status.UpdateText = message; })),
                         async () => await Dispatcher.InvokeAsync(() =>
                         {
-                            if (_cleanupStarted || GitHubAutoUpdater.IsGameRunning()) return false;
+                            if (_cleanupStarted) return false;
                             ExitClient();
                             return true;
                         }), _logger);

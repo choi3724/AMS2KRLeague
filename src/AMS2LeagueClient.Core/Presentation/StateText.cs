@@ -9,7 +9,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public static string TowerStatus(string code) => code switch
         {
             "FIN" => "완주", "FINAL" => "완주", "RET" => "중도 포기", "DNF" => "미완주",
-            "DSQ" => "실격", "PIT" => "피트", "BEST" => "최고",
+            "DSQ" => "실격", "PIT" => "피트", "BEST" => "최고속 랩",
             // Penalties have their own column; they must not replace pit/finish information.
             "DT" => string.Empty, "SG" => string.Empty,
             "MAND" => "의무 피트", "DMG" => "수리", "?" => "미확인", _ => code

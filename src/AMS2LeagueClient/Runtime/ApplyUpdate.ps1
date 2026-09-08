@@ -36,8 +36,13 @@ try {
         $parent.Refresh()
     }
     $parentExited = $true
-    # Neither the game nor another overlay instance may be force-closed by Setup.
-    if (@(Get-Process -Name AMS2,AMS2AVX,AMS2LeagueClient -ErrorAction SilentlyContinue).Count -gt 0) { throw '게임 또는 다른 오버레이가 실행되어 설치를 연기했습니다.' }
+    # Only another instance using these installation files can block replacement.
+    # The game and overlays installed in other directories remain untouched.
+    foreach ($other in @(Get-Process -Name AMS2LeagueClient -ErrorAction SilentlyContinue)) {
+        if ([string]::IsNullOrWhiteSpace($other.Path) -or [IO.Path]::GetFullPath($other.Path) -ieq $executable) {
+            throw '같은 설치 폴더의 다른 오버레이가 실행되어 설치를 연기했습니다.'
+        }
+    }
     $arguments = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RESTARTEXITCODE=3010 /NOCLOSEAPPLICATIONS /NOFORCECLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR="' + $installRoot + '" /LOG="' + (Join-Path $taskDirectory 'install.log') + '"'
     if (-not (Test-Path -LiteralPath (Join-Path $installRoot 'unins000.exe'))) { $arguments += ' /PORTABLE=1 /NOICONS' }
     $setup = Start-Process -FilePath $installer -ArgumentList $arguments -WindowStyle Hidden -PassThru -Wait

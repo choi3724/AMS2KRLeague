@@ -218,7 +218,7 @@ namespace AMS2LeagueClient.Overlay
 
         private void ResizeTimingPreview()
         {
-            if (ActualWidth <= 0 || ActualHeight <= 0) return;
+            if ((!_layoutEditing && _lastGameWindow != null) || ActualWidth <= 0 || ActualHeight <= 0) return;
             int capacity = LeftTowerLayoutMetrics.CalculateRankingRows(
                 (int)Math.Round(ActualWidth), (int)Math.Round(ActualHeight), _diagnostic);
             if (_viewModel.Timing.RankingRowCapacity == capacity) return;
@@ -357,7 +357,15 @@ namespace AMS2LeagueClient.Overlay
 
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.TimingTower))
             {
-                ShowMainAt(gameWindow, Resolve(OverlayComponentKeys.TimingTower, defaults.Timing, gameWindow));
+                OverlayBounds tower = Resolve(OverlayComponentKeys.TimingTower, defaults.Timing, gameWindow);
+                _viewModel.Timing.ResizeRanking(LeftTowerLayoutMetrics.CalculateRankingRows(tower.Width, tower.Height, _diagnostic));
+                TimingHud.SetViewModel(_viewModel.Timing);
+                if (!_layoutEditing)
+                {
+                    int contentHeight = (int)Math.Ceiling(TimingHud.Height * tower.Width / LeftTowerLayoutMetrics.Width);
+                    tower = new OverlayBounds(tower.X, tower.Y, tower.Width, Math.Min(tower.Height, contentHeight));
+                }
+                ShowMainAt(gameWindow, tower);
             }
             else if (IsVisible)
             {
