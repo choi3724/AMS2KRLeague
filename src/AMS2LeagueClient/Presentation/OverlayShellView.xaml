@@ -54,7 +54,7 @@
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="14,0,0,0">
                     <TextBlock Text="{Binding EventCard.SecondaryText}" Foreground="#DDE7F1" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Right" Style="{StaticResource HudNumericText}" />
                     <Border Visibility="{Binding EventCard.IsDemo, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#665D3FD3" CornerRadius="4" Padding="5,1" Margin="0,3,0,0">
-                        <TextBlock Text="DEMO" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontMicro}" FontWeight="Bold" />
+                        <TextBlock Text="데모" Foreground="White" FontSize="{x:Static core:OverlayUiMetrics.FontMicro}" FontWeight="Bold" />
                     </Border>
                 </StackPanel>
             </Grid>

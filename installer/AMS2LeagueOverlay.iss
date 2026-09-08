@@ -5,7 +5,7 @@
   #error OutputDir must be provided by build-release.ps1
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.4.0"
+  #define AppVersion "0.4.1"
 #endif
 
 [Setup]
@@ -31,13 +31,24 @@ UninstallDisplayIcon={app}\AMS2LeagueClient.exe
 CloseApplications=force
 RestartApplications=no
 SetupLogging=yes
+Uninstallable=not IsPortableMode
+CreateUninstallRegKey=not IsPortableMode
+
+[Languages]
+Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\AMS2 League Overlay"; Filename: "{app}\AMS2LeagueClient.exe"; WorkingDir: "{app}"
-Name: "{group}\제거"; Filename: "{uninstallexe}"
+Name: "{group}\AMS2 League Overlay"; Filename: "{app}\AMS2LeagueClient.exe"; WorkingDir: "{app}"; Check: not IsPortableMode
+Name: "{group}\제거"; Filename: "{uninstallexe}"; Check: not IsPortableMode
 
 [Run]
 Filename: "{app}\AMS2LeagueClient.exe"; Description: "AMS2 League Overlay 실행"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function IsPortableMode: Boolean;
+begin
+  Result := ExpandConstant('{param:PORTABLE|0}') = '1';
+end;

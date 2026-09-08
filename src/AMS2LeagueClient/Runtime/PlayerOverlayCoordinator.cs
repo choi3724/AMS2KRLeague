@@ -338,7 +338,12 @@ namespace AMS2LeagueClient.Runtime
                 else if (_lastReadStatus == TelemetryReadStatus.UnsupportedVersion || _lastReadStatus == TelemetryReadStatus.InvalidData || _lastReadStatus == TelemetryReadStatus.Error)
                 {
                     _status.StateLabel = "텔레메트리 오류";
-                    _status.Message = _lastReadMessage;
+                    _status.Message = _lastReadStatus switch
+                    {
+                        TelemetryReadStatus.UnsupportedVersion => "지원하지 않는 AMS2 공유 메모리 버전입니다. 프로그램 업데이트를 확인해 주세요.",
+                        TelemetryReadStatus.InvalidData => "게임 데이터가 아직 유효하지 않습니다. 연결을 다시 확인하는 중입니다.",
+                        _ => "게임 데이터를 읽지 못했습니다. 연결을 다시 확인하는 중입니다."
+                    };
                     _status.AccentColor = "#FF6B6B";
                 }
 

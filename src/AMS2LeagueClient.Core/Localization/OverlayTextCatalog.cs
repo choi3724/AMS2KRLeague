@@ -107,7 +107,7 @@ namespace AMS2LeagueClient.Core.Localization
                 RaceState.Finished => Get(OverlayTextKey.Finish),
                 RaceState.Disqualified => Get(OverlayTextKey.Disqualified),
                 RaceState.Retired => Get(OverlayTextKey.Retired),
-                RaceState.Dnf => Get(OverlayTextKey.Retired),
+                RaceState.Dnf => CultureName == "ko-KR" ? "미완주" : "DNF",
                 RaceState.Racing => Get(OverlayTextKey.Race),
                 _ => Get(OverlayTextKey.Waiting)
             };
@@ -191,7 +191,7 @@ namespace AMS2LeagueClient.Core.Localization
             "ko-KR",
             new Dictionary<OverlayTextKey, string>
             {
-                [OverlayTextKey.AppTitle] = "AMS2 LEAGUE",
+                [OverlayTextKey.AppTitle] = "AMS2 리그",
                 [OverlayTextKey.PlayerOverlay] = "플레이어 오버레이",
                 [OverlayTextKey.RealReadOnly] = "실제 AMS2 · 읽기 전용",
                 [OverlayTextKey.DemoSimulation] = "데모 / 시뮬레이션",
@@ -208,14 +208,14 @@ namespace AMS2LeagueClient.Core.Localization
                 [OverlayTextKey.FinalLap] = "마지막 랩",
                 [OverlayTextKey.PitEntry] = "피트 진입",
                 [OverlayTextKey.PitExit] = "피트 이탈",
-                [OverlayTextKey.Finish] = "레이스 종료",
+                [OverlayTextKey.Finish] = "완주",
                 [OverlayTextKey.Retired] = "리타이어",
                 [OverlayTextKey.Disqualified] = "실격",
                 [OverlayTextKey.InvalidLap] = "현재 랩 무효",
                 [OverlayTextKey.BattleAhead] = "앞차와 접전",
                 [OverlayTextKey.CurrentPosition] = "현재 순위",
                 [OverlayTextKey.FinalPosition] = "최종 순위",
-                [OverlayTextKey.CompletedLap] = "완주 LAP",
+                [OverlayTextKey.CompletedLap] = "완료 랩",
                 [OverlayTextKey.AheadGap] = "앞차와 간격",
                 [OverlayTextKey.Practice] = "연습",
                 [OverlayTextKey.Qualifying] = "예선",
@@ -243,7 +243,7 @@ namespace AMS2LeagueClient.Core.Localization
                 [OverlayTextKey.Session] = "세션",
                 [OverlayTextKey.ViewedIndex] = "표시 참가자 인덱스",
                 [OverlayTextKey.LocalStatePit] = "로컬 상태 / 피트",
-                [OverlayTextKey.ReadUiRate] = "읽기 / UI 속도",
+                [OverlayTextKey.ReadUiRate] = "읽기 / 화면 갱신 속도",
                 [OverlayTextKey.SessionInformation] = "세션 정보"
             },
             English);

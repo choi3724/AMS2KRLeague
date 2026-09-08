@@ -116,7 +116,7 @@ namespace AMS2LeagueClient.Runtime
                 case OverlayEventType.RaceFastestLap:
                     return new OverlayEvent(type, OverlayEventPriority.Normal, now, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(12), text.Get(OverlayTextKey.RaceFastestLap), "LEE", "1:40.973", "DEMO");
                 case OverlayEventType.PitEntry:
-                    return new OverlayEvent(type, OverlayEventPriority.Normal, now, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), text.Get(OverlayTextKey.PitEntry), "LAP 3", string.Empty, "DEMO");
+                    return new OverlayEvent(type, OverlayEventPriority.Normal, now, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), text.Get(OverlayTextKey.PitEntry), "랩 3", string.Empty, "DEMO");
                 case OverlayEventType.FinalLap:
                     return new OverlayEvent(type, OverlayEventPriority.Critical, now, TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(20), text.Get(OverlayTextKey.FinalLap), "현재 순위 P4", string.Empty, "DEMO");
                 case OverlayEventType.Finish:

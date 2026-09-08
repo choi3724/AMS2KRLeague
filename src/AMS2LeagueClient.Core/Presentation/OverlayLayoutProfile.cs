@@ -35,6 +35,8 @@ namespace AMS2LeagueClient.Core.Presentation
     public sealed class OverlayLayoutProfile
     {
         public int Schema { get; set; } = 1;
+        // Missing in pre-0.4.1 profiles; expand only the saved tower width once.
+        public int TowerDesignWidth { get; set; } = 520;
         public Dictionary<string, NormalizedOverlayBounds> Components { get; set; }
             = new Dictionary<string, NormalizedOverlayBounds>(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, bool> EnabledComponents { get; set; }
@@ -67,8 +69,10 @@ namespace AMS2LeagueClient.Core.Presentation
                 return fallback;
             }
 
-            int width = Clamp((int)Math.Round(saved.Width * viewportWidth), 72, viewportWidth);
-            int height = Clamp((int)Math.Round(saved.Height * viewportHeight), 48, viewportHeight);
+            double widthRatio = component == OverlayComponentKeys.TimingTower && TowerDesignWidth == 520 ? OverlayUiMetrics.TowerWidth / 520.0 : 1.0;
+            int width = Clamp((int)Math.Round(saved.Width * viewportWidth * widthRatio), 72, viewportWidth);
+            double extraHeaderHeight = widthRatio != 1 ? 22 * saved.Width * viewportWidth / 520.0 : 0;
+            int height = Clamp((int)Math.Round(saved.Height * viewportHeight + extraHeaderHeight), 48, viewportHeight);
             int x = Clamp((int)Math.Round(saved.X * viewportWidth), 0, Math.Max(0, viewportWidth - width));
             int y = Clamp((int)Math.Round(saved.Y * viewportHeight), 0, Math.Max(0, viewportHeight - height));
             return new OverlayBounds(x, y, width, height);
@@ -84,6 +88,7 @@ namespace AMS2LeagueClient.Core.Presentation
             int x = Clamp(bounds.X, 0, Math.Max(0, viewportWidth - width));
             int y = Clamp(bounds.Y, 0, Math.Max(0, viewportHeight - height));
             Components ??= new Dictionary<string, NormalizedOverlayBounds>(StringComparer.OrdinalIgnoreCase);
+            if (component == OverlayComponentKeys.TimingTower) TowerDesignWidth = OverlayUiMetrics.TowerWidth;
             Components[component] = new NormalizedOverlayBounds
             {
                 X = x / (double)viewportWidth,

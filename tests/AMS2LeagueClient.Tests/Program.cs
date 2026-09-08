@@ -29,7 +29,7 @@ using AMS2LeagueClient.Overlay;
 
 namespace AMS2LeagueClient.Tests
 {
-    internal static class Program
+    internal static partial class Program
     {
         private static string? _layoutCaptureDirectory;
 
@@ -47,8 +47,25 @@ namespace AMS2LeagueClient.Tests
                 application.Shutdown();
                 return 0;
             }
+            int liveUpdateArgument = Array.IndexOf(args, "--verify-live-update");
+            if (liveUpdateArgument >= 0 && liveUpdateArgument + 1 < args.Length)
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+                var client = new GitHubReleaseClient(http);
+                ReleaseUpdate release = client.FindUpdateAsync("0.0.0", CancellationToken.None).GetAwaiter().GetResult()
+                    ?? throw new InvalidOperationException("No public release found.");
+                string path = client.DownloadAsync(release, Path.GetFullPath(args[liveUpdateArgument + 1]), null, CancellationToken.None).GetAwaiter().GetResult();
+                Console.WriteLine("LIVE_UPDATE_VERIFIED version=" + release.Version + " bytes=" + new FileInfo(path).Length + " sha256=" + release.Sha256);
+                application.Shutdown();
+                return 0;
+            }
             var tests = new (string Name, Action Test)[]
             {
+                ("Korean labels and dedicated penalty column", KoreanLabelsAndPenaltyColumn),
+                ("Saved tower expands once and retains independent layout", LegacyTowerWidthMigration),
+                ("Release versions and metadata reject unsafe updates", ReleaseVersionAndMetadata),
+                ("Update downloads verify exact bytes and recover from failures", UpdateDownloadValidation),
+                ("Updater startup and Windows quoting preserve arguments", UpdateStartupAndArguments),
                 ("Official v14 activity metadata offsets", ActivityMetadataLayoutOffsets),
                 ("Official v14 future telemetry offsets", FutureTelemetryLayoutOffsets),
                 ("Official v14 future telemetry parses", FutureTelemetryParses),
@@ -563,9 +580,9 @@ namespace AMS2LeagueClient.Tests
                 local,
                 ProgressParticipant(1, "AHEAD", 3, 100));
             AssertEqual(1, oneLap.LapGap);
-            AssertEqual("LAP 1", oneLap.Text);
+            AssertEqual("랩 1", oneLap.Text);
             AssertEqual(2, twoLaps.LapGap);
-            AssertEqual("LAP 2", twoLaps.Text);
+            AssertEqual("랩 2", twoLaps.Text);
 
             var tracker = new RelativeDistanceTrendTracker();
             var first = LapCandidateView("1|AHEAD|CAR|GT3", 1);
@@ -574,15 +591,15 @@ namespace AMS2LeagueClient.Tests
             AssertEqual(string.Empty, first.AheadLapGap);
             var confirmed = LapCandidateView("1|AHEAD|CAR|GT3", 1);
             tracker.Apply(confirmed, 8);
-            AssertEqual("LAP 1", confirmed.AheadLapGap);
+            AssertEqual("랩 1", confirmed.AheadLapGap);
             AssertEqual("+0.500", confirmed.AheadGap);
 
             var firstTwo = LapCandidateView("1|AHEAD|CAR|GT3", 2);
             tracker.Apply(firstTwo, 8);
-            AssertEqual("LAP 1", firstTwo.AheadLapGap);
+            AssertEqual("랩 1", firstTwo.AheadLapGap);
             var confirmedTwo = LapCandidateView("1|AHEAD|CAR|GT3", 2);
             tracker.Apply(confirmedTwo, 8);
-            AssertEqual("LAP 2", confirmedTwo.AheadLapGap);
+            AssertEqual("랩 2", confirmedTwo.AheadLapGap);
             AssertEqual("+0.500", confirmedTwo.AheadGap);
         }
 
@@ -592,7 +609,7 @@ namespace AMS2LeagueClient.Tests
             tracker.Apply(LapCandidateView("1|OLD|CAR|GT3", 1), 9);
             var oldConfirmed = LapCandidateView("1|OLD|CAR|GT3", 1);
             tracker.Apply(oldConfirmed, 9);
-            AssertEqual("LAP 1", oldConfirmed.AheadLapGap);
+            AssertEqual("랩 1", oldConfirmed.AheadLapGap);
 
             var refreshed = LapCandidateView("1|NEW|CAR|GT3", 1);
             tracker.Apply(refreshed, 9);
@@ -626,8 +643,8 @@ namespace AMS2LeagueClient.Tests
             var tracker = new RelativeDistanceTrendTracker();
             tracker.Apply(view, 1);
             tracker.Apply(view, 1);
-            AssertEqual("LAP 1", view.AheadLapGap);
-            AssertEqual("LAP 2", view.BehindLapGap);
+            AssertEqual("랩 1", view.AheadLapGap);
+            AssertEqual("랩 2", view.BehindLapGap);
             AssertEqual("+0.842s", view.AheadGap);
             AssertEqual("+1.127s", view.BehindGap);
 
@@ -764,8 +781,8 @@ namespace AMS2LeagueClient.Tests
                 OverlayViewModel view = BuildTiming(fixture.SetSession(SessionState.Race));
                 tracker.Apply(view, 1);
                 tracker.Apply(view, 1);
-                AssertEqual("LAP 1", view.AheadLapGap);
-                AssertEqual("LAP 2", view.BehindLapGap);
+                AssertEqual("랩 1", view.AheadLapGap);
+                AssertEqual("랩 2", view.BehindLapGap);
                 view = BuildTiming(fixture.SetSession(session));
                 for (int sample = 0; sample < 3; sample++)
                 {
@@ -905,8 +922,8 @@ namespace AMS2LeagueClient.Tests
                 timing.AheadParticipantKey = timing.BehindParticipantKey = string.Empty; // static layout, no entrance motion
                 timing.AheadGap = hasTime ? (lapped ? "+123.456s" : "+0.842s") : "—";
                 timing.BehindGap = hasTime ? (lapped ? "+987.654s" : "+1.127s") : "—";
-                timing.AheadLapGap = lapped ? "LAP 1" : string.Empty;
-                timing.BehindLapGap = lapped ? "LAP 2" : string.Empty;
+                timing.AheadLapGap = lapped ? "랩 1" : string.Empty;
+                timing.BehindLapGap = lapped ? "랩 2" : string.Empty;
                 timing.AheadDistance = "1234m";
                 view.SetViewModel(timing);
                 double scale = Math.Min(width / 520.0, height / 104.0);
@@ -962,7 +979,7 @@ namespace AMS2LeagueClient.Tests
             AssertEqual(1.00, OverlayUiMetrics.TargetScale);
             AssertTrue(OverlayUiMetrics.FontDriverName >= 24);
             AssertTrue(OverlayUiMetrics.RowPitch >= 37);
-            AssertTrue(OverlayUiMetrics.TowerHeight + OverlayUiMetrics.ComponentGap + OverlayUiMetrics.RelativeHeight <= 700);
+            AssertTrue(OverlayUiMetrics.TowerHeight + OverlayUiMetrics.ComponentGap + OverlayUiMetrics.RelativeHeight <= 722);
             AssertEqual(15, LeftTowerLayoutMetrics.RankingRows);
             AssertTrue(LeftTowerLayoutMetrics.RequiredHeight <= LeftTowerLayoutMetrics.DesiredHeight);
         }
@@ -979,7 +996,7 @@ namespace AMS2LeagueClient.Tests
                 OverlayUiMetrics.TowerWidth,
                 LeftTowerLayoutMetrics.RequiredHeightForRows(20, false) - 1,
                 false));
-            AssertEqual(15, LeftTowerLayoutMetrics.CalculateRankingRows(1040, 1172, false));
+            AssertEqual(15, LeftTowerLayoutMetrics.CalculateRankingRows(OverlayUiMetrics.TowerWidth * 2, OverlayUiMetrics.TowerHeight * 2, false));
             AssertEqual(15, LeftTowerLayoutMetrics.CalculateRankingRows(
                 OverlayUiMetrics.TowerWidth,
                 LeftTowerLayoutMetrics.RequiredHeightForRows(15, true),
@@ -1155,7 +1172,7 @@ namespace AMS2LeagueClient.Tests
             AssertTrue(OverlayUiMetrics.FontClass >= 17);
             AssertTrue(OverlayUiMetrics.FontTiming >= 18);
             AssertTrue(OverlayUiMetrics.RowPitch >= 38);
-            AssertTrue(OverlayUiMetrics.TowerHeight + OverlayUiMetrics.ComponentGap + OverlayUiMetrics.RelativeHeight <= 700);
+            AssertTrue(OverlayUiMetrics.TowerHeight + OverlayUiMetrics.ComponentGap + OverlayUiMetrics.RelativeHeight <= 722);
 
             var view = new OverlayHudView();
             view.SetViewModel(DemoSnapshotFactory.CreateShell(false).Timing);
@@ -3470,8 +3487,8 @@ namespace AMS2LeagueClient.Tests
             }
             foreach ((RaceState race, PitSchedule schedule, string badge) in new[] {
                 (RaceState.Retired, PitSchedule.None, "RET"), (RaceState.Dnf, PitSchedule.None, "DNF"),
-                (RaceState.Disqualified, PitSchedule.None, "DSQ"), (RaceState.Racing, PitSchedule.DriveThrough, "DT"),
-                (RaceState.Racing, PitSchedule.StopGo, "SG") })
+                (RaceState.Disqualified, PitSchedule.None, "DSQ"), (RaceState.Racing, PitSchedule.DriveThrough, "PIT"),
+                (RaceState.Racing, PitSchedule.StopGo, "PIT") })
             {
                 var snapshot = Parse(new RawFixtureBuilder(4).SetSession(SessionState.Practice)
                     .SetParticipant(0, true, "PIT", 1, 0, 1, race, PitMode.InGarage).SetParticipantControl(0, schedule));

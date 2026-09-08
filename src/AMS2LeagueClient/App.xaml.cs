@@ -34,6 +34,7 @@ namespace AMS2LeagueClient
         private ClientStatusWindow? _statusWindow;
         private PlayerOverlayCoordinator? _coordinator;
         private MemoryDiagnosticsWriter? _memoryDiagnostics;
+        private GitHubAutoUpdater? _autoUpdater;
         private ActivityCaptureRuntime? _activityCapture;
         private CancellationTokenSource? _bootstrapCancellation;
         private Task? _bootstrapTask;
@@ -222,6 +223,20 @@ namespace AMS2LeagueClient
                     + " statusWindow=" + startupPolicy.ShowStatusWindow
                     + " showActivated=" + startupPolicy.ShowStatusWindowActivated);
 
+                if (GitHubAutoUpdater.ShouldEnable(args))
+                {
+                    _autoUpdater = new GitHubAutoUpdater(ClientVersion(), userDataRoot, args,
+                        message => Dispatcher.BeginInvoke(new Action(() => { if (!_cleanupStarted) status.UpdateText = message; })),
+                        async () => await Dispatcher.InvokeAsync(() =>
+                        {
+                            if (_cleanupStarted || GitHubAutoUpdater.IsGameRunning()) return false;
+                            ExitClient();
+                            return true;
+                        }), _logger);
+                    _autoUpdater.Start();
+                }
+                else status.UpdateText = "업데이트: 이 실행에서는 사용 안 함";
+
                 string? memoryCsv = ValueAfter(args, "--memory-csv");
                 if (memoryCsv != null)
                 {
@@ -245,7 +260,7 @@ namespace AMS2LeagueClient
                 _logger.Error("STARTUP_EXCEPTION", exception);
                 if (_allowInteractiveErrors)
                 {
-                    MessageBox.Show(exception.Message, "AMS2 League Client failed to start", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show("프로그램을 시작하지 못했습니다. 설치 경로와 권한을 확인해 주세요. 자세한 내용은 로그에 기록했습니다.", "AMS2 리그 오버레이 시작 오류", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
 
                 Shutdown(1);
@@ -287,6 +302,8 @@ namespace AMS2LeagueClient
             if (_cleanupStarted) return;
             _cleanupStarted = true;
 
+            CleanupComponent("AUTO_UPDATE", () => _autoUpdater?.Dispose());
+            _autoUpdater = null;
             _autoExitTimer?.Stop();
             _demoEventTimer?.Stop();
             CleanupComponent("MEMORY_DIAGNOSTICS", () => _memoryDiagnostics?.Dispose());
@@ -324,7 +341,7 @@ namespace AMS2LeagueClient
             eventArgs.Handled = true;
             if (_allowInteractiveErrors)
             {
-                MessageBox.Show(eventArgs.Exception.Message, "AMS2 League Client error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("화면 처리 중 오류가 발생했습니다. 프로그램을 다시 실행해 주세요. 자세한 내용은 로그에 기록했습니다.", "AMS2 리그 오버레이 오류", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

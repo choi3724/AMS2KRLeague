@@ -149,7 +149,7 @@ namespace AMS2LeagueClient.Core.RaceControl
                     }
                     else if (raceState == RaceState.Dnf)
                     {
-                        detected.Add(ParticipantEvent(RaceControlEventType.Dnf, RaceControlPriority.DriverState, now, participant, tracker.Generation, leagueParticipant.LeaguePosition, "DNF", "mRaceStates[]", participant.RaceStateRaw, ParticipantPenaltyState.Dnf));
+                        detected.Add(ParticipantEvent(RaceControlEventType.Dnf, RaceControlPriority.DriverState, now, participant, tracker.Generation, leagueParticipant.LeaguePosition, "미완주", "mRaceStates[]", participant.RaceStateRaw, ParticipantPenaltyState.Dnf));
                         terminalEmitted = true;
                     }
                 }

@@ -16,11 +16,12 @@ namespace AMS2LeagueClient.Presentation
         private string _windowText = "게임 창: 감지되지 않음";
         private string _serverText = "서버: 확인 중";
         private string _accountText = "계정: 연결 안 됨";
+        private string _updateText = "업데이트: 확인 대기";
         private SessionPlayMode _sessionPlayMode;
 
-        public ClientStatusViewModel(string version = "0.4.0")
+        public ClientStatusViewModel(string version = "0.4.1")
         {
-            VersionText = "AMS2 League Overlay " + (string.IsNullOrWhiteSpace(version) ? "0.4.0" : version);
+            VersionText = "AMS2 리그 오버레이 " + (string.IsNullOrWhiteSpace(version) ? "0.4.1" : version);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -34,6 +35,7 @@ namespace AMS2LeagueClient.Presentation
         public string WindowText { get => _windowText; set => Set(ref _windowText, value); }
         public string ServerText { get => _serverText; set => Set(ref _serverText, value); }
         public string AccountText { get => _accountText; set => Set(ref _accountText, value); }
+        public string UpdateText { get => _updateText; set => Set(ref _updateText, value); }
         public string VersionText { get; }
         // Not persisted: do not silently carry yesterday's room type into another game launch.
         public SessionPlayMode SessionPlayMode
@@ -73,7 +75,7 @@ namespace AMS2LeagueClient.Presentation
         {
             StateLabel = "연결됨";
             Message = "읽기 전용 텔레메트리에 연결되었습니다.";
-            Detail = "AMS2가 전면에 있고 플레이 상태가 유효할 때만 레이스 HUD가 표시됩니다.";
+            Detail = "AMS2가 전면에 있고 플레이 상태가 유효할 때만 레이스 오버레이가 표시됩니다.";
             AccentColor = "#4DE3B1";
             ProcessText = "AMS2 프로세스: 연결됨 (PID " + pid + ")";
             SharedMemoryText = "공유 메모리: v" + version + " · 빌드 " + build;
@@ -84,7 +86,7 @@ namespace AMS2LeagueClient.Presentation
         {
             StateLabel = "데모 / 시뮬레이션";
             Message = "고정 데이터 오버레이를 실행 중입니다.";
-            Detail = "이 모드는 UI와 창 동작만 검증하며 실제 AMS2 텔레메트리 증거가 아닙니다.";
+            Detail = "이 모드는 화면과 창 동작만 검증하며 실제 AMS2 텔레메트리 증거가 아닙니다.";
             AccentColor = "#B68CFF";
             ProcessText = "AMS2 프로세스: --demo로 생략";
             SharedMemoryText = "공유 메모리: 고정 데이터 v14";

@@ -13,4 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AMS2LeagueClient.Core\AMS2LeagueClient.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Runtime\ApplyUpdate.ps1" LogicalName="AMS2LeagueClient.ApplyUpdate.ps1" />
+  </ItemGroup>
 </Project>

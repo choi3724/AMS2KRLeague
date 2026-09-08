@@ -52,8 +52,8 @@ namespace AMS2LeagueClient.Core.Presentation
             int aheadLaps = _aheadLap.Observe(viewModel.AheadParticipantKey, viewModel.AheadLapGapCandidate);
             int behindLaps = _behindLap.Observe(viewModel.BehindParticipantKey, viewModel.BehindLapGapCandidate);
             // Lap difference is independent of the game-provided time gap.
-            viewModel.AheadLapGap = aheadLaps > 0 ? "LAP " + aheadLaps.ToString(CultureInfo.InvariantCulture) : string.Empty;
-            viewModel.BehindLapGap = behindLaps > 0 ? "LAP " + behindLaps.ToString(CultureInfo.InvariantCulture) : string.Empty;
+            viewModel.AheadLapGap = aheadLaps > 0 ? "랩 " + aheadLaps.ToString(CultureInfo.InvariantCulture) : string.Empty;
+            viewModel.BehindLapGap = behindLaps > 0 ? "랩 " + behindLaps.ToString(CultureInfo.InvariantCulture) : string.Empty;
         }
 
         public void Reset()
@@ -203,7 +203,7 @@ namespace AMS2LeagueClient.Core.Presentation
             if (absoluteMeters >= trackLength)
             {
                 int laps = Math.Max(1, (int)Math.Floor(absoluteMeters / trackLength));
-                return new TrackProgressDistance(true, signedMeters, "LAP " + laps.ToString(CultureInfo.InvariantCulture), laps);
+                return new TrackProgressDistance(true, signedMeters, "랩 " + laps.ToString(CultureInfo.InvariantCulture), laps);
             }
 
             return new TrackProgressDistance(

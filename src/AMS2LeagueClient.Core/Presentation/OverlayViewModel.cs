@@ -30,6 +30,9 @@ namespace AMS2LeagueClient.Core.Presentation
         public bool IsDimmed { get; set; }
         public string Status { get; set; } = string.Empty;
         public string StatusColor { get; set; } = "#91A5B8";
+        // Keep the machine code for transitions; localize only the rendered label.
+        public string StatusLabel => StateText.TowerStatus(Status);
+        public string PenaltyText { get; set; } = "—";
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -53,7 +56,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 && DisplayState == source.DisplayState
                 && IsDimmed == source.IsDimmed
                 && Status == source.Status
-                && StatusColor == source.StatusColor)
+                && StatusColor == source.StatusColor && PenaltyText == source.PenaltyText)
             {
                 if (timeChanged) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentTime)));
                 return;
@@ -76,6 +79,7 @@ namespace AMS2LeagueClient.Core.Presentation
             IsDimmed = source.IsDimmed;
             Status = source.Status;
             StatusColor = source.StatusColor;
+            PenaltyText = source.PenaltyText;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
         }
     }
@@ -87,7 +91,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string EnvironmentLabel { get; set; } = "실제 AMS2 · 읽기 전용";
         public bool IsDiagnostic { get; set; }
         public string PositionText { get; set; } = "P— / —";
-        public string LapText { get; set; } = "LAP — / —";
+        public string LapText { get; set; } = "랩 — / —";
         public string AheadPosition { get; set; } = "P—";
         public string AheadName { get; set; } = "앞차 없음";
         public string AheadGap { get; set; } = "—";
@@ -153,7 +157,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string RemainingTimeText { get; set; } = "—";
         public string OverallPositionText { get; set; } = "P— / —";
         public string ClassPositionText { get; set; } = "C— / —";
-        public string CurrentLapHeaderText { get; set; } = "LAP —";
+        public string CurrentLapHeaderText { get; set; } = "랩 —";
         public string RankingRangeText { get; set; } = "순위";
         public int RankingRowCapacity { get; set; } = MaxRankingRows;
         public IReadOnlyList<RankingRowViewModel> AllRankingRows { get; set; } = Array.Empty<RankingRowViewModel>();
@@ -237,7 +241,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 ? "순위"
                 : playerPinnedAfterLeaders && rankingRows.Count > 1
                     ? rankingRows[0].Position + " — " + rankingRows[rankingRows.Count - 2].Position
-                        + " · PLAYER " + rankingRows[rankingRows.Count - 1].Position
+                        + " · 내 차량 " + rankingRows[rankingRows.Count - 1].Position
                     : rankingRows[0].Position + " — " + rankingRows[rankingRows.Count - 1].Position;
 
             return new OverlayViewModel
@@ -245,7 +249,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 EnvironmentLabel = environmentLabel,
                 IsDiagnostic = diagnostic,
                 PositionText = "P" + (league.Local?.LeaguePosition ?? 0) + " / " + league.LeagueParticipantCount,
-                LapText = "LAP " + displayLap + " / " + (snapshot.LapsInEvent == 0 ? "—" : snapshot.LapsInEvent.ToString(CultureInfo.InvariantCulture)),
+                LapText = "랩 " + displayLap + " / " + (snapshot.LapsInEvent == 0 ? "—" : snapshot.LapsInEvent.ToString(CultureInfo.InvariantCulture)),
                 AheadPosition = PositionOf(aheadLeague),
                 AheadName = NameOf(ahead, noCar),
                 AheadGap = aheadGap.Text,
@@ -279,7 +283,7 @@ namespace AMS2LeagueClient.Core.Presentation
                     ? catalog.Get(OverlayTextKey.CurrentLapInvalid) : catalog.Get(OverlayTextKey.GameTelemetry),
                 ShmVersion = snapshot.Version.ToString(CultureInfo.InvariantCulture),
                 BuildVersion = snapshot.BuildVersion.ToString(CultureInfo.InvariantCulture),
-                GameState = StateText.Game(snapshot.GameStateRaw),
+                GameState = StateText.GameLabel(snapshot.GameStateRaw),
                 SessionState = catalog.SessionName(snapshot.KnownSessionState),
                 ParticipantCount = league.RawParticipantCount.ToString(CultureInfo.InvariantCulture),
                 LeagueParticipantCount = league.LeagueParticipantCount.ToString(CultureInfo.InvariantCulture),
@@ -296,7 +300,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 SnapshotRate = snapshotRate.ToString("0.0", CultureInfo.InvariantCulture) + " Hz",
                 UiRate = uiRate.ToString("0.0", CultureInfo.InvariantCulture) + " Hz",
                 EventQueueText = queuedEvents.ToString(CultureInfo.InvariantCulture),
-                CurrentEventText = currentEvent?.Type.ToString() ?? "—",
+                CurrentEventText = currentEvent?.Title ?? "—",
                 PlayerOverlayLabel = catalog.Get(OverlayTextKey.PlayerOverlay),
                 RaceGapLabel = catalog.Get(OverlayTextKey.RaceGapGameProvided),
                 LastLabel = catalog.Get(OverlayTextKey.Last),
@@ -306,7 +310,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 RemainingTimeText = eventTimeRemainingTextOverride ?? FormatRemainingTime(displayedEventTimeRemaining),
                 OverallPositionText = "P" + (league.Local?.LeaguePosition ?? 0) + " / " + league.LeagueParticipantCount,
                 ClassPositionText = FormatClassPosition(league, local),
-                CurrentLapHeaderText = "LAP " + displayLap,
+                CurrentLapHeaderText = "랩 " + displayLap,
                 RankingRangeText = range,
                 RankingRowCapacity = rankingRowCapacity,
                 AllRankingRows = allRankingRows,
@@ -318,10 +322,10 @@ namespace AMS2LeagueClient.Core.Presentation
                 PitScheduleRawText = local.PitScheduleRaw.ToString(CultureInfo.InvariantCulture),
                 PitModeRawText = local.PitModeRaw.ToString(CultureInfo.InvariantCulture),
                 RaceStateRawText = local.RaceStateRaw.ToString(CultureInfo.InvariantCulture),
-                FlagColourRawText = local.HighestFlagColourRaw.ToString(CultureInfo.InvariantCulture) + " / ROOT " + snapshot.HighestFlagColourRaw,
-                FlagReasonRawText = local.HighestFlagReasonRaw.ToString(CultureInfo.InvariantCulture) + " / ROOT " + snapshot.HighestFlagReasonRaw,
-                DerivedPenaltyText = broadcastStates != null && broadcastStates.TryGetValue(local.Index, out ParticipantBroadcastState? localBroadcast) ? localBroadcast.PenaltyState.ToString() : "—",
-                DerivedRaceControlText = raceControl?.ActiveEvent?.Type.ToString() ?? "—",
+                FlagColourRawText = local.HighestFlagColourRaw.ToString(CultureInfo.InvariantCulture) + " / 전체 " + snapshot.HighestFlagColourRaw,
+                FlagReasonRawText = local.HighestFlagReasonRaw.ToString(CultureInfo.InvariantCulture) + " / 전체 " + snapshot.HighestFlagReasonRaw,
+                DerivedPenaltyText = broadcastStates != null && broadcastStates.TryGetValue(local.Index, out ParticipantBroadcastState? localBroadcast) ? StateText.PenaltyLabel(localBroadcast.PenaltyState) : "—",
+                DerivedRaceControlText = raceControl?.ActiveEvent?.Message ?? "—",
                 EventProvenanceText = raceControl?.ActiveEvent?.Source ?? "—",
                 EventConfidenceText = raceControl?.ActiveEvent?.Confidence.ToString() ?? "—"
             };
@@ -330,7 +334,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public static OverlayViewModel Build(TelemetrySnapshot snapshot, ParticipantSnapshot local, RelativeDrivers relatives, double snapshotRate, double uiRate, bool diagnostic, string environmentLabel)
         {
             LeagueClassification league = new LeagueClassificationResolver().Resolve(snapshot, local);
-            return Build(snapshot, local, league, snapshotRate, uiRate, diagnostic, environmentLabel, text: OverlayTextCatalog.English);
+            return Build(snapshot, local, league, snapshotRate, uiRate, diagnostic, environmentLabel, text: OverlayTextCatalog.Korean);
         }
 
         public static string FormatLapTime(float seconds)
@@ -367,7 +371,7 @@ namespace AMS2LeagueClient.Core.Presentation
                     > TimingTowerTransitionTracker.ParsePosition(RankingRows[RankingRows.Count - 2].Position) + 1;
             RankingRangeText = RankingRows.Count == 0 ? "순위"
                 : pinned ? RankingRows[0].Position + " — " + RankingRows[RankingRows.Count - 2].Position
-                    + " · PLAYER " + RankingRows[RankingRows.Count - 1].Position
+                    + " · 내 차량 " + RankingRows[RankingRows.Count - 1].Position
                 : RankingRows[0].Position + " — " + RankingRows[RankingRows.Count - 1].Position;
         }
 
@@ -427,6 +431,7 @@ namespace AMS2LeagueClient.Core.Presentation
                         ClassBackground = dimmed ? "#394652" : classBadge.Background,
                         ClassForeground = dimmed ? "#AAB4BE" : classBadge.Foreground,
                         TimeForeground = dimmed ? OverlayUiPalette.InactiveTime : OverlayUiPalette.ActiveTime,
+                        PenaltyText = StateText.Penalty(item.Source),
                         Status = terminal.Length > 0 ? terminal : StatusOf(item.Source.Index, broadcastStates, visibleFastestIndex),
                         StatusColor = terminal.Length > 0 ? (dimmed ? "#FF7777" : "#91A5B8")
                             : StatusColorOf(item.Source.Index, broadcastStates, visibleFastestIndex)
@@ -463,6 +468,8 @@ namespace AMS2LeagueClient.Core.Presentation
         {
             if (states != null && states.TryGetValue(participantIndex, out ParticipantBroadcastState? state) && state.CompactCode.Length > 0)
             {
+                if (state.PenaltyState == ParticipantPenaltyState.DriveThrough || state.PenaltyState == ParticipantPenaltyState.StopGo)
+                    return state.IsPitActive ? "PIT" : fastestIndex == participantIndex ? "BEST" : string.Empty;
                 return state.CompactCode;
             }
             return fastestIndex == participantIndex ? "BEST" : string.Empty;
@@ -483,7 +490,7 @@ namespace AMS2LeagueClient.Core.Presentation
                         return "#FF7777";
                     case ParticipantPenaltyState.DriveThrough:
                     case ParticipantPenaltyState.StopGo:
-                        return "#FFD166";
+                        return state.IsPitActive ? "#57D5FF" : fastestIndex == participantIndex ? "#B68CFF" : "#91A5B8";
                     case ParticipantPenaltyState.Pit:
                         return "#57D5FF";
                 }

@@ -118,12 +118,12 @@ namespace AMS2LeagueClient.Core.Presentation
             if ((state & BroadcastOverlayState.FullCourseYellow) != 0) return "전 코스 황색기";
             if ((state & BroadcastOverlayState.DoubleYellow) != 0) return "!! 이중 황색기";
             if ((state & BroadcastOverlayState.Yellow) != 0) return "! 황색기";
-            if ((state & BroadcastOverlayState.Chequered) != 0) return "FINAL";
+            if ((state & BroadcastOverlayState.Chequered) != 0) return "완주";
             if ((state & BroadcastOverlayState.FinalLap) != 0) return "마지막 랩";
             if ((state & BroadcastOverlayState.BlueFlagPlayer) != 0) return "청색기";
             if ((state & BroadcastOverlayState.PlayerDsq) != 0) return "실격";
             if ((state & BroadcastOverlayState.PlayerPenalty) != 0) return "페널티";
-            if ((state & BroadcastOverlayState.PlayerPit) != 0) return "PIT";
+            if ((state & BroadcastOverlayState.PlayerPit) != 0) return "피트";
             return string.Empty;
         }
     }
@@ -164,7 +164,7 @@ namespace AMS2LeagueClient.Core.Presentation
 
         private static uint ParseLap(string value)
         {
-            string raw = (value ?? string.Empty).Replace("LAP", string.Empty).Trim();
+            string raw = (value ?? string.Empty).Replace("LAP", string.Empty).Replace("랩", string.Empty).Trim();
             return uint.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out uint parsed) ? parsed : 0;
         }
     }

@@ -24,11 +24,11 @@ namespace AMS2LeagueClient.Core.Presentation
         public const int BaselineEventWidth = 650;
         public const int BaselineEventHeight = 105;
 
-        public const int TowerWidth = 520;
-        public const int TowerHeight = 586;
-        public const int DiagnosticTowerHeight = 690;
+        public const int TowerWidth = 648;
+        public const int TowerHeight = 608;
+        public const int DiagnosticTowerHeight = 712;
         public const int RowPitch = 38;
-        public const int HeaderAndFooterHeight = 16;
+        public const int HeaderAndFooterHeight = 38;
         public const int ComponentGap = 10;
 
         public const int RelativeWidth = 520;

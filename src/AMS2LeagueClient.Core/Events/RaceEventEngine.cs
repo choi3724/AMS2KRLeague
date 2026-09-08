@@ -441,7 +441,7 @@ namespace AMS2LeagueClient.Core.Events
                     TimeSpan.FromSeconds(2),
                     TimeSpan.FromSeconds(10),
                     _text.Get(OverlayTextKey.PitEntry),
-                    "LAP " + local.CurrentLap,
+                    (_text.CultureName == "ko-KR" ? "랩 " : "LAP ") + local.CurrentLap,
                     string.Empty,
                     "PIT_MODE_TRANSITION"), detected, now);
             }
@@ -529,7 +529,7 @@ namespace AMS2LeagueClient.Core.Events
                     TimeSpan.FromSeconds(4),
                     TimeSpan.FromSeconds(12),
                     _text.Get(OverlayTextKey.InvalidLap),
-                    "LAP " + local.CurrentLap,
+                    (_text.CultureName == "ko-KR" ? "랩 " : "LAP ") + local.CurrentLap,
                     string.Empty,
                     "LOCAL_LAP_INVALIDATED"), detected, now);
             }
