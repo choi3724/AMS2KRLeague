@@ -4,7 +4,7 @@
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-        <FontFamily x:Key="HudFontFamily">Noto Sans KR, Malgun Gothic, Segoe UI</FontFamily>
+        <FontFamily x:Key="HudFontFamily">pack://application:,,,/AMS2LeagueClient;component/Assets/Fonts/#Pretendard</FontFamily>
         <SolidColorBrush x:Key="MainPanelBackgroundBrush" Color="#B00A111C" />
         <SolidColorBrush x:Key="SecondaryPanelBackgroundBrush" Color="#94101C29" />
         <SolidColorBrush x:Key="TertiaryPanelBackgroundBrush" Color="#86121D2B" />

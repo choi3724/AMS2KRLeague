@@ -5,7 +5,7 @@
   #error OutputDir must be provided by build-release.ps1
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.4.4"
+  #define AppVersion "0.4.5"
 #endif
 
 [Setup]
@@ -25,6 +25,7 @@ OutputBaseFilename=AMS2-League-Overlay-{#AppVersion}-Setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\src\AMS2LeagueClient\Assets\AppIcon.ico
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\AMS2LeagueClient.exe

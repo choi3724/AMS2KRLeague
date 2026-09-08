@@ -113,6 +113,18 @@ namespace AMS2LeagueClient
                             _statusWindow.SetLayoutEditState(false, "먼저 AMS2에서 오버레이가 표시되는 화면으로 진입하세요.");
                         }
                     };
+                    _statusWindow.DrivingHudSettingsRequested += (sender, settingsArgs) =>
+                    {
+                        var dialog = new DrivingHudSettingsWindow(overlay.GetDrivingHudSettings()) { Owner = _statusWindow };
+                        if (dialog.ShowDialog() != true) return;
+                        try { overlay.SaveDrivingHudSettings(dialog.Settings); }
+                        catch (Exception exception)
+                        {
+                            _logger?.Warning("DRIVING_HUD_SETTINGS", "reason=" + exception.GetType().Name);
+                            MessageBox.Show(_statusWindow, "설정을 저장하지 못했습니다. 저장 폴더의 권한과 여유 공간을 확인해 주세요.",
+                                "계기판 설정", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    };
                     _statusWindow.LayoutResetRequested += (sender, layoutArgs) =>
                     {
                         _overlay?.ResetLayout();

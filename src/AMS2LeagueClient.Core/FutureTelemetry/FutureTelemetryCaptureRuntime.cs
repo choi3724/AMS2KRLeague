@@ -322,6 +322,15 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             }
         }
 
+        public void CompleteRace(DateTimeOffset capturedAtUtc)
+        {
+            lock (_gate)
+            {
+                if (_disposed) return;
+                CloseCurrent(capturedAtUtc, "RACE_RESULTS_READY", preserveSessionForNextAttempt: false);
+            }
+        }
+
         public void GameDetached()
         {
             lock (_gate)
@@ -458,6 +467,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         internal static bool IsCaptureScope(TelemetrySnapshot snapshot)
         {
             if (snapshot.Version != SharedMemoryLayout.SupportedVersion
+                || string.IsNullOrWhiteSpace(snapshot.TrackLocation)
                 || !SnapshotValidator.IsParticipantCountValid(snapshot.NumParticipants)
                 || snapshot.NumParticipants <= 0)
             {

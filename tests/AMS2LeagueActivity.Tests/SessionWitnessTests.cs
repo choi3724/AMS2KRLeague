@@ -26,6 +26,29 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Witness and all five telemetry streams share archive identity", ArchiveIdentityJoinsWitnessAndAllStreams);
             yield return new TestCase("Witness restart advances only the archive attempt", ArchiveRestartAdvancesAttempt);
             yield return new TestCase("Witness rejects archive identity changes during capture", ArchiveIdentityChangeFailsClosed);
+            yield return new TestCase("Qualifying terminal state cannot become a race result on transition", QualifyingTerminalDoesNotBecomeRace);
+        }
+
+        private static void QualifyingTerminalDoesNotBecomeRace()
+        {
+            DateTimeOffset start = FixedTime();
+            var engine = new SessionWitnessCaptureEngine("install-qual-transition", "0.3.1-test");
+            engine.Observe(SessionSnapshot(start, 0, SessionState.Qualify, RaceState.Racing, 23, 1790, 30));
+            engine.Observe(SessionSnapshot(start.AddSeconds(1), 1, SessionState.Qualify, RaceState.Finished, 23, 1791, 30));
+            engine.Observe(SessionSnapshot(start.AddSeconds(2), 2, SessionState.Race, RaceState.Finished, 23, 1792, 30));
+            engine.Observe(SessionSnapshot(start.AddSeconds(4), 3, SessionState.Race, RaceState.Finished, 23, 1794, 30));
+            SessionWitnessRecord qualified = Required(engine.Close(start.AddSeconds(5), "SESSION_RESET").FinalizedWitness);
+            AssertEx.NotNull(qualified.Session.Qualifying);
+            AssertEx.Null(qualified.Session.RaceResult, "Copied qualifying FINISHED standings are not a race result.");
+            AssertEx.Null(qualified.Session.StartingGrid, "Copied qualifying standings are not a starting grid.");
+
+            engine.Observe(SessionSnapshot(start.AddMinutes(1), 4, SessionState.Race, RaceState.NotStarted, 0, 0, 30));
+            engine.Observe(SessionSnapshot(start.AddMinutes(1).AddSeconds(2), 5, SessionState.Race, RaceState.Racing, 0, 2, 30));
+            engine.Observe(SessionSnapshot(start.AddMinutes(31), 6, SessionState.Race, RaceState.Finished, 33, 1800, 30));
+            SessionWitnessRecord race = Required(engine.Close(start.AddMinutes(31).AddSeconds(2), "TEST_END").FinalizedWitness);
+            AssertEx.NotNull(race.Session.RaceResult);
+            AssertEx.True(race.Session.RaceResult!.Participants.All(value => value.LapsCompleted == 33));
+            AssertEx.Null(race.Session.Qualifying);
         }
 
         private static void SingleWitnessIsRetained()

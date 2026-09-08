@@ -83,6 +83,8 @@ namespace AMS2LeagueClient.Core.SessionWitness
         /// Returns a defensive copy of the identity reserved for the active or next
         /// restart attempt. A normal close clears this value.
         /// </summary>
+        public bool HasStableRaceResult => _capture.Phase == HostRecorderPhase.ResultCaptured;
+
         public TelemetryArchiveIdentity? CurrentArchiveIdentity
             => _archiveIdentity?.ValidatedCopy();
 

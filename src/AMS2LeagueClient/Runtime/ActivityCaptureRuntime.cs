@@ -24,12 +24,15 @@ namespace AMS2LeagueClient.Runtime
     {
         private static readonly TimeSpan UploadPollInterval = TimeSpan.FromSeconds(5);
         private const int PersistenceAttemptLimit = 3;
+        private static readonly ParticipantRoleClassifier Roles = new ParticipantRoleClassifier();
         private readonly object _engineGate = new object();
         private readonly ActivityCaptureEngine _engine;
         private readonly SessionPlayModeDetector _playModeDetector;
         private readonly SessionWitnessCaptureEngine _witnessEngine;
         private readonly FutureTelemetryCaptureRuntime _futureTelemetry;
         private readonly ActivityLocalParticipantResolver _localResolver = new ActivityLocalParticipantResolver();
+        private readonly RaceUploadCompletionGate _completionGate;
+        private TelemetrySnapshot? _completedRace;
         private readonly ActivityRecordStore _recordStore;
         private readonly SessionWitnessStore _witnessStore;
         private readonly ActivityUploadQueue _uploadQueue;
@@ -74,10 +77,12 @@ namespace AMS2LeagueClient.Runtime
                 archiveFormat: TelemetryArchiveFormat.COMPACT_A2CT_V1);
             _futureTelemetry.FailureDiagnostic = details => LogInfoSafely("ARCHIVE_FAILURE", details);
             _futureTelemetry.IdentityStarted += BindWitnessArchiveIdentity;
-            _telemetryUploadQueue = new TelemetryChunkUploadQueue(_futureTelemetry.ArchiveRoot, uploadEligibility: IsTelemetryUploadAllowed);
+            _completionGate = new RaceUploadCompletionGate(_futureTelemetry.ArchiveRoot);
+            _telemetryUploadQueue = new TelemetryChunkUploadQueue(_futureTelemetry.ArchiveRoot,
+                uploadEligibility: metadata => _completionGate.Allows(metadata.SessionId) && IsTelemetryUploadAllowed(metadata));
             _recordStore = new ActivityRecordStore(root);
             _witnessStore = new SessionWitnessStore(Path.Combine(root, "witness"));
-            _uploadQueue = new ActivityUploadQueue(Path.Combine(root, "upload-queue"), uploadEligibility: IsActivityUploadAllowed);
+            _uploadQueue = new ActivityUploadQueue(Path.Combine(root, "upload-queue"), uploadEligibility: item => _completionGate.Allows(item) && IsActivityUploadAllowed(item));
             _persistChannel = Channel.CreateUnbounded<ActivityCaptureUpdate>(new UnboundedChannelOptions
             {
                 SingleReader = true,
@@ -156,10 +161,34 @@ namespace AMS2LeagueClient.Runtime
             lock (_engineGate)
             {
                 if (_disposed) return;
+                if (_completedRace != null)
+                {
+                    bool gameplay = snapshot.KnownGameState == GameState.InGamePlaying
+                        || snapshot.KnownGameState == GameState.InGamePaused
+                        || snapshot.KnownGameState == GameState.InGameMenuTimeTicking;
+                    bool newSession = snapshot.SessionStateRaw != (uint)SessionState.Race
+                        && snapshot.SessionStateRaw != (uint)SessionState.FormationLap
+                        && snapshot.SessionStateRaw != (uint)SessionState.Invalid;
+                    bool restarted = snapshot.Participants.Any(value => value.IsActive && Roles.IsLeagueDriver(value)
+                        && (value.RaceStateRaw == (uint)RaceState.Racing || value.RaceStateRaw == (uint)RaceState.NotStarted));
+                    bool newTrack = snapshot.TrackLocation != _completedRace.TrackLocation
+                        || snapshot.TrackVariation != _completedRace.TrackVariation;
+                    if (!gameplay || string.IsNullOrWhiteSpace(snapshot.TrackLocation) || (!newSession && !restarted && !newTrack)) return;
+                    _completedRace = null;
+                }
                 ActivityLocalParticipantResolution local = _localResolver.Resolve(snapshot);
                 _futureTelemetry.Observe(snapshot);
                 Handle(_engine.Observe(snapshot, local.IsValid ? local.Participant : null));
                 HandleWitness(_witnessEngine.Observe(snapshot));
+                if (_witnessEngine.HasStableRaceResult)
+                {
+                    // Both early and late observers use the whole-field terminal result gate.
+                    // Persist the final replay/integrity blocks before making the witness eligible.
+                    _futureTelemetry.CompleteRace(snapshot.CapturedAt);
+                    Handle(_engine.Close(snapshot.CapturedAt, "RACE_RESULTS_READY"));
+                    HandleWitness(_witnessEngine.Close(snapshot.CapturedAt, "RACE_RESULTS_READY"));
+                    _completedRace = snapshot;
+                }
                 ReconcileWitnessArchiveIdentity(snapshot.CapturedAt);
             }
         }
@@ -514,6 +543,7 @@ namespace AMS2LeagueClient.Runtime
                         _lastModeDiagnostic = modeDiagnostic;
                         LogInfoSafely("SESSION_PLAY_MODE", modeDiagnostic);
                     }
+                    _completionGate.Refresh(_uploadQueue.Scan());
                     if (_uploadWorker != null)
                     {
                         ActivityUploadWorkerSummary summary =

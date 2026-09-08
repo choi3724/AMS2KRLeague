@@ -3,10 +3,14 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- WPF owns per-monitor DPI through app.manifest; WinForms is used only for ColorDialog. -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <LangVersion>8.0</LangVersion>
     <Nullable>enable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <AssemblyName>AMS2LeagueClient</AssemblyName>
     <RootNamespace>AMS2LeagueClient</RootNamespace>
   </PropertyGroup>
@@ -14,6 +18,9 @@
     <ProjectReference Include="..\AMS2LeagueClient.Core\AMS2LeagueClient.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Resource Include="Assets\AppIcon.ico" />
+    <Resource Include="Assets\Fonts\Pretendard-Medium.otf" />
+    <None Update="Assets\Fonts\Pretendard-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Runtime\ApplyUpdate.ps1" LogicalName="AMS2LeagueClient.ApplyUpdate.ps1" />
   </ItemGroup>
 </Project>

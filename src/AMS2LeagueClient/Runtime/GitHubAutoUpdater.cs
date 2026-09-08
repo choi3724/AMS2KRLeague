@@ -140,7 +140,7 @@ namespace AMS2LeagueClient.Runtime
                 update.Version,
                 InstallDirectory = _installDirectory,
                 Executable = executable,
-                RestartArguments = string.Join(" ", _arguments.Concat(new[] { "--background" }).Select(QuoteArgument)),
+                RestartArguments = string.Join(" ", _arguments.Where(arg => !string.Equals(arg, "--after-update", StringComparison.OrdinalIgnoreCase)).Concat(new[] { "--after-update" }).Select(QuoteArgument)),
                 ResultPath = Path.Combine(_directory, "last-result.json")
             }), new UTF8Encoding(true), token).ConfigureAwait(false);
             var start = new ProcessStartInfo

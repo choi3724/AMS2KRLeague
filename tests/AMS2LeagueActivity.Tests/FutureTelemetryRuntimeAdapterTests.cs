@@ -33,6 +33,7 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Future runtime identity reaches witness and all five persisted streams", RuntimeWitnessAndFiveStreams);
             yield return new TestCase("Future runtime fingerprint joins independent witnesses", IndependentWitnessFingerprintsJoin);
             yield return new TestCase("Future runtime separates restart attempts while retaining join identity", RestartAttemptIdentity);
+            yield return new TestCase("Cleared track cannot start orphan replay captures", ClearedTrackDoesNotCapture);
             yield return new TestCase("Restarting snapshots cannot start an unbound session witness", RestartingWitnessWaitsForArchiveIdentity);
             yield return new TestCase("Future runtime close uses durable acknowledgement before COMPLETE", CloseRequiresDurableAcknowledgement);
             yield return new TestCase("Future runtime propagates deterministic outer queue loss and isolates attempts", OuterQueueLossIsAttemptScoped);
@@ -979,6 +980,21 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.NotEqual(identities[0].AttemptId, identities[1].AttemptId);
             AssertEx.Equal(1, identities[0].AttemptNumber);
             AssertEx.Equal(2, identities[1].AttemptNumber);
+        }
+
+        private static void ClearedTrackDoesNotCapture()
+        {
+            using var temporary = new TemporaryDirectory("future-cleared-track");
+            using var runtime = new FutureTelemetryCaptureRuntime(temporary.Root, "installation-empty-track", "0.3.1-test");
+            var participants = new[] { Participant(0, "LOCAL", 1), Participant(1, "OTHER", 2) };
+            AssertEx.False(runtime.Observe(Snapshot(At(0), participants, null, trackLocation: "")));
+            AssertEx.Null(runtime.CurrentIdentity);
+            AssertEx.True(runtime.Observe(Snapshot(At(1), participants, null)));
+            AssertEx.NotNull(runtime.CurrentIdentity);
+            AssertEx.False(runtime.Observe(Snapshot(At(2), participants, null, trackLocation: "")));
+            AssertEx.Null(runtime.CurrentIdentity);
+            AssertEx.False(runtime.Observe(Snapshot(At(3), participants, null, trackLocation: "")));
+            AssertEx.Equal(1L, runtime.Counters.StartedAttempts);
         }
 
         private static void RestartingWitnessWaitsForArchiveIdentity()

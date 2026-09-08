@@ -13,6 +13,7 @@ namespace AMS2LeagueClient.Core.HostRecording
 {
     public sealed class HostRecorderEngine
     {
+        private static readonly ParticipantRoleClassifier Roles = new ParticipantRoleClassifier();
         private static readonly TimeSpan EvidenceInterval = TimeSpan.FromSeconds(30);
         private const int MaximumEvidenceSnapshots = 720;
         private static readonly TimeSpan QualifyingStable = TimeSpan.FromSeconds(1);
@@ -44,6 +45,7 @@ namespace AMS2LeagueClient.Core.HostRecording
         private HostClassification? _startingGrid;
         private HostClassification? _latestRace;
         private HostRaceResult? _raceResult;
+        private bool _racePhaseReady;
         private TelemetrySnapshot? _latestSnapshot;
         private uint _sessionBuild;
         private uint _sessionSharedMemoryVersion;
@@ -239,6 +241,12 @@ namespace AMS2LeagueClient.Core.HostRecording
 
         private void ObserveRace(TelemetrySnapshot snapshot, HostRecorderUpdate update)
         {
+            // At qualifying exit SHM can switch SessionState to Race before it
+            // clears the qualifying FINISHED standings. Do not freeze those as
+            // the race result/grid; wait for the race's not-started/active state.
+            if (snapshot.RaceStateRaw == (uint)RaceState.NotStarted
+                || snapshot.RaceStateRaw == (uint)RaceState.Racing) _racePhaseReady = true;
+            if (_latestQualifying != null && !_racePhaseReady) return;
             bool started = snapshot.RaceStateRaw == (uint)RaceState.Racing
                 || snapshot.Participants.Any(participant => participant.IsActive && participant.RaceStateRaw == (uint)RaceState.Racing);
             if (_startingGrid == null && !started)
@@ -256,7 +264,7 @@ namespace AMS2LeagueClient.Core.HostRecording
                 if (finishing)
                 {
                     SetPhase(HostRecorderPhase.RaceFinishing, update);
-                    if (stableFor >= ResultStable && candidate.Participants.All(participant => IsTerminal(participant.ResultStateRaw)))
+                    if (stableFor >= ResultStable && AllDriversTerminal(candidate.Participants))
                     {
                         FinalizeRace(candidate, stableFor, update);
                     }
@@ -426,7 +434,7 @@ namespace AMS2LeagueClient.Core.HostRecording
 
             var positions = new HashSet<uint>();
             bool invalid = false;
-            foreach (ParticipantSnapshot participant in active)
+            foreach (ParticipantSnapshot participant in active.Where(Roles.IsLeagueDriver))
             {
                 if (participant.RacePosition == 0 || !positions.Add(participant.RacePosition))
                 {
@@ -441,7 +449,7 @@ namespace AMS2LeagueClient.Core.HostRecording
             }
 
             foreach (IGrouping<string, ParticipantSnapshot> group in active
-                .Where(participant => !string.IsNullOrWhiteSpace(participant.Name))
+                .Where(participant => Roles.IsLeagueDriver(participant) && !string.IsNullOrWhiteSpace(participant.Name))
                 .GroupBy(participant => participant.Name, StringComparer.OrdinalIgnoreCase))
             {
                 if (group.Count() > 1)
@@ -626,6 +634,7 @@ namespace AMS2LeagueClient.Core.HostRecording
             _startingGrid = null;
             _latestRace = null;
             _raceResult = null;
+            _racePhaseReady = false;
             _latestSnapshot = null;
             _sessionBuild = 0;
             _sessionSharedMemoryVersion = 0;
@@ -677,11 +686,17 @@ namespace AMS2LeagueClient.Core.HostRecording
                 || after.CurrentLap + 1 < before.CurrentLap;
         }
 
+        private static bool AllDriversTerminal(IEnumerable<HostParticipantEvidence> participants)
+        {
+            HostParticipantEvidence[] drivers = participants.Where(value => Roles.IsLeagueDriver(value.Vehicle, value.VehicleClass)).ToArray();
+            return drivers.Length > 0 && drivers.All(value => IsTerminal(value.ResultStateRaw));
+        }
+
         private string DetermineAttemptStatus(string reason)
         {
             if (reason.IndexOf("RESTART", StringComparison.OrdinalIgnoreCase) >= 0) return "RESTARTED";
             if (_raceResult != null && _raceResult.Participants.Count > 0
-                && _raceResult.Participants.All(participant => IsTerminal(participant.ResultStateRaw)))
+                && AllDriversTerminal(_raceResult.Participants))
             {
                 return "FINISHED";
             }

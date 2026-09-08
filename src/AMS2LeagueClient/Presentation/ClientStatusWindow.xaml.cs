@@ -18,6 +18,7 @@ namespace AMS2LeagueClient.Presentation
 
         public ClientStatusViewModel ViewModel { get; }
 
+        public event EventHandler? DrivingHudSettingsRequested;
         public event EventHandler? LayoutEditRequested;
         public event EventHandler? LayoutResetRequested;
         public event EventHandler<LayoutComponentToggleEventArgs>? LayoutComponentToggled;
@@ -72,11 +73,17 @@ namespace AMS2LeagueClient.Presentation
                 SessionInfoCheck,
                 EventCardCheck,
                 RaceControlCheck,
-                WaitingCheck
+                WaitingCheck,
+                PedalTelemetryCheck,
+                SpeedCheck,
+                GearCheck
             };
 
         private void LayoutEditButton_Click(object sender, RoutedEventArgs eventArgs)
             => LayoutEditRequested?.Invoke(this, EventArgs.Empty);
+
+        private void DrivingHudSettingsButton_Click(object sender, RoutedEventArgs eventArgs)
+            => DrivingHudSettingsRequested?.Invoke(this, EventArgs.Empty);
 
         private void LayoutResetButton_Click(object sender, RoutedEventArgs eventArgs)
             => LayoutResetRequested?.Invoke(this, EventArgs.Empty);

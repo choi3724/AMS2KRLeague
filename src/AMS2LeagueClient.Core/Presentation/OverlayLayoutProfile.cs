@@ -12,6 +12,9 @@ namespace AMS2LeagueClient.Core.Presentation
         public const string EventCard = "eventCard";
         public const string RaceControl = "raceControl";
         public const string Waiting = "waiting";
+        public const string PedalTelemetry = "pedalTelemetry";
+        public const string Speed = "speed";
+        public const string Gear = "gear";
         public static readonly string[] All =
         {
             TimingTower,
@@ -20,7 +23,10 @@ namespace AMS2LeagueClient.Core.Presentation
             SessionInfo,
             EventCard,
             RaceControl,
-            Waiting
+            Waiting,
+            PedalTelemetry,
+            Speed,
+            Gear
         };
     }
 
@@ -35,6 +41,7 @@ namespace AMS2LeagueClient.Core.Presentation
     public sealed class OverlayLayoutProfile
     {
         public int Schema { get; set; } = 1;
+        public DrivingHudSettings DrivingHud { get; set; } = new DrivingHudSettings();
         // Missing in pre-0.4.1 profiles; expand only the saved tower width once.
         public int TowerDesignWidth { get; set; } = 520;
         public Dictionary<string, NormalizedOverlayBounds> Components { get; set; }

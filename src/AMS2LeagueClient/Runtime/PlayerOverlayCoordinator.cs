@@ -526,6 +526,7 @@ namespace AMS2LeagueClient.Runtime
                 Interlocked.Increment(ref _uiUpdateCount);
             }
 
+            _overlay.UpdateDrivingTelemetry(snapshot, local.Participant.Index, _sessionTracker.Generation);
             _overlay.ShowAt(window);
             if (!_styleLogged)
             {

@@ -4,10 +4,12 @@
         xmlns:local="clr-namespace:AMS2LeagueClient.Presentation"
         xmlns:core="clr-namespace:AMS2LeagueClient.Core.Presentation;assembly=AMS2LeagueClient.Core"
         Title="{Binding VersionText}"
+        Icon="/AMS2LeagueClient;component/Assets/AppIcon.ico"
         Width="980" Height="840"
         MinWidth="860" MinHeight="820"
         ShowActivated="True"
         WindowStartupLocation="CenterScreen"
+        FontFamily="{DynamicResource HudFontFamily}"
         Background="#07101A">
     <Grid>
         <Grid.Background>
@@ -24,7 +26,7 @@
             </StackPanel>
             <StackPanel x:Name="LayoutVisibilityPanel" Margin="0,0,0,9">
                 <TextBlock Text="표시할 오버레이 · 체크를 해제하면 해당 화면을 즉시 끄고 설정을 저장합니다" Foreground="#9EB3C7" FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,6" />
-                <WrapPanel HorizontalAlignment="Center">
+                <WrapPanel HorizontalAlignment="Center" MaxWidth="800">
                     <CheckBox x:Name="TimingTowerCheck" Tag="{x:Static core:OverlayComponentKeys.TimingTower}" Content="순위 타워" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
                     <CheckBox x:Name="RelativeDriversCheck" Tag="{x:Static core:OverlayComponentKeys.RelativeDrivers}" Content="전후방 거리" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
                     <CheckBox x:Name="LapTimingCheck" Tag="{x:Static core:OverlayComponentKeys.LapTiming}" Content="현재·섹터 타임" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
@@ -32,6 +34,9 @@
                     <CheckBox x:Name="EventCardCheck" Tag="{x:Static core:OverlayComponentKeys.EventCard}" Content="이벤트" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
                     <CheckBox x:Name="RaceControlCheck" Tag="{x:Static core:OverlayComponentKeys.RaceControl}" Content="레이스 컨트롤" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
                     <CheckBox x:Name="WaitingCheck" Tag="{x:Static core:OverlayComponentKeys.Waiting}" Content="대기 화면" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
+                    <CheckBox x:Name="PedalTelemetryCheck" Tag="{x:Static core:OverlayComponentKeys.PedalTelemetry}" Content="텔레메트리" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
+                    <CheckBox x:Name="SpeedCheck" Tag="{x:Static core:OverlayComponentKeys.Speed}" Content="속도계" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
+                    <CheckBox x:Name="GearCheck" Tag="{x:Static core:OverlayComponentKeys.Gear}" Content="기어" IsChecked="True" Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" Margin="8,2" />
                 </WrapPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
                     <Button x:Name="ShowAllButton" Content="모두 켜기" Click="ShowAllButton_Click"
@@ -46,6 +51,9 @@
                 <Button x:Name="LayoutEditButton" Content="레이아웃 편집" Click="LayoutEditButton_Click"
                         MinWidth="150" Height="38" Margin="5,0" Padding="15,0" Background="#193247" Foreground="White"
                         BorderBrush="#4DE3B1" BorderThickness="1" FontSize="14" FontWeight="SemiBold" />
+                <Button Content="텔레메트리·글꼴 설정" Click="DrivingHudSettingsButton_Click"
+                        MinWidth="190" Height="38" Margin="5,0" Padding="15,0" Background="#142536" Foreground="#DDE7F1"
+                        BorderBrush="#526779" BorderThickness="1" FontSize="14" FontWeight="SemiBold" />
                 <Button Content="기본 위치 복원" Click="LayoutResetButton_Click"
                         MinWidth="140" Height="38" Margin="5,0" Padding="15,0" Background="#142536" Foreground="#DDE7F1"
                         BorderBrush="#526779" BorderThickness="1" FontSize="14" FontWeight="SemiBold" />

@@ -7,6 +7,7 @@ $updateLock = [Threading.Mutex]::new($false, 'Local\AMS2KRLeague.AutoUpdate')
 $ownsLock = $false
 $parentExited = $false
 $success = $false
+$restarted = $false
 $message = '업데이트: 설치하지 못했습니다. 기존 설치 파일을 다시 실행해 주세요.'
 $installerStream = $null
 $canDeleteInstaller = $false
@@ -61,16 +62,32 @@ try {
     if ($ownsLock) {
         try {
             $result = @{ success = $success; message = $message; version = $settings.Version; atUtc = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json
-            [IO.File]::WriteAllText($settings.ResultPath, $result, [Text.UTF8Encoding]::new($false))
+            try { [IO.File]::WriteAllText($settings.ResultPath, $result, [Text.UTF8Encoding]::new($false)) }
+            catch { Write-Warning 'Failed to write initial update result; restart will still be attempted.' }
             if ($parentExited -and (Test-Path -LiteralPath $settings.Executable)) {
+                try {
                 $restart = [Diagnostics.ProcessStartInfo]::new()
                 $restart.FileName = $settings.Executable
                 $restart.WorkingDirectory = $settings.InstallDirectory
                 $restart.Arguments = $settings.RestartArguments
                 $restart.UseShellExecute = $false
                 $restart.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
-                [Diagnostics.Process]::Start($restart).Dispose()
+                $started = [Diagnostics.Process]::Start($restart)
+                if ($null -eq $started) { throw '프로그램을 다시 실행하지 못했습니다.' }
+                try {
+                    if ($started.WaitForExit(2000)) { throw ('프로그램이 재실행 직후 종료되었습니다: ' + $started.ExitCode) }
+                    $restarted = $true
+                    if ($success) { $message = '업데이트: ' + $settings.Version + ' 설치 완료 · 자동 재실행 완료' }
+                } finally { $started.Dispose() }
+                } catch {
+                    $success = $false
+                    $message = '업데이트: 자동 재실행 실패 · 프로그램을 직접 실행해 주세요.'
+                    try { [IO.File]::WriteAllText((Join-Path $taskDirectory 'restart-failure.log'), $_.Exception.ToString(), [Text.UTF8Encoding]::new($false)) }
+                    catch { Write-Warning 'Failed to write restart diagnostic log.' }
+                }
             }
+            $result = @{ success = $success; restarted = $restarted; message = $message; version = $settings.Version; atUtc = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json
+            [IO.File]::WriteAllText($settings.ResultPath, $result, [Text.UTF8Encoding]::new($false))
             if ($canDeleteInstaller -and (Test-Path -LiteralPath $settings.Installer)) { Remove-Item -LiteralPath $settings.Installer -Force }
         } finally { $updateLock.ReleaseMutex() }
     }

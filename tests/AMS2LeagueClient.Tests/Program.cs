@@ -68,6 +68,10 @@ namespace AMS2LeagueClient.Tests
             }
             var tests = new (string Name, Action Test)[]
             {
+                ("Driving graph scrolls existing points left between samples", DrivingGraphScrollsLeft),
+                ("Driving telemetry validates sources and bounds its history", DrivingTelemetrySourcesAndHistory),
+                ("Driving HUD renders independently and persists appearance", DrivingHudRenderingAndSettings),
+                ("Update helper confirms restart and reports early exit", UpdateHelperConfirmsRestart),
                 ("Automatic online log session boundaries", AutomaticModeTests.LogBoundaries),
                 ("Automatic mode rejects missing stale and replaced logs", AutomaticModeTests.LogFilesAndHistory),
                 ("Single and unknown queues cannot starve multiplayer uploads", AutomaticModeTests.UploadFiltering),
@@ -142,7 +146,7 @@ namespace AMS2LeagueClient.Tests
                 ,("Telemetry gzip HTTP contract is exact", TelemetryGzipHttpContractIsExact)
                 ,("Compact telemetry gzip HTTP contract is exact", CompactTelemetryGzipHttpContractIsExact)
                 ,("403 JSON HTML diagnostics quarantine without credentials or replay", ForbiddenUploadDiagnostics)
-                ,("Activity runtime automatically uploads pending telemetry chunks", ActivityRuntimeUploadsPendingTelemetry)
+                ,("Race batch uploads after whole-field finish and preserves late joins", RaceBatchCompletionAndLateJoin)
                 ,("Transition tracker reports position direction and fastest lap", TransitionTrackerReportsPositionDirection)
                 ,("Position change flashes row and rolls number", PositionChangeFlashesRowAndRollsNumber)
                 ,("Fastest lap status sweeps purple without dimming", FastestLapStatusSweepsPurple)
@@ -182,6 +186,12 @@ namespace AMS2LeagueClient.Tests
                 ,("Out lap survives real pause and menu generation changes", OutLapSurvivesPauseAndMenu)
                 ,("Late attach distinguishes untimed out lap from first timed lap", LateAttachRecognizesUntimedOutLap)
             };
+            int filterArgument = Array.IndexOf(args, "--filter");
+            if (filterArgument >= 0 && filterArgument + 1 < args.Length)
+            {
+                tests = tests.Where(test => test.Name.Contains(args[filterArgument + 1], StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (tests.Length == 0) throw new ArgumentException("No tests matched --filter.");
+            }
             int passed = 0;
             foreach ((string name, Action test) in tests)
             {
@@ -1983,36 +1993,6 @@ namespace AMS2LeagueClient.Tests
             });
         }
 
-        private static void ActivityRuntimeUploadsPendingTelemetry()
-        {
-            WithTemporaryDirectory(directory =>
-            {
-                string telemetryRoot = Path.Combine(directory, "future-telemetry");
-                string metadataPath = CreatePendingTelemetryChunk(telemetryRoot, DateTimeOffset.UtcNow.AddMinutes(-1));
-                var detector = AutomaticModeTests.CreateMultiplayerDetector(directory);
-                var transport = new DualUploadFixtureTransport();
-                var logger = new FileLogger(Path.Combine(directory, "logs"));
-                using (var runtime = new ActivityCaptureRuntime(
-                    directory,
-                    "client-runtime-upload-fixture-0001",
-                    "0.2.2",
-                    logger,
-                    transport,
-                    detector))
-                {
-                    bool sent = SpinWait.SpinUntil(
-                        () => ReadTelemetryStatus(metadataPath) == TelemetryUploadStatus.SENT,
-                        TimeSpan.FromSeconds(5));
-                    AssertTrue(sent);
-                }
-                AssertEqual(1, transport.TelemetryCalls);
-                AssertEqual("MULTIPLAYER", TelemetryChunkSerializer.DeserializeMetadata(File.ReadAllBytes(metadataPath)).RaceMode);
-                AssertTrue(File.ReadAllText(logger.FilePath).Contains(
-                    "FUTURE_TELEMETRY_UPLOAD_BATCH attempted=1 sent=1",
-                    StringComparison.Ordinal));
-            });
-        }
-
         private static void CompactTelemetryGzipHttpContractIsExact()
         {
             WithTemporaryDirectory(directory =>
@@ -2789,7 +2769,7 @@ namespace AMS2LeagueClient.Tests
                 window.SetViewModel(shell, false);
                 Window[] panels = Application.Current.Windows.Cast<Window>()
                     .Where(item => item != window && !existing.Contains(item)).ToArray();
-                AssertEqual(6, panels.Length);
+                AssertEqual(9, panels.Length);
                 foreach (Window panel in panels)
                 {
                     var root = (Grid)panel.Content;
@@ -2823,7 +2803,7 @@ namespace AMS2LeagueClient.Tests
                             double scaleX = (transform.Transform(new Point(1, 0)) - zero).Length;
                             double scaleY = (transform.Transform(new Point(0, 1)) - zero).Length;
                             AssertTrue(Math.Abs(scaleX - scaleY) < 0.0001);
-                            if (box != null && text.Name != "AheadTimeGapText" && text.Name != "BehindTimeGapText"
+                            if (box != null && !(content is DrivingNumberView) && text.Name != "AheadTimeGapText" && text.Name != "BehindTimeGapText"
                                 && text.Name != "AheadLapGapText" && text.Name != "BehindLapGapText")
                                 AssertTrue(Math.Abs(scaleX - Math.Min(x, y)) < 0.0001);
                         }
