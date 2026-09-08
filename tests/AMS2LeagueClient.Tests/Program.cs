@@ -2718,8 +2718,9 @@ namespace AMS2LeagueClient.Tests
                 ItemsControl items = FindDescendant<ItemsControl>(window)!;
                 foreach (int capacity in new[] { 10, 20, 8, 20 })
                 {
-                    window.Width = OverlayUiMetrics.TowerWidth;
-                    window.Height = LeftTowerLayoutMetrics.RequiredHeightForRows(capacity, false);
+                    // Keep native windows within small CI desktops; preserve the exact aspect ratio.
+                    window.Width = OverlayUiMetrics.TowerWidth / 2.0;
+                    window.Height = LeftTowerLayoutMetrics.RequiredHeightForRows(capacity, false) / 2.0;
                     PumpDispatcher();
                     // No SetViewModel/telemetry tick between these resizes.
                     AssertEqual(capacity, items.Items.Count);

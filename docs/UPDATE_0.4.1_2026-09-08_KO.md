@@ -103,3 +103,10 @@ dotnet run --project tests/AMS2LeagueClient.Tests -c Release --no-build -- --ver
 ```
 
 구현 근거: [GitHub Release API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release), [Inno Setup 명령행 옵션](https://jrsoftware.org/ishelp/topic_setupcmdline.htm), [포터블 설치 옵션](https://jrsoftware.org/ishelp/topic_setup_uninstallable.htm).
+
+## 릴리스 요청 후 CI 검증 보완
+
+- 사용자가 0.4.1 GitHub 릴리스를 명시적으로 요청하여 main 및 v0.4.1 태그를 푸시했다.
+- 첫 GitHub 실행 34213883925는 빌드 0 경고/0 오류 후 창 크기 조절 테스트에서 20행 대신 19행으로 실패했다. 작은 CI 데스크톱에서 네이티브 창 높이가 제한되는 환경 의존을 제거하기 위해 테스트 창의 폭과 높이를 동일하게 절반으로 줄였다. 10→20→8→20행, 저장 및 다시 열기 검증은 유지한다.
+- 수정 후 로컬 Release 빌드와 클라이언트 107/107, 활동 기록 102/102가 통과했다. 증거: work/validation-0.4.1/release-ci-fix.log 및 release-ci-fix/.
+- 이 보완은 테스트만 변경하며 배포 프로그램 및 설치 파일은 위에서 검증한 파일과 같다. 수정 커밋의 GitHub CI 통과를 확인한 뒤 미게시 v0.4.1 태그를 해당 커밋으로 갱신하여 Latest 릴리스를 게시한다.
