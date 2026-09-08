@@ -22,7 +22,7 @@ REQ-043-03 [DONE: 실제 게임 실행 중 격리 설치 검증 통과]
 - 같은 설치 경로의 다른 오버레이는 설치를 차단한다. 다른 폴더의 오버레이는 유지한다. 설치 인자의 NOCLOSEAPPLICATIONS/NOFORCECLOSEAPPLICATIONS/NORESTART를 유지한다.
 - 게임 파일·프로세스·설정·레지스트리 및 운영 서버/DB를 변경하지 않는다.
 
-REQ-043-04 [게시 준비]
+REQ-043-04 [DONE: CI·Latest 게시·공개 다운로드 검증 통과]
 - 사용자가 0.4.3 릴리스를 명시적으로 요청했다. 버전과 설치·릴리스 문서를 갱신했다.
 - scripts/verify.sh 변경 후: Release 경고 0/오류 0, Client 112/112, Activity 102/102. 기존 테스트 삭제·skip 없음. 추가 타워 전환 테스트 1개 및 기존 한국어 상태 검증 확장.
 - 패키지 생성과 격리 설치, GitHub CI, Latest 게시, 공개 다운로드·해시 결과는 게시 보고서에 확정한다.
@@ -51,3 +51,5 @@ REQ-043-04 [게시 준비]
 - Setup 51,270,171 bytes / SHA-256 03a0783af7a65eb1b174f06018e0ad29af36afe8d9e105db2158e5ef9bdf207d.
 - ZIP 72,362,913 bytes / SHA-256 fa0f9d9a4059c4ba8385a666ad2058ec9da5e4e4fa414ab0c854d19348241462.
 - 공개 폴더/ZIP 검사: 각 466개 파일, 금지 파일 0. 설치 파일 검사 PASS.
+
+최종 게시 확인: docs/PUBLISHED_0.4.3_2026-09-08_KO.md. GitHub Latest v0.4.3, 공개 설치 파일 무결성 검증 PASS.
