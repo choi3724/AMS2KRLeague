@@ -1,11 +1,10 @@
-# 0.4.3 타워 표시와 게임 실행 중 업데이트
+# 배치 편집의 빈 패널 미리보기와 마우스 선택
 
-- REQ-043-01: 베스트랩 타워 상태 ‘최고’를 ‘최고속 랩’으로 변경. 다른 랩 패널 문구와 내부 BEST 코드는 유지.
-- REQ-043-02: 참가자 수가 적으면 타워 배경과 실제 표시 창 높이를 자동 축소. 저장된 최대 크기/행 수·글꼴·가로 폭·다른 패널 배치 유지. 인원 증가 시 복원하고 편집 시 최대 크기를 사용.
-- REQ-043-03: 게임 종료 없이 검증된 업데이트 설치. 수집을 정상 저장하고 오버레이만 종료·설치·백그라운드 재실행. 게임·다른 앱 강제 종료 없음. 같은 설치 경로의 중복 오버레이와 해시·취소·오류 방어 유지.
-- REQ-043-04: 0.4.3 빌드·두 테스트·화면 크기 전환·격리 설치와 다운로드 검증 후 commit/tag/push/정식 Latest 공개. 사용자가 이번 요청에서 승인함.
+- REQ-EDIT-01: 편집 중 비어 있는 이벤트·레이스 컨트롤에 가상 미리보기 표시. 실제 이벤트가 있으면 실제 내용을 유지하고, 편집 종료 시 즉시 실제 상태로 복원. 가상 데이터는 원본/기록/업로드에 포함하지 않음.
+- REQ-EDIT-02: 편집 중 패널 내부 전체에서 마우스 선택·이동 커서가 유지되도록 투명 픽셀의 입력 통과 문제 수정. 크기 조절 손잡이와 편집 종료 후 클릭 통과 유지. 일반 플레이 UI 배경·저장 배치 유지.
+- REQ-EDIT-03: 이벤트 종료 애니메이션 뒤 편집 진입, 편집 중 갱신·실제 이벤트, 저장/취소 복원, 전체 면적 hit test·렌더 alpha·크기 변화를 WPF로 검증. 빌드·두 테스트와 보고서 작성. 2026-09-09 사용자가 0.4.4 릴리스를 요청했으므로 패키지·설치·CI 검증 후 commit/tag/push/정식 Latest 게시.
 
-기준선: main 5e6aeae, 공개 Latest v0.4.2, clean. verify.sh: 경고/오류 0, Client 111/111, Activity 102/102. 기준선 화면 work/validation-0.4.3/baseline/after/.
-보호 대상: 원본 활동/Compact, 자동 모드와 업로드 필터, 페널티, 순위 선택·애니메이션, 사용자 저장 설정 및 서버/DB.
-범위: StateText, OverlayHudView/OverlayWindow, GitHubAutoUpdater/App/ApplyUpdate, 관련 검증 스크립트·테스트, 버전과 릴리스 문서. 게임 실행이나 조작은 하지 않는다.
-호환 제한: 0.4.2 이하 실행본은 자기 코드의 게임 종료 대기를 따르므로 최초 0.4.3 자동 설치에는 기존 조건이 적용된다. 0.4.3부터 이후 업데이트는 게임 실행 중 적용한다.
+기준선: HEAD 53b23a5, 공개 v0.4.3, clean. scripts/verify.sh 경고/오류 0, Client 112/112, Activity 102/102. work/validation-edit-preview/baseline/.
+범위: OverlayWindow.xaml(.cs), 관련 WPF 회귀 테스트, README 작업 트리 안내와 완료 보고서. 원본 이벤트 모델·캡처·업로드·서버/DB·업데이트 코드 변경 없음.
+원인: Windows layered window는 alpha=0 픽셀에서 마우스가 밑 창으로 통과한다. 기존 편집 drag surface의 Background=Transparent와 이벤트 퇴장 후 투명 패널이 조합되어 내부 선택이 어려움.
+근거: https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features (Layered Windows).

@@ -19,9 +19,9 @@ namespace AMS2LeagueClient.Presentation
         private string _updateText = "업데이트: 확인 대기";
         private SessionPlayMode _sessionPlayMode;
 
-        public ClientStatusViewModel(string version = "0.4.3")
+        public ClientStatusViewModel(string version = "0.4.4")
         {
-            VersionText = "AMS2 리그 오버레이 " + (string.IsNullOrWhiteSpace(version) ? "0.4.3" : version);
+            VersionText = "AMS2 리그 오버레이 " + (string.IsNullOrWhiteSpace(version) ? "0.4.4" : version);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

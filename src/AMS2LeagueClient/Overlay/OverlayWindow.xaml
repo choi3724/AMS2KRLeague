@@ -18,7 +18,7 @@
             <presentation:OverlayHudView x:Name="TimingHud" />
         </Viewbox>
         <Grid x:Name="EditChrome" Visibility="Collapsed">
-            <Border BorderBrush="#FF4DE3B1" BorderThickness="2" CornerRadius="6" Background="Transparent"
+            <Border BorderBrush="#FF4DE3B1" BorderThickness="2" CornerRadius="6" Background="#180B1520"
                     Cursor="SizeAll" ToolTip="순위 타워 · 드래그로 이동 / 오른쪽 아래 모서리로 크기 조절"
                     MouseLeftButtonDown="EditDrag_MouseLeftButtonDown" />
             <ResizeGrip Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Bottom" Background="Transparent" Cursor="SizeNWSE" />

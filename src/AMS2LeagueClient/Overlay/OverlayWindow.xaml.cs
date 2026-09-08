@@ -191,20 +191,30 @@ namespace AMS2LeagueClient.Overlay
                 _sessionView.SetViewModel(viewModel.Session);
             }
 
-            string eventKey = viewModel.EventCard.EventId + "\u001f" + viewModel.EventCard.IsVisible + "\u001f" + viewModel.EventCard.SecondaryText;
+            // Presentation-only previews never enter the live event model or capture pipeline.
+            EventCardViewModel eventCard = _layoutEditing && !viewModel.EventCard.IsVisible
+                ? new EventCardViewModel { EventId = "layout-preview-event", IsVisible = true, IsDemo = true,
+                    Title = "이벤트 미리보기", PrimaryText = "개인 최고 기록", SecondaryText = "1:42.350" }
+                : viewModel.EventCard;
+            RaceControlViewModel raceControl = _layoutEditing && !viewModel.RaceControl.IsVisible
+                ? new RaceControlViewModel { EventId = "layout-preview-race-control", IsVisible = true,
+                    Title = "미리보기", StateLabel = "황색기" }
+                : viewModel.RaceControl;
+
+            string eventKey = eventCard.EventId + "\u001f" + eventCard.IsVisible + "\u001f" + eventCard.SecondaryText;
             if (eventKey != _lastEventKey)
             {
                 _lastEventKey = eventKey;
-                TimeSpan exit = _eventView.SetViewModel(viewModel.EventCard, animate);
+                TimeSpan exit = _eventView.SetViewModel(eventCard, animate && !_layoutEditing);
                 _eventExitDeadline = exit > TimeSpan.Zero ? DateTime.UtcNow + exit : DateTime.MinValue;
             }
 
-            string raceControlKey = viewModel.RaceControl.EventId + "\u001f" + viewModel.RaceControl.IsVisible + "\u001f"
-                + viewModel.RaceControl.IsExpanded + "\u001f" + viewModel.RaceControl.Message + "\u001f" + viewModel.RaceControl.StateLabel;
+            string raceControlKey = raceControl.EventId + "\u001f" + raceControl.IsVisible + "\u001f"
+                + raceControl.IsExpanded + "\u001f" + raceControl.Message + "\u001f" + raceControl.StateLabel;
             if (raceControlKey != _lastRaceControlKey)
             {
                 _lastRaceControlKey = raceControlKey;
-                TimeSpan exit = _raceControlView.SetViewModel(viewModel.RaceControl, animate);
+                TimeSpan exit = _raceControlView.SetViewModel(raceControl, animate && !_layoutEditing);
                 _raceControlExitDeadline = exit > TimeSpan.Zero ? DateTime.UtcNow + exit : DateTime.MinValue;
             }
 
@@ -504,6 +514,8 @@ namespace AMS2LeagueClient.Overlay
             _eventWindow.SetEditMode(enabled);
             _raceControlWindow.SetEditMode(enabled);
             _waitingWindow.SetEditMode(enabled);
+            _lastEventKey = _lastRaceControlKey = string.Empty;
+            SetViewModel(_viewModel, false);
         }
 
         private void EditDrag_MouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
@@ -653,7 +665,7 @@ namespace AMS2LeagueClient.Overlay
                 BorderBrush = new SolidColorBrush(Color.FromRgb(77, 227, 177)),
                 BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(6),
-                Background = Brushes.Transparent,
+                Background = new SolidColorBrush(Color.FromArgb(24, 11, 21, 32)),
                 Cursor = Cursors.SizeAll,
                 ToolTip = label + " · 드래그로 이동 / 오른쪽 아래 모서리로 크기 조절"
             };

@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$BaselineZip,
     [Parameter(Mandatory = $true)][string]$BaselineSha256,
     [string]$BaselineVersion = '0.4.0',
-    [string]$Version = '0.4.3'
+    [string]$Version = '0.4.4'
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
