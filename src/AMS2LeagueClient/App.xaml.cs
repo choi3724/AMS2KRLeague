@@ -84,6 +84,11 @@ namespace AMS2LeagueClient
                 }
 
                 _overlay = new OverlayWindow(startupPolicy.Diagnostic);
+                _overlay.StartVr(message =>
+                {
+                    status.VrText = message;
+                    _logger?.Info("VR_STATUS", message);
+                });
                 if (_statusWindow != null)
                 {
                     // Per-overlay toggles work at any time; reflect the saved state now.
@@ -106,12 +111,29 @@ namespace AMS2LeagueClient
                                 key => key,
                                 key => _overlay.IsComponentEnabled(key),
                                 StringComparer.OrdinalIgnoreCase));
-                            _statusWindow.SetLayoutEditState(true, "각 패널의 상단을 드래그하고 우측 하단 손잡이로 크기를 조절하세요.");
+                            _statusWindow.SetLayoutEditState(true, _overlay.IsLayoutPreview
+                                ? "가상 데이터 미리보기입니다. 위치·크기를 조절한 뒤 저장 후 잠금을 누르세요."
+                                : "각 패널의 상단을 드래그하고 우측 하단 손잡이로 크기를 조절하세요.");
                         }
                         else
                         {
-                            _statusWindow.SetLayoutEditState(false, "먼저 AMS2에서 오버레이가 표시되는 화면으로 진입하세요.");
+                            _statusWindow.SetLayoutEditState(false, "편집 화면을 열지 못했습니다.");
                         }
+                    };
+                    void StartLayoutPreview(bool waiting)
+                    {
+                        overlay.BeginLayoutPreview(waiting, OverlayWindowInterop.GetLayoutPreviewArea(
+                            new System.Windows.Interop.WindowInteropHelper(_statusWindow).Handle));
+                        _statusWindow.SetLayoutEditState(true,
+                            "가상 데이터 미리보기입니다. 위치·크기를 조절한 뒤 저장 후 잠금을 누르세요.");
+                        _statusWindow.Activate();
+                    }
+                    _statusWindow.GameplayPreviewRequested += (sender, previewArgs) => StartLayoutPreview(false);
+                    _statusWindow.WaitingPreviewRequested += (sender, previewArgs) => StartLayoutPreview(true);
+                    _statusWindow.VrSettingsRequested += (sender, vrArgs) =>
+                    {
+                        new VrSettingsWindow(overlay.GetVrHudSettings(), overlay.SaveVrHudSettings, overlay.RecenterVr)
+                            { Owner = _statusWindow }.ShowDialog();
                     };
                     _statusWindow.DrivingHudSettingsRequested += (sender, settingsArgs) =>
                     {
@@ -314,6 +336,7 @@ namespace AMS2LeagueClient
             if (_cleanupStarted) return;
             _cleanupStarted = true;
 
+            CleanupComponent("VR", () => _overlay?.StopVr());
             CleanupComponent("AUTO_UPDATE", () => _autoUpdater?.Dispose());
             _autoUpdater = null;
             _autoExitTimer?.Stop();

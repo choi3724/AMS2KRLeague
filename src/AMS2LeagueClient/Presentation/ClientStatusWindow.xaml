@@ -42,6 +42,9 @@
                     <Button x:Name="ShowAllButton" Content="모두 켜기" Click="ShowAllButton_Click"
                             MinWidth="96" Height="28" Margin="4,0" Padding="10,0" Background="#142536" Foreground="#DDE7F1"
                             BorderBrush="#526779" BorderThickness="1" FontSize="12" FontWeight="SemiBold" />
+                    <Button Content="모니터·VR 표시 설정" Click="VrSettingsButton_Click"
+                            MinWidth="160" Height="28" Margin="4,0" Padding="10,0" Background="#193247" Foreground="White"
+                            BorderBrush="#526779" BorderThickness="1" FontSize="12" FontWeight="SemiBold" />
                     <Button x:Name="HideAllButton" Content="모두 끄기" Click="HideAllButton_Click"
                             MinWidth="96" Height="28" Margin="4,0" Padding="10,0" Background="#142536" Foreground="#DDE7F1"
                             BorderBrush="#526779" BorderThickness="1" FontSize="12" FontWeight="SemiBold" />
@@ -49,16 +52,20 @@
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                 <Button x:Name="LayoutEditButton" Content="레이아웃 편집" Click="LayoutEditButton_Click"
-                        MinWidth="150" Height="38" Margin="5,0" Padding="15,0" Background="#193247" Foreground="White"
+                        MinWidth="120" Height="38" Margin="4,0" Padding="8,0" Background="#193247" Foreground="White"
                         BorderBrush="#4DE3B1" BorderThickness="1" FontSize="14" FontWeight="SemiBold" />
                 <Button Content="텔레메트리·글꼴 설정" Click="DrivingHudSettingsButton_Click"
-                        MinWidth="190" Height="38" Margin="5,0" Padding="15,0" Background="#142536" Foreground="#DDE7F1"
+                        MinWidth="164" Height="38" Margin="4,0" Padding="8,0" Background="#142536" Foreground="#DDE7F1"
                         BorderBrush="#526779" BorderThickness="1" FontSize="14" FontWeight="SemiBold" />
                 <Button Content="기본 위치 복원" Click="LayoutResetButton_Click"
-                        MinWidth="140" Height="38" Margin="5,0" Padding="15,0" Background="#142536" Foreground="#DDE7F1"
+                        MinWidth="110" Height="38" Margin="4,0" Padding="8,0" Background="#142536" Foreground="#DDE7F1"
                         BorderBrush="#526779" BorderThickness="1" FontSize="14" FontWeight="SemiBold" />
+                <Button Content="게임 없이 주행 UI 편집" Click="GameplayPreviewButton_Click"
+                        Height="38" Padding="8,0" Margin="4,0" Background="#193247" Foreground="White" />
+                <Button Content="게임 없이 대기 UI 편집" Click="WaitingPreviewButton_Click"
+                        Height="38" Padding="8,0" Margin="4,0" Background="#193247" Foreground="White" />
             </StackPanel>
-            <TextBlock x:Name="LayoutHint" Text="게임 화면이 표시된 상태에서 레이아웃 편집을 누르세요."
+            <TextBlock x:Name="LayoutHint" Text="게임 없이도 가상 데이터로 위치와 크기를 편집할 수 있습니다."
                        Foreground="#82F1D0" FontSize="12" HorizontalAlignment="Center" Margin="0,8,0,0" />
         </StackPanel>
         <TextBlock Text="이 창을 닫으면 오버레이가 종료됩니다. 최소화한 상태에서도 계속 작동합니다."

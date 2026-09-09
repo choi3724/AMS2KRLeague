@@ -5,7 +5,7 @@
   #error OutputDir must be provided by build-release.ps1
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.5.1"
+  #define AppVersion "0.6.0"
 #endif
 
 [Setup]

@@ -41,6 +41,7 @@ namespace AMS2LeagueClient.Core.Presentation
     public sealed class OverlayLayoutProfile
     {
         public int Schema { get; set; } = 1;
+        public VrHudSettings VrHud { get; set; } = new VrHudSettings();
         public DrivingHudSettings DrivingHud { get; set; } = new DrivingHudSettings();
         // Missing in pre-0.4.1 profiles; expand only the saved tower width once.
         public int TowerDesignWidth { get; set; } = 520;

@@ -2,7 +2,13 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-현재 버전 및 공개 Latest: **0.5.1**
+현재 버전 및 공개 Latest: **0.6.0**
+
+0.6.0 추가 기능: SteamVR 오버레이 시험 지원, 게임 없이 주행·대기 레이아웃 편집, 서버 지원 시 기록 압축 업로드.
+
+상태창의 **모니터·VR 표시 설정**에서 모니터/VR/동시 표시를 선택하고 VR 화면의 위치·크기·거리·각도를 조절합니다. SteamVR를 먼저 실행해야 하며 Meta/Oculus·OpenXR 단독 실행은 현재 지원하지 않습니다. 실제 헤드셋 검증은 진행 전인 시험 기능입니다.
+
+**게임 없이 주행 UI 편집** 또는 **게임 없이 대기 UI 편집**에서 미리보기로 배치를 조절한 뒤 **저장하고 잠금**을 누르면 적용됩니다.
 
 0.4.5 추가 기능: 텔레메트리·속도·기어 독립 패널, 색상/숫자 글꼴 설정, 업데이트 후 상태창 자동 재실행, 사용자 지정 앱/설치 아이콘.
 
@@ -39,12 +45,12 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 ## 실행 방법
 
-1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 `AMS2-League-Overlay-0.5.1-Setup.exe`를 다운로드하고 실행합니다.
+1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 `AMS2-League-Overlay-0.6.0-Setup.exe`를 다운로드하고 실행합니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
 
-설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.5.1-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
+설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.6.0-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
 
 게임이 실행되지 않았거나 Shared Memory를 사용할 수 없으면 오버레이는 대기 상태로 유지됩니다. 프로그램은 게임 설정, 실행 파일, 저장 파일을 자동 변경하지 않습니다.
 
@@ -58,7 +64,7 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 - 설정과 기록은 기존 `%LOCALAPPDATA%\AMS2KRLeague`에 유지합니다. ZIP 실행본도 현재 폴더에 적용하며 포터블 상태를 유지합니다. 설치판은 기존 Windows 제거 항목을 갱신합니다.
 - 설치 경로에 쓰기 권한이 필요합니다. 게임과 다른 오버레이 프로세스를 강제 종료하거나 Windows를 자동 재부팅하지 않습니다.
 - 데모·화면 캡처·자동 종료 실행은 자동 업데이트를 생략합니다. 필요 시 `--updates-disabled`로 이번 실행의 업데이트만 끌 수 있습니다.
-- 0.4.0 이하에는 이 기능이 없으므로 **0.5.1을 한 번 수동 설치**해야 합니다. 커밋만으로 업데이트가 배포되지 않으며 GitHub 릴리스에 새 설치 파일이 게시되어야 합니다.
+- 0.4.0 이하에는 이 기능이 없으므로 **0.6.0을 한 번 수동 설치**해야 합니다. 커밋만으로 업데이트가 배포되지 않으며 GitHub 릴리스에 새 설치 파일이 게시되어야 합니다.
 
 ## 오버레이 위치와 크기 조절
 
@@ -128,7 +134,7 @@ dotnet run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.c
 
 ## 버전 정책
 
-첫 공개 버전은 `0.1.0`, 현재 개발 버전은 `0.5.1`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
+첫 공개 버전은 `0.1.0`, 현재 개발 버전은 `0.6.0`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
 
 ## 현재 제한사항
 

@@ -77,6 +77,12 @@ try {
 }
 finally {
     if ($temporaryRoot -and (Test-Path -LiteralPath $temporaryRoot)) {
-        Remove-Item -LiteralPath $temporaryRoot -Recurse -Force
+        $cleanupPath = (Resolve-Path -LiteralPath $temporaryRoot).Path
+        $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+        if (-not $cleanupPath.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase) `
+            -or (Split-Path -Leaf $cleanupPath) -notmatch '^ams2-public-audit-[0-9a-f]{32}$') {
+            throw "Unsafe package audit cleanup path: $cleanupPath"
+        }
+        Remove-Item -LiteralPath $cleanupPath -Recurse -Force
     }
 }

@@ -18,8 +18,11 @@ namespace AMS2LeagueClient.Presentation
 
         public ClientStatusViewModel ViewModel { get; }
 
+        public event EventHandler? VrSettingsRequested;
         public event EventHandler? DrivingHudSettingsRequested;
         public event EventHandler? LayoutEditRequested;
+        public event EventHandler? GameplayPreviewRequested;
+        public event EventHandler? WaitingPreviewRequested;
         public event EventHandler? LayoutResetRequested;
         public event EventHandler<LayoutComponentToggleEventArgs>? LayoutComponentToggled;
 
@@ -81,6 +84,15 @@ namespace AMS2LeagueClient.Presentation
 
         private void LayoutEditButton_Click(object sender, RoutedEventArgs eventArgs)
             => LayoutEditRequested?.Invoke(this, EventArgs.Empty);
+
+        private void GameplayPreviewButton_Click(object sender, RoutedEventArgs eventArgs)
+            => GameplayPreviewRequested?.Invoke(this, EventArgs.Empty);
+
+        private void WaitingPreviewButton_Click(object sender, RoutedEventArgs eventArgs)
+            => WaitingPreviewRequested?.Invoke(this, EventArgs.Empty);
+
+        private void VrSettingsButton_Click(object sender, RoutedEventArgs eventArgs)
+            => VrSettingsRequested?.Invoke(this, EventArgs.Empty);
 
         private void DrivingHudSettingsButton_Click(object sender, RoutedEventArgs eventArgs)
             => DrivingHudSettingsRequested?.Invoke(this, EventArgs.Empty);

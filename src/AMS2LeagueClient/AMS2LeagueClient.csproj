@@ -18,6 +18,8 @@
     <ProjectReference Include="..\AMS2LeagueClient.Core\AMS2LeagueClient.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <None Update="ThirdParty\OpenVR\openvr_api.dll" Link="openvr_api.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="ThirdParty\OpenVR\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\Fonts\Pretendard-Medium.otf" />
     <None Update="Assets\Fonts\Pretendard-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

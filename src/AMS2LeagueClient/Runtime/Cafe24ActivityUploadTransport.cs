@@ -21,6 +21,7 @@ namespace AMS2LeagueClient.Runtime
         public ActivityScheduledEventOptions ScheduledEvent { get; set; } = new ActivityScheduledEventOptions();
         public string ServiceVersion { get; set; } = string.Empty;
         public DateTimeOffset? ServerTimeUtc { get; set; }
+        public string[] GzipRequestRoutes { get; set; } = Array.Empty<string>();
     }
 
     public sealed class Cafe24HealthResponse
@@ -150,8 +151,16 @@ namespace AMS2LeagueClient.Runtime
             using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Headers.TryAddWithoutValidation("Idempotency-Key", item.Metadata.IdempotencyKey);
-            request.Content = new ByteArrayContent(payload);
+            cancellationToken.ThrowIfCancellationRequested();
+            byte[] wirePayload = payload;
+            if (_options.SupportsGzipRequest(requestUri, endpoint))
+            {
+                byte[] gzip = TelemetryChunkSerializer.Gzip(payload);
+                if (gzip.Length < payload.Length) wirePayload = gzip;
+            }
+            request.Content = new ByteArrayContent(wirePayload);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            if (!ReferenceEquals(wirePayload, payload)) request.Content.Headers.ContentEncoding.Add("gzip");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.BearerToken);
             // Cafe24's shared-hosting FastCGI layer may remove the standard
             // Authorization header before PHP. Send the same value in a
@@ -337,6 +346,7 @@ namespace AMS2LeagueClient.Runtime
         public async Task<Cafe24BootstrapResponse> GetBootstrapAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
+            _options.SetGzipRequestSupport(null);
             await EnsureAnonymousEnrollmentAsync(cancellationToken).ConfigureAwait(false);
             if (!TryBuildRouteUri(BootstrapEndpoint, out Uri? requestUri) || requestUri == null)
             {
@@ -366,7 +376,11 @@ namespace AMS2LeagueClient.Runtime
                     throw new HttpRequestException("Cafe24 bootstrap request failed with HTTP " + statusCode.ToString(CultureInfo.InvariantCulture) + ".");
                 }
 
-                return ParseBootstrap(responseBytes);
+                Cafe24BootstrapResponse bootstrap = ParseBootstrap(responseBytes);
+                _options.SetGzipRequestSupport(requestUri,
+                    bootstrap.GzipRequestRoutes.Contains(PlayerActivitiesEndpoint, StringComparer.Ordinal),
+                    bootstrap.GzipRequestRoutes.Contains(SessionWitnessEndpoint, StringComparer.Ordinal));
+                return bootstrap;
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -520,13 +534,33 @@ namespace AMS2LeagueClient.Runtime
                         Status = StringValue(eventElement, "status")
                     },
                     ServiceVersion = StringValue(root, "serviceVersion"),
-                    ServerTimeUtc = DateValue(root, "serverTimeUtc")
+                    ServerTimeUtc = DateValue(root, "serverTimeUtc"),
+                    GzipRequestRoutes = ParseGzipRequestRoutes(root)
                 };
             }
             catch (JsonException)
             {
                 throw new InvalidDataException("Cafe24 bootstrap response JSON is invalid.");
             }
+        }
+
+        private static string[] ParseGzipRequestRoutes(JsonElement root)
+        {
+            if (!root.TryGetProperty("capabilities", out JsonElement capabilities)
+                || capabilities.ValueKind != JsonValueKind.Object
+                || !capabilities.TryGetProperty("gzipRequestRoutes", out JsonElement routes)
+                || routes.ValueKind != JsonValueKind.Array)
+                return Array.Empty<string>();
+
+            var supported = new System.Collections.Generic.List<string>();
+            foreach (JsonElement value in routes.EnumerateArray())
+            {
+                if (value.ValueKind != JsonValueKind.String) return Array.Empty<string>();
+                string route = value.GetString()!;
+                if ((route == PlayerActivitiesEndpoint || route == SessionWitnessEndpoint) && !supported.Contains(route))
+                    supported.Add(route);
+            }
+            return supported.ToArray();
         }
 
         public static Cafe24HealthResponse ParseHealth(ReadOnlyMemory<byte> utf8Json)

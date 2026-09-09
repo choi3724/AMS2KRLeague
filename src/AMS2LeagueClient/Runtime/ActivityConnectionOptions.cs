@@ -43,6 +43,22 @@ namespace AMS2LeagueClient.Runtime
     public sealed class ActivityConnectionOptions
     {
         private const int MaximumConfigBytes = 64 * 1024;
+        // Runtime-only capability shared by bootstrap and upload transports.
+        // Binding the exact API path prevents reuse against a different server.
+        private volatile Tuple<string, bool, bool>? _gzipRequestSupport;
+
+        internal void SetGzipRequestSupport(Uri? apiUri, bool activities = false, bool witnesses = false)
+            => _gzipRequestSupport = apiUri == null ? null
+                : Tuple.Create(apiUri.GetLeftPart(UriPartial.Path), activities, witnesses);
+
+        internal bool SupportsGzipRequest(Uri apiUri, string route)
+        {
+            var support = _gzipRequestSupport;
+            if (support == null || !string.Equals(support.Item1, apiUri.GetLeftPart(UriPartial.Path), StringComparison.Ordinal))
+                return false;
+            return route == Cafe24ActivityUploadTransport.PlayerActivitiesEndpoint ? support.Item2
+                : route == Cafe24ActivityUploadTransport.SessionWitnessEndpoint && support.Item3;
+        }
         private static readonly Regex BearerPattern = new Regex(
             "^[A-Za-z0-9_-]{32,128}$",
             RegexOptions.CultureInvariant);

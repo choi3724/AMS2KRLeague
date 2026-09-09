@@ -16,12 +16,13 @@ namespace AMS2LeagueClient.Presentation
         private string _windowText = "게임 창: 감지되지 않음";
         private string _serverText = "서버: 확인 중";
         private string _accountText = "계정: 연결 안 됨";
+        private string _vrText = "VR: 꺼짐 · 모니터 표시";
         private string _updateText = "업데이트: 확인 대기";
         private SessionPlayMode _sessionPlayMode;
 
-        public ClientStatusViewModel(string version = "0.5.1")
+        public ClientStatusViewModel(string version = "0.6.0")
         {
-            VersionText = "AMS2 리그 오버레이 " + (string.IsNullOrWhiteSpace(version) ? "0.5.1" : version);
+            VersionText = "AMS2 리그 오버레이 " + (string.IsNullOrWhiteSpace(version) ? "0.6.0" : version);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -35,6 +36,7 @@ namespace AMS2LeagueClient.Presentation
         public string WindowText { get => _windowText; set => Set(ref _windowText, value); }
         public string ServerText { get => _serverText; set => Set(ref _serverText, value); }
         public string AccountText { get => _accountText; set => Set(ref _accountText, value); }
+        public string VrText { get => _vrText; set => Set(ref _vrText, value); }
         public string UpdateText { get => _updateText; set => Set(ref _updateText, value); }
         public string VersionText { get; }
         // Populated by automatic detection; there is no user mode selector.
@@ -83,7 +85,7 @@ namespace AMS2LeagueClient.Presentation
         {
             StateLabel = "연결됨";
             Message = "읽기 전용 텔레메트리에 연결되었습니다.";
-            Detail = "AMS2가 전면에 있고 플레이 상태가 유효할 때만 레이스 오버레이가 표시됩니다.";
+            Detail = "유효한 주행·대기 화면에 표시합니다. 모니터는 게임 전면, VR은 AMS2 실행 장면을 확인합니다.";
             AccentColor = "#4DE3B1";
             ProcessText = "AMS2 프로세스: 연결됨 (PID " + pid + ")";
             SharedMemoryText = "공유 메모리: v" + version + " · 빌드 " + build;

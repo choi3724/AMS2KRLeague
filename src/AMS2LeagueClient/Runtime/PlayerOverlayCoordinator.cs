@@ -322,8 +322,9 @@ namespace AMS2LeagueClient.Runtime
                 bool gameplayValid = snapshot != null && local != null && local.IsValid && local.Participant != null;
                 bool waitingValid = multiplayerDecision?.Mode == MultiplayerOverlayMode.Waiting
                     && multiplayerDecision.Waiting != null;
-                OverlayVisibilityDecision decision = _visibilityController.Evaluate(true, window, gameplayValid || waitingValid);
-                ApplyVisibility(decision, window, snapshot, local, multiplayerDecision);
+                GameWindowSnapshot? outputWindow = _overlay.ResolveOutputWindow(window, _overlay.IsVrSceneActive(pid), pid);
+                OverlayVisibilityDecision decision = _visibilityController.Evaluate(true, outputWindow, gameplayValid || waitingValid);
+                ApplyVisibility(decision, outputWindow, snapshot, local, multiplayerDecision);
 
                 if (_lastReadStatus == TelemetryReadStatus.MappingUnavailable)
                 {

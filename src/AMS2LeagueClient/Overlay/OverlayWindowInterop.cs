@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using AMS2LeagueClient.Core.Presentation;
+using AMS2LeagueClient.Core.Process;
 
 namespace AMS2LeagueClient.Overlay
 {
@@ -43,6 +44,35 @@ namespace AMS2LeagueClient.Overlay
         private static readonly IntPtr TopMost = new IntPtr(-1);
         private static readonly object StateGate = new object();
         private static readonly HashSet<IntPtr> EditingHandles = new HashSet<IntPtr>();
+
+        public static GameWindowSnapshot GetLayoutPreviewArea(IntPtr owner)
+        {
+            IntPtr monitor = MonitorFromWindow(owner, 2);
+            var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            if (!GetMonitorInfo(monitor, ref info)) throw new InvalidOperationException("편집할 모니터 정보를 읽지 못했습니다.");
+            uint dpi = owner == IntPtr.Zero ? 96 : GetDpiForWindow(owner);
+            NativeRect area = info.Work;
+            return new GameWindowSnapshot(IntPtr.Zero, area.Left, area.Top,
+                area.Right - area.Left, area.Bottom - area.Top, dpi == 0 ? 96 : dpi,
+                true, false, monitor.ToInt64());
+        }
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromWindow(IntPtr handle, uint flags);
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr handle);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MonitorInfo
+        {
+            public int Size;
+            public NativeRect Monitor;
+            public NativeRect Work;
+            public uint Flags;
+        }
 
         public static void Configure(IntPtr handle)
         {

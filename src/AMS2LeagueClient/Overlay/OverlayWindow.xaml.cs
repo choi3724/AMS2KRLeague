@@ -11,6 +11,7 @@ using AMS2LeagueClient.Core.Presentation;
 using AMS2LeagueClient.Core.Process;
 using AMS2LeagueClient.Core.Telemetry;
 using AMS2LeagueClient.Presentation;
+using AMS2LeagueClient.Runtime;
 
 namespace AMS2LeagueClient.Overlay
 {
@@ -57,6 +58,8 @@ namespace AMS2LeagueClient.Overlay
         private DateTime _eventExitDeadline = DateTime.MinValue;
         private DateTime _raceControlExitDeadline = DateTime.MinValue;
         private bool _layoutEditing;
+        private bool _layoutPreview;
+        private OverlayShellViewModel? _liveViewModelBeforePreview;
         private bool _closing;
 
         public OverlayWindow(bool diagnostic, string? layoutPath = null)
@@ -142,6 +145,7 @@ namespace AMS2LeagueClient.Overlay
 
         public void UpdateDrivingTelemetry(TelemetrySnapshot snapshot, int localIndex, int generation)
         {
+            if (_layoutPreview) return;
             DrivingTelemetrySample? previous = _drivingHistory.Current;
             _drivingHistory.Add(DrivingTelemetrySample.FromSnapshot(snapshot, localIndex, generation));
             if (!ReferenceEquals(previous, _drivingHistory.Current)) RefreshDrivingViews();
@@ -182,6 +186,7 @@ namespace AMS2LeagueClient.Overlay
         }
 
         public bool IsLayoutEditing => _layoutEditing;
+        public bool IsLayoutPreview => _layoutPreview;
 
         public bool IsComponentEnabled(string component)
             => _layoutProfile.IsEnabled(component);
@@ -242,6 +247,7 @@ namespace AMS2LeagueClient.Overlay
         {
             _closing = true;
             _drivingPreviewTimer.Stop();
+            StopVr();
             if (_layoutEditing)
             {
                 CaptureLayout();
@@ -259,6 +265,16 @@ namespace AMS2LeagueClient.Overlay
         }
 
         public void SetViewModel(OverlayShellViewModel viewModel, bool animate = true)
+        {
+            if (_layoutPreview)
+            {
+                _liveViewModelBeforePreview = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+                return;
+            }
+            ApplyViewModel(viewModel, animate);
+        }
+
+        private void ApplyViewModel(OverlayShellViewModel viewModel, bool animate)
         {
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             ResizeTimingPreview();
@@ -334,10 +350,36 @@ namespace AMS2LeagueClient.Overlay
         public OverlayStyleState GetStyleState()
             => _handle == IntPtr.Zero ? new OverlayStyleState() : OverlayWindowInterop.ReadStyleState(_handle);
 
+        /// <summary>Presentation-only editing; synthetic values never reach the recorder.</summary>
+        public void BeginLayoutPreview(bool waiting, GameWindowSnapshot? desktop = null)
+        {
+            desktop ??= OverlayWindowInterop.GetLayoutPreviewArea(_handle);
+            if (!desktop.HasValidClientRect) throw new ArgumentException("Invalid preview area.", nameof(desktop));
+            if (_layoutEditing) EndLayoutEdit(true);
+            _liveViewModelBeforePreview = _viewModel;
+            HideOverlay();
+            _lastGameWindow = desktop;
+            _displayMode = waiting ? DisplayMode.Waiting : DisplayMode.Gameplay;
+            _lastWaitingViewModel = waiting ? new MultiplayerWaitingOverlayViewModel
+            {
+                Title = "대기 화면 미리보기", SessionLabel = "예선",
+                ParticipantCountText = "리그 20 / 원본 20",
+                RemainingLabel = "남은 시간", RemainingValue = "05:00"
+            } : null;
+            _waitingView.DataContext = _lastWaitingViewModel;
+            ApplyViewModel(DemoSnapshotFactory.CreateShell(_diagnostic), false);
+            _layoutPreview = true;
+            BeginLayoutEdit();
+        }
+
         public bool BeginLayoutEdit()
         {
             if (_layoutEditing) return true;
-            if (_lastGameWindow == null || !_lastGameWindow.HasValidClientRect) return false;
+            if (_lastGameWindow == null || !_lastGameWindow.HasValidClientRect)
+            {
+                BeginLayoutPreview(false);
+                return true;
+            }
             _layoutEditing = true;
             SetEditMode(true);
             if (_displayMode == DisplayMode.Waiting)
@@ -362,7 +404,22 @@ namespace AMS2LeagueClient.Overlay
                 _layoutStore.Save(_layoutProfile);
             }
             _layoutEditing = false;
+            bool wasPreview = _layoutPreview;
+            _layoutPreview = false;
+            if (wasPreview)
+            {
+                ApplyViewModel(_liveViewModelBeforePreview ?? new OverlayShellViewModel(), false);
+                _liveViewModelBeforePreview = null;
+                _lastWaitingViewModel = null;
+                _lastWaitingKey = string.Empty;
+                _waitingView.DataContext = null;
+            }
             SetEditMode(false);
+            if (wasPreview)
+            {
+                HideOverlay();
+                return;
+            }
             InvalidateBounds();
             if (_closing || _lastGameWindow == null) return;
             if (_displayMode == DisplayMode.Waiting && _lastWaitingViewModel != null)
@@ -377,7 +434,7 @@ namespace AMS2LeagueClient.Overlay
 
         public void ResetLayout()
         {
-            _layoutProfile = new OverlayLayoutProfile { DrivingHud = GetDrivingHudSettings() };
+            _layoutProfile = new OverlayLayoutProfile { DrivingHud = GetDrivingHudSettings(), VrHud = GetVrHudSettings() };
             _layoutStore.Save(_layoutProfile);
             InvalidateBounds();
             if (_lastGameWindow == null) return;
@@ -399,6 +456,7 @@ namespace AMS2LeagueClient.Overlay
 
         public void ShowAt(GameWindowSnapshot gameWindow)
         {
+            if (_layoutEditing) return;
             _lastGameWindow = gameWindow ?? throw new ArgumentNullException(nameof(gameWindow));
             _displayMode = DisplayMode.Gameplay;
             if (_layoutEditing) return;
@@ -410,6 +468,7 @@ namespace AMS2LeagueClient.Overlay
         {
             if (gameWindow == null) throw new ArgumentNullException(nameof(gameWindow));
             if (viewModel == null) throw new ArgumentNullException(nameof(viewModel));
+            if (_layoutEditing) return;
             _lastGameWindow = gameWindow;
             _lastWaitingViewModel = viewModel;
             _displayMode = DisplayMode.Waiting;
@@ -437,6 +496,8 @@ namespace AMS2LeagueClient.Overlay
             if (_layoutEditing) return;
             HideGameplayWindows();
             _waitingWindow.HideOverlay();
+            _lastGameWindow = null;
+            InvalidateBounds();
         }
 
         private void ShowGameplaySurfaces(GameWindowSnapshot gameWindow, bool includeInactive)
@@ -602,6 +663,7 @@ namespace AMS2LeagueClient.Overlay
             ResizeMode = enabled ? ResizeMode.CanResizeWithGrip : ResizeMode.NoResize;
             Focusable = enabled;
             ShowActivated = enabled;
+            ApplyOutputVisibility();
             OverlayWindowInterop.SetEditMode(_handle, enabled);
             _relativeWindow.SetEditMode(enabled);
             _lapTimingWindow.SetEditMode(enabled);
@@ -612,7 +674,7 @@ namespace AMS2LeagueClient.Overlay
             foreach (AuxiliaryOverlayWindow panel in _drivingWindows) panel.SetEditMode(enabled);
             RefreshDrivingViews();
             _lastEventKey = _lastRaceControlKey = string.Empty;
-            SetViewModel(_viewModel, false);
+            ApplyViewModel(_viewModel, false);
         }
 
         private void EditDrag_MouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)

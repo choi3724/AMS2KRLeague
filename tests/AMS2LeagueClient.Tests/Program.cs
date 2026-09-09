@@ -79,6 +79,12 @@ namespace AMS2LeagueClient.Tests
                 ("Korean labels and dedicated penalty column", KoreanLabelsAndPenaltyColumn),
                 ("Tower shrinks and restores with participant count", TowerShrinksAndRestoresWithParticipants),
                 ("Empty panels remain editable with preview", EmptyPanelsRemainEditableWithPreview),
+                ("Offline layout preview lifecycle", OfflineLayoutPreviewLifecycle),
+                ("Offline layout controls", OfflineLayoutControls),
+                ("VR settings defaults bounds colours and transforms", VrSettingsAndTransforms),
+                ("VR connection retry backpressure quit and monitor off", VrConnectionLifecycle),
+                ("VR output rendering focus isolation and saved settings", VrOutputRenderingAndPersistence),
+                ("VR settings controls and packaged SDK", VrSettingsControlsAndSdk),
                 ("Saved tower expands once and retains independent layout", LegacyTowerWidthMigration),
                 ("Release versions and metadata reject unsafe updates", ReleaseVersionAndMetadata),
                 ("Update downloads verify exact bytes and recover from failures", UpdateDownloadValidation),
@@ -143,6 +149,9 @@ namespace AMS2LeagueClient.Tests
                 ,("Fresh install enrolls anonymously before upload", FreshInstallEnrollsBeforeUpload)
                 ,("Two anonymous installs receive independent credentials", TwoAnonymousInstallsRemainIndependent)
                 ,("Anonymous enrollment status never claims upload is disabled", AnonymousEnrollmentStatusIsAccurate)
+                ,("JSON gzip capabilities are optional and route specific", JsonGzipCapabilities)
+                ,("JSON gzip preserves durable payloads identities and response handling", JsonGzipUploadContract)
+                ,("JSON gzip negotiation is shared transient and server bound", JsonGzipNegotiationLifecycle)
                 ,("Telemetry gzip HTTP contract is exact", TelemetryGzipHttpContractIsExact)
                 ,("Compact telemetry gzip HTTP contract is exact", CompactTelemetryGzipHttpContractIsExact)
                 ,("403 JSON HTML diagnostics quarantine without credentials or replay", ForbiddenUploadDiagnostics)

@@ -39,6 +39,7 @@
                     <TextBlock Text="{Binding WindowText}" Foreground="#DDE6F0" Style="{DynamicResource HudNumericText}" FontSize="14" Margin="0,4" />
                     <TextBlock Text="{Binding ServerText}" Foreground="#DDE6F0" Style="{DynamicResource HudNumericText}" FontSize="14" Margin="0,4" />
                     <TextBlock Text="{Binding UpdateText}" Foreground="#82F1D0" FontSize="14" Margin="0,4" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding VrText}" Foreground="#82F1D0" FontSize="12" Margin="0,4" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding AccountText}" Foreground="#DDE6F0" Style="{DynamicResource HudNumericText}" FontSize="14" Margin="0,4" />
                 </StackPanel>
             </Border>
