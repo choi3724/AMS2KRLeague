@@ -9,7 +9,7 @@ namespace AMS2LeagueClient.Presentation
 {
     public sealed class DrivingHudSettingsWindow : Window
     {
-        private readonly Button[] _colors = new Button[4];
+        private readonly Button[] _colors = new Button[6];
         private readonly ComboBox _speedFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
         private readonly ComboBox _gearFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
         public DrivingHudSettings Settings { get; private set; }
@@ -17,7 +17,7 @@ namespace AMS2LeagueClient.Presentation
         public DrivingHudSettingsWindow(DrivingHudSettings current)
         {
             Settings = current.Normalize();
-            Title = "텔레메트리 색상·계기판 글꼴";
+            Title = "텔레메트리 색상·계기판 글꼴·그림자";
             FontFamily = DrivingNumberView.ResolveFont(DrivingHudSettings.DefaultFontName);
             Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/AMS2LeagueClient;component/Assets/AppIcon.ico"));
             Width = 500; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
@@ -40,6 +40,15 @@ namespace AMS2LeagueClient.Presentation
             _speedFont.SelectedItem = fonts.Contains(Settings.SpeedFont) ? Settings.SpeedFont : DrivingHudSettings.DefaultFontName;
             _gearFont.SelectedItem = fonts.Contains(Settings.GearFont) ? Settings.GearFont : DrivingHudSettings.DefaultFontName;
             panel.Children.Add(Row("속도계", _speedFont)); panel.Children.Add(Row("기어", _gearFont));
+            panel.Children.Add(new TextBlock { Text = "글자 그림자 색상", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
+            for (int i = 4; i < 6; i++)
+            {
+                var button = new Button { MinWidth = 240, Height = 30 };
+                SetColor(button, i == 4 ? Settings.SpeedShadowColor : Settings.GearShadowColor);
+                _colors[i] = button;
+                button.Click += (sender, args) => PickColor((Button)sender);
+                panel.Children.Add(Row(i == 4 ? "속도계 그림자" : "기어 그림자", button));
+            }
             panel.Children.Add(new TextBlock { Text = "위치·크기는 메인 창의 레이아웃 편집에서 조절합니다.",
                 FontSize = 12, Foreground = Brushes.LightGray, Margin = new Thickness(0, 14, 0, 14) });
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -48,6 +57,7 @@ namespace AMS2LeagueClient.Presentation
             {
                 Settings = new DrivingHudSettings { BrakeColor = (string)_colors[0].Tag, ThrottleColor = (string)_colors[1].Tag,
                     ClutchColor = (string)_colors[2].Tag, HandBrakeColor = (string)_colors[3].Tag,
+                    SpeedShadowColor = (string)_colors[4].Tag, GearShadowColor = (string)_colors[5].Tag,
                     SpeedFont = _speedFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName, GearFont = _gearFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName };
                 DialogResult = true;
             };

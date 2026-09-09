@@ -132,10 +132,11 @@ namespace AMS2LeagueClient.Tests
                 ("Timing tower removes redundant headers", TimingTowerRemovesRedundantHeaders),
                 ("Overlay edit mode restores click-through", OverlayEditModeRestoresClickThrough),
                 ("Multiplayer menu shows waiting overlay", MultiplayerMenuShowsWaitingOverlay),
-                ("Multiplayer qualify-end transition shows waiting", MultiplayerQualifyEndShowsWaitingOverlay),
+                ("Missing qualifying timer cannot override gameplay state", QualifyingWithoutTimerRemainsGameplay),
                 ("Waiting overlay includes single but excludes replay", WaitingOverlayIncludesSingleExcludesReplay),
                 ("Automatic mode display and session labels follow observed sources", WaitingModeAndSessionLabels),
                 ("Waiting overlay returns to gameplay", WaitingOverlayReturnsToGameplay),
+                ("All driving modes remain visible without timer", AllDrivingModesRemainVisibleWithoutTimer),
                 ("Remaining timer fallback is bounded to generation", RemainingTimerFallbackBounded),
                 ("Waiting timer never fabricates countdown", WaitingTimerDoesNotFabricateCountdown),
                 ("Session card uses observed terminal status", SessionCardUsesObservedTerminalStatus)
@@ -1602,7 +1603,7 @@ namespace AMS2LeagueClient.Tests
             AssertEqual("3:31", decision.Waiting?.RemainingValue);
         }
 
-        private static void MultiplayerQualifyEndShowsWaitingOverlay()
+        private static void QualifyingWithoutTimerRemainsGameplay()
         {
             var fixture = new RawFixtureBuilder(4)
                 .SetGameState(GameState.InGamePlaying)
@@ -1611,9 +1612,10 @@ namespace AMS2LeagueClient.Tests
                 .SetSessionTiming(15, 0, -1);
             MultiplayerOverlayDecision decision = new MultiplayerWaitingOverlayController().Observe(Parse(fixture), 0, FixedTime());
 
-            AssertEqual(MultiplayerOverlayMode.Waiting, decision.Mode);
-            AssertEqual("SESSION_TRANSITION", decision.Reason);
-            AssertEqual("세션 종료 대기", decision.Waiting?.RemainingValue);
+            AssertEqual(MultiplayerOverlayMode.Gameplay, decision.Mode);
+            AssertEqual("GAMEPLAY", decision.Reason);
+            AssertNull(decision.Waiting);
+            AssertEqual("—", decision.RemainingDisplayTextOverride);
         }
 
         private static void WaitingOverlayIncludesSingleExcludesReplay()
@@ -1742,7 +1744,7 @@ namespace AMS2LeagueClient.Tests
 
             MultiplayerOverlayDecision expired = controller.Observe(transient, 4, t.AddSeconds(3.1));
             AssertNull(expired.EffectiveRemainingSeconds);
-            AssertEqual("종료 처리 중", expired.RemainingDisplayTextOverride);
+            AssertEqual("—", expired.RemainingDisplayTextOverride);
             controller.Observe(valid, 4, t.AddSeconds(4));
             MultiplayerOverlayDecision nextGeneration = controller.Observe(transient, 5, t.AddSeconds(5));
             AssertNull(nextGeneration.EffectiveRemainingSeconds);
@@ -1757,8 +1759,9 @@ namespace AMS2LeagueClient.Tests
             var controller = new MultiplayerWaitingOverlayController();
 
             MultiplayerOverlayDecision unknown = controller.Observe(Parse(fixture), 0, FixedTime());
-            AssertEqual("상태", unknown.Waiting?.RemainingLabel);
-            AssertEqual("세션 종료 대기", unknown.Waiting?.RemainingValue);
+            AssertEqual(MultiplayerOverlayMode.Gameplay, unknown.Mode);
+            AssertNull(unknown.Waiting);
+            AssertEqual("—", unknown.RemainingDisplayTextOverride);
             AssertNull(unknown.EffectiveRemainingSeconds);
         }
 

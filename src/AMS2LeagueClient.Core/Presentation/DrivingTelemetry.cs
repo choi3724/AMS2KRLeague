@@ -15,6 +15,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public string HandBrakeColor { get; set; } = "#BE60FF";
         public string SpeedFont { get; set; } = DefaultFontName;
         public string GearFont { get; set; } = DefaultFontName;
+        public string SpeedShadowColor { get; set; } = "#000000";
+        public string GearShadowColor { get; set; } = "#000000";
 
         public DrivingHudSettings Normalize() => new DrivingHudSettings
         {
@@ -22,7 +24,9 @@ namespace AMS2LeagueClient.Core.Presentation
             ThrottleColor = Color(ThrottleColor, "#20E050"),
             ClutchColor = Color(ClutchColor, "#3399FF"),
             HandBrakeColor = Color(HandBrakeColor, "#BE60FF"),
-            SpeedFont = Font(SpeedFont), GearFont = Font(GearFont)
+            SpeedFont = Font(SpeedFont), GearFont = Font(GearFont),
+            SpeedShadowColor = Color(SpeedShadowColor, "#000000"),
+            GearShadowColor = Color(GearShadowColor, "#000000")
         };
 
         private static string Color(string value, string fallback)

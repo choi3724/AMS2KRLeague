@@ -144,7 +144,7 @@ namespace AMS2LeagueClient.Core.Presentation
             RaceControlUpdate? raceControl = null)
         {
             OverlayTextCatalog catalog = text ?? OverlayTextCatalog.Korean;
-            bool timed = snapshot.SessionDuration > 0 || (snapshot.LapsInEvent == 0 && snapshot.EventTimeRemaining >= 0);
+            bool timed = snapshot.SessionDuration > 0 || snapshot.LapsInEvent == 0;
             uint currentLap = ParseLap(timing.CurrentLapHeaderText);
             uint remainingLaps = snapshot.LapsInEvent > currentLap ? snapshot.LapsInEvent - currentLap : 0;
             return new OverlayShellViewModel

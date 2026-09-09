@@ -82,13 +82,9 @@ namespace AMS2LeagueClient.Core.Presentation
                 .ToArray();
             bool remainingValid = IsFiniteNonNegative(snapshot.EventTimeRemaining);
             bool waitingGameState = snapshot.KnownGameState == GameState.InGameMenuTimeTicking;
-            bool notStarted = snapshot.RaceStateRaw == (uint)RaceState.NotStarted
-                || ViewedParticipantIsNotStarted(snapshot);
-            bool endTransition = snapshot.KnownGameState == GameState.InGamePlaying
-                && !remainingValid
-                && notStarted;
-
-            if (active.Length > 0 && (waitingGameState || endTransition))
+            // An absent timer/NotStarted also occurs during unlimited driving.
+            // Only the game's menu state selects the waiting surface.
+            if (active.Length > 0 && waitingGameState)
             {
                 int leagueCount = active.Count(_roles.IsLeagueDriver);
                 string sessionLabel = snapshot.KnownSessionState switch
@@ -101,7 +97,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 };
                 return new MultiplayerOverlayDecision(
                     MultiplayerOverlayMode.Waiting,
-                    waitingGameState ? "SESSION_MENU_WAITING" : "SESSION_TRANSITION",
+                    "SESSION_MENU_WAITING",
                     new MultiplayerWaitingOverlayViewModel
                     {
                         // SHM v14 has no authoritative online flag. AI count and privacy are not mode evidence.
@@ -149,7 +145,7 @@ namespace AMS2LeagueClient.Core.Presentation
                     ? null
                     : HasTerminalRaceState(snapshot)
                         ? "세션 종료"
-                        : "종료 처리 중");
+                        : "—");
         }
 
         public void Reset()
@@ -157,15 +153,6 @@ namespace AMS2LeagueClient.Core.Presentation
             _remainingGeneration = int.MinValue;
             _lastValidRemaining = null;
             _lastValidRemainingAt = default;
-        }
-
-        private static bool ViewedParticipantIsNotStarted(TelemetrySnapshot snapshot)
-        {
-            int index = snapshot.ViewedParticipantIndex;
-            return index >= 0
-                && index < snapshot.Participants.Count
-                && snapshot.Participants[index].IsActive
-                && snapshot.Participants[index].KnownRaceState == RaceState.NotStarted;
         }
 
         private static bool HasTerminalRaceState(TelemetrySnapshot snapshot)

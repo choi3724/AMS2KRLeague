@@ -141,6 +141,8 @@ namespace AMS2LeagueClient.Overlay
             _pedalView.ApplySettings(settings);
             _speedView.ApplyFont(settings.SpeedFont);
             _gearView.ApplyFont(settings.GearFont);
+            _speedView.ApplyShadow(settings.SpeedShadowColor);
+            _gearView.ApplyShadow(settings.GearShadowColor);
         }
 
         public void UpdateDrivingTelemetry(TelemetrySnapshot snapshot, int localIndex, int generation)

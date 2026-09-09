@@ -159,9 +159,11 @@ namespace AMS2LeagueClient.Tests
             AssertEqual(DrivingTelemetryHistory.MaximumSamples, history.Count);
             history.Add(null); AssertEqual(0, history.Count); AssertTrue(history.Current == null);
             Console.WriteLine("PROOF driving-history 10000 samples, 20Hz window=201, hardLimit=256, elapsedMs=" + watch.ElapsedMilliseconds);
-            var bad = new DrivingHudSettings { BrakeColor = "#xyzxyz", ClutchColor = "#123abc", SpeedFont = "https://remote/font", GearFont = "" }.Normalize();
+            var bad = new DrivingHudSettings { BrakeColor = "#xyzxyz", ClutchColor = "#123abc", SpeedFont = "https://remote/font", GearFont = "", SpeedShadowColor = "invalid", GearShadowColor = "#aabbcc" }.Normalize();
             AssertEqual("#FF3030", bad.BrakeColor); AssertEqual("#123ABC", bad.ClutchColor);
             AssertEqual("Pretendard", bad.SpeedFont); AssertEqual("Pretendard", bad.GearFont);
+            AssertEqual("#000000", bad.SpeedShadowColor); AssertEqual("#AABBCC", bad.GearShadowColor);
+            AssertEqual("#000000", JsonSerializer.Deserialize<DrivingHudSettings>("{}")!.Normalize().GearShadowColor);
         }
 
         private static void DrivingHudRenderingAndSettings()
@@ -217,10 +219,21 @@ namespace AMS2LeagueClient.Tests
                     CaptureLayout((FrameworkElement)panel.Content, "driving-live-" + panel.Title);
                 }
                 var settings = new DrivingHudSettings { BrakeColor = "#FFAA00", ThrottleColor = "#00CCFF",
-                    ClutchColor = "#FFFFFF", HandBrakeColor = "#FF55AA", SpeedFont = "Consolas", GearFont = "Arial" };
+                    ClutchColor = "#FFFFFF", HandBrakeColor = "#FF55AA", SpeedFont = "Consolas", GearFont = "Arial",
+                    SpeedShadowColor = "#00AAFF", GearShadowColor = "#FF0066" };
                 window.SaveDrivingHudSettings(settings); PumpDispatcher();
                 AssertEqual("Consolas", speedView.ValueText.FontFamily.Source);
                 AssertEqual("Arial", gearView.ValueText.FontFamily.Source);
+                foreach (var pair in new[] { (speedView, "#00AAFF"), (gearView, "#FF0066") })
+                {
+                    foreach (TextBlock text in Descendants<TextBlock>(pair.Item1))
+                    {
+                        var shadow = text.Effect as System.Windows.Media.Effects.DropShadowEffect;
+                        AssertNotNull(shadow);
+                        AssertEqual((Color)ColorConverter.ConvertFromString(pair.Item2), shadow!.Color);
+                        AssertTrue(shadow.IsFrozen && shadow.BlurRadius > 0 && shadow.Opacity > 0);
+                    }
+                }
                 foreach (Window panel in new[] { pedals, speed, gear }) CaptureLayout((FrameworkElement)panel.Content, "driving-custom-" + panel.Title);
                 foreach (TextBlock text in new[] { speedView.ValueText, gearView.ValueText })
                 {
@@ -238,17 +251,21 @@ namespace AMS2LeagueClient.Tests
                 window = new OverlayWindow(false, path);
                 AssertEqual("#FFAA00", window.GetDrivingHudSettings().BrakeColor);
                 AssertEqual("Consolas", window.GetDrivingHudSettings().SpeedFont);
+                AssertEqual("#00AAFF", window.GetDrivingHudSettings().SpeedShadowColor);
+                AssertEqual("#FF0066", window.GetDrivingHudSettings().GearShadowColor);
                 AssertFalse(window.IsComponentEnabled(OverlayComponentKeys.Speed));
                 window.ResetLayout();
                 AssertEqual("Consolas", window.GetDrivingHudSettings().SpeedFont);
                 AssertEqual("#FFAA00", window.GetDrivingHudSettings().BrakeColor);
 
+                AssertEqual("#00AAFF", window.GetDrivingHudSettings().SpeedShadowColor);
+                AssertEqual("#FF0066", window.GetDrivingHudSettings().GearShadowColor);
                 var dialog = new DrivingHudSettingsWindow(settings);
                 dialog.ShowActivated = false; dialog.Left = -5000; dialog.Top = -5000;
                 dialog.WindowStartupLocation = WindowStartupLocation.Manual;
                 dialog.Show(); PumpDispatcher();
                 AssertEqual(2, Descendants<ComboBox>(dialog).Count());
-                AssertEqual(4, Descendants<Button>(dialog).Count(button => button.Tag is string));
+                AssertEqual(6, Descendants<Button>(dialog).Count(button => button.Tag is string));
                 CaptureLayout((FrameworkElement)dialog.Content, "driving-settings-menu");
                 dialog.Close();
                 var status = new ClientStatusWindow(new ClientStatusViewModel()) { Width = 860, Height = 820 };

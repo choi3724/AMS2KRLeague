@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using AMS2LeagueClient.Core.Presentation;
 
 namespace AMS2LeagueClient.Presentation
@@ -162,6 +163,7 @@ namespace AMS2LeagueClient.Presentation
     public sealed class DrivingNumberView : UserControl
     {
         private readonly bool _gear;
+        private readonly TextBlock? _title;
         public TextBlock ValueText { get; }
         public DrivingNumberView(bool gear)
         {
@@ -174,20 +176,35 @@ namespace AMS2LeagueClient.Presentation
             {
                 grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(22) });
                 grid.RowDefinitions.Add(new RowDefinition());
-                grid.Children.Add(new TextBlock { Text = "기어", Foreground = Brushes.White, FontSize = 14,
-                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+                _title = new TextBlock { Text = "기어", Foreground = Brushes.White, FontSize = 14,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                grid.Children.Add(_title);
             }
-            var box = new Viewbox { Stretch = Stretch.Uniform, Child = ValueText, Margin = new Thickness(4) };
+            var box = new Viewbox { Stretch = Stretch.Uniform,
+                Child = new Border { Padding = new Thickness(6), Child = ValueText }, Margin = new Thickness(4) };
             if (gear) Grid.SetRow(box, 1);
             grid.Children.Add(box);
             Content = new Border { BorderBrush = Brushes.White, BorderThickness = new Thickness(gear ? 2 : 0), Child = grid };
             AutomationProperties.SetName(this, gear ? "기어" : "속도");
+            ApplyShadow("#000000");
         }
 
         public void SetSample(DrivingTelemetrySample? sample)
             => ValueText.Text = _gear ? sample?.GearText ?? "—" : sample?.SpeedText ?? "— km/h";
 
         public void ApplyFont(string name) => ValueText.FontFamily = ResolveFont(name);
+
+        public void ApplyShadow(string color)
+        {
+            var shadow = new DropShadowEffect
+            {
+                Color = (Color)ColorConverter.ConvertFromString(color),
+                BlurRadius = 6, ShadowDepth = 2, Direction = 315, Opacity = 1
+            };
+            shadow.Freeze();
+            ValueText.Effect = shadow;
+            if (_title != null) _title.Effect = shadow;
+        }
 
         internal static FontFamily ResolveFont(string name)
         {
