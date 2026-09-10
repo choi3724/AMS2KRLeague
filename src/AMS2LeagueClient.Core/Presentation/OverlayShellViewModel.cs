@@ -39,9 +39,11 @@ namespace AMS2LeagueClient.Core.Presentation
                 IsVisible = true,
                 Title = item.Title,
                 PrimaryText = item.PrimaryText,
-                SecondaryText = item.Type == OverlayEventType.Battle && timing != null
+                SecondaryText = item.Type == OverlayEventType.Battle && timing != null && item.Driver == timing.AheadName
                     ? timing.AheadGap + " · " + timing.AheadDistance
-                    : item.SecondaryText,
+                    : item.Type == OverlayEventType.BattleBehind && timing != null && item.Driver == timing.BehindName
+                        ? timing.BehindGap + " · " + timing.BehindDistance
+                        : item.SecondaryText,
                 Accent = down || item.Type == OverlayEventType.InvalidLap ? "#FF7777" : critical ? "#FFD166" : "#82F1D0",
                 Arrow = item.Type == OverlayEventType.PositionGained ? "▲" : down ? "▼" : string.Empty,
                 FlashOnEntry = item.Type == OverlayEventType.RaceFastestLap || item.Type == OverlayEventType.LeaderChange,

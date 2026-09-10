@@ -20,7 +20,8 @@ namespace AMS2LeagueClient.Core.Events
         OpeningStart,
         LeaderChange,
         PodiumEntry,
-        PodiumExit
+        PodiumExit,
+        BattleBehind
     }
 
     public enum OverlayEventPriority

@@ -134,6 +134,27 @@ namespace AMS2LeagueClient.Core.CompactTelemetry
             return schema;
         }
 
+        // V1 is immutable. Only distance-overflow chunks use the additive V2 schemas.
+        internal static CompactTelemetrySchemaId SelectForWrite(
+            CompactTelemetrySchemaId id, IReadOnlyList<CompactTelemetrySample> samples)
+        {
+            CompactTelemetrySchemaId extended = (CompactTelemetrySchemaId)((ushort)id + 0x0100);
+            if (!Registry.ContainsKey(extended)) return id;
+            foreach (CompactTelemetryField field in Get(id).Fields)
+            {
+                if (field.Name != "trackLengthMeters" && field.Name != "lapDistanceMeters") continue;
+                foreach (CompactTelemetrySample sample in samples)
+                {
+                    if (sample.Values.Count != Get(id).Fields.Count)
+                        throw new CompactTelemetryFormatException("Sample field count does not match schema.");
+                    double? value = sample.Values[field.Ordinal];
+                    if (value.HasValue && Math.Round((value.Value - field.Offset) / field.Scale,
+                        MidpointRounding.AwayFromZero) > field.QuantizedMaximum) return extended;
+                }
+            }
+            return id;
+        }
+
         private static IReadOnlyDictionary<CompactTelemetrySchemaId, CompactTelemetrySchema> BuildRegistry()
         {
             var schemas = new Dictionary<CompactTelemetrySchemaId, CompactTelemetrySchema>
@@ -215,6 +236,21 @@ namespace AMS2LeagueClient.Core.CompactTelemetry
                     Field(3, "completenessCode", CompactFieldEncoding.RleUnsigned, 1.0, 0, 255))
             };
 
+            foreach (CompactTelemetrySchemaId id in new[] {
+                CompactTelemetrySchemaId.SessionStaticV1, CompactTelemetrySchemaId.RaceEventV1,
+                CompactTelemetrySchemaId.ParticipantReplayV1, CompactTelemetrySchemaId.TrackGeometryV1,
+                CompactTelemetrySchemaId.DriverFastV1, CompactTelemetrySchemaId.IncidentV1 })
+            {
+                CompactTelemetrySchema source = schemas[id];
+                var fields = new List<CompactTelemetryField>(source.Fields);
+                string distance = id == CompactTelemetrySchemaId.SessionStaticV1
+                    ? "trackLengthMeters" : "lapDistanceMeters";
+                double scale = id == CompactTelemetrySchemaId.ParticipantReplayV1 ? 0.1 : 0.01;
+                Rescale(fields, distance, scale, 0, (long)(100_000 / scale));
+                var extended = (CompactTelemetrySchemaId)((ushort)id + 0x0100);
+                schemas.Add(extended, new CompactTelemetrySchema(
+                    extended, source.Name.Replace("_V1", "_V2"), fields.ToArray()));
+            }
             return new ReadOnlyDictionary<CompactTelemetrySchemaId, CompactTelemetrySchema>(schemas);
         }
 

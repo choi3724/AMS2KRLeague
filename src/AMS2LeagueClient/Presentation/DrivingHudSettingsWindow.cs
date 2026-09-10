@@ -10,6 +10,7 @@ namespace AMS2LeagueClient.Presentation
     public sealed class DrivingHudSettingsWindow : Window
     {
         private readonly Button[] _colors = new Button[6];
+        private readonly Slider _steeringRange = new Slider { Minimum = 180, Maximum = 1440, TickFrequency = 90, IsSnapToTickEnabled = true, Width = 200 };
         private readonly ComboBox _speedFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
         private readonly ComboBox _gearFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
         public DrivingHudSettings Settings { get; private set; }
@@ -17,10 +18,10 @@ namespace AMS2LeagueClient.Presentation
         public DrivingHudSettingsWindow(DrivingHudSettings current)
         {
             Settings = current.Normalize();
-            Title = "텔레메트리 색상·계기판 글꼴·그림자";
+            Title = "색상·글꼴·핸들 설정";
             FontFamily = DrivingNumberView.ResolveFont(DrivingHudSettings.DefaultFontName);
             Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/AMS2LeagueClient;component/Assets/AppIcon.ico"));
-            Width = 500; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
+            Width = 520; MaxHeight = SystemParameters.WorkArea.Height; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = new SolidColorBrush(Color.FromRgb(15, 26, 39)); Foreground = Brushes.White;
             var panel = new StackPanel();
@@ -34,6 +35,14 @@ namespace AMS2LeagueClient.Presentation
                 button.Click += (sender, args) => PickColor((Button)sender);
                 panel.Children.Add(Row(labels[i], button));
             }
+            _steeringRange.Value = Settings.SteeringRangeDegrees;
+            var rangeValue = new TextBlock { Text = Settings.SteeringRangeDegrees.ToString("0") + "°", VerticalAlignment = VerticalAlignment.Center };
+            _steeringRange.ValueChanged += (_, __) => rangeValue.Text = _steeringRange.Value.ToString("0") + "°";
+            var rangePanel = new StackPanel { Orientation = Orientation.Horizontal };
+            rangePanel.Children.Add(_steeringRange); rangePanel.Children.Add(rangeValue);
+            panel.Children.Add(Row("핸들 전체 회전각", rangePanel));
+            panel.Children.Add(new TextBlock { Text = "게임에서 사용하는 좌우 전체 회전 범위에 맞춰 주세요.",
+                FontSize = 11, Foreground = Brushes.LightGray, TextWrapping = TextWrapping.Wrap });
             panel.Children.Add(new TextBlock { Text = "숫자 글꼴", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
             string[] fonts = Fonts.SystemFontFamilies.Select(font => font.Source).Concat(new[] { DrivingHudSettings.DefaultFontName }).Distinct().OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase).ToArray();
             _speedFont.ItemsSource = fonts; _gearFont.ItemsSource = fonts;
@@ -55,7 +64,7 @@ namespace AMS2LeagueClient.Presentation
             var save = new Button { Content = "저장", IsDefault = true, Width = 90, Height = 32, Margin = new Thickness(5) };
             save.Click += (sender, args) =>
             {
-                Settings = new DrivingHudSettings { BrakeColor = (string)_colors[0].Tag, ThrottleColor = (string)_colors[1].Tag,
+                Settings = new DrivingHudSettings { TowerDesign = Settings.TowerDesign, TelemetryDesign = Settings.TelemetryDesign, SteeringRangeDegrees = _steeringRange.Value, BrakeColor = (string)_colors[0].Tag, ThrottleColor = (string)_colors[1].Tag,
                     ClutchColor = (string)_colors[2].Tag, HandBrakeColor = (string)_colors[3].Tag,
                     SpeedShadowColor = (string)_colors[4].Tag, GearShadowColor = (string)_colors[5].Tag,
                     SpeedFont = _speedFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName, GearFont = _gearFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName };
@@ -64,7 +73,7 @@ namespace AMS2LeagueClient.Presentation
             buttons.Children.Add(save);
             buttons.Children.Add(new Button { Content = "취소", IsCancel = true, Width = 90, Height = 32, Margin = new Thickness(5) });
             panel.Children.Add(buttons);
-            Content = new Border { Padding = new Thickness(24), Background = Background, Child = panel };
+            Content = new Border { Padding = new Thickness(24), Background = Background, Child = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
         }
 
         private static Grid Row(string label, FrameworkElement control)

@@ -7,7 +7,12 @@
              SnapsToDevicePixels="True"
              UseLayoutRounding="True"
              IsHitTestVisible="False">
-    <Border CornerRadius="8" Background="{StaticResource MainPanelBackgroundBrush}" BorderBrush="#8A4DE3B1" BorderThickness="1" Padding="8,7">
+    <UserControl.Resources>
+        <ImageBrush x:Key="TowerMaterial" TileMode="FlipXY" Viewport="0,0,160,160" ViewportUnits="Absolute" Opacity="0.8">
+            <ImageBrush.ImageSource><BitmapImage UriSource="/AMS2LeagueClient;component/Assets/Hud/tower-material.png" DecodePixelWidth="512" CacheOption="OnLoad"/></ImageBrush.ImageSource>
+        </ImageBrush>
+        <ControlTemplate x:Key="LegacyTowerTemplate" TargetType="ContentControl">
+<Border CornerRadius="8" Background="{StaticResource MainPanelBackgroundBrush}" BorderBrush="#8A4DE3B1" BorderThickness="1" Padding="8,7">
         <StackPanel>
             <TextBlock Text="페널티" Height="22" Width="114" HorizontalAlignment="Right" TextAlignment="Center" Foreground="#FFD166" FontSize="14.5" FontWeight="SemiBold" />
             <!-- ClipToBounds keeps the broadcast-style row slide-in inside the tower panel. -->
@@ -35,10 +40,10 @@
                                     </TextBlock>
                                     <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{Binding Foreground}" FontWeight="SemiBold" FontSize="{x:Static core:OverlayUiMetrics.FontDriverName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0,7,0" />
                                     <Border Grid.Column="2" Background="{Binding ClassBackground}" CornerRadius="3" Padding="4,1" Margin="4,4,5,4" HorizontalAlignment="Right" VerticalAlignment="Stretch" MinWidth="55" MaxWidth="95">
-                                        <TextBlock Text="{Binding Class}" Foreground="{Binding ClassForeground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontClass}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" />
+                                        <TextBlock Text="{Binding Class}" Foreground="{Binding ClassForeground}" FontWeight="Bold" FontSize="17" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" />
                                     </Border>
                                     <Viewbox Grid.Column="3" Stretch="Uniform" StretchDirection="DownOnly" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                        <TextBlock Foreground="{Binding TimeForeground}" FontWeight="Bold" TextAlignment="Right">
+                                        <TextBlock Foreground="{Binding LegacyTimeForeground}" FontWeight="Bold" TextAlignment="Right">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}">
                                                     <Setter Property="Text" Value="{Binding CurrentTime}"/>
@@ -82,4 +87,108 @@
             </Border>
         </StackPanel>
     </Border>
+        </ControlTemplate>
+        <ControlTemplate x:Key="RacingTowerTemplate" TargetType="ContentControl">
+<Border CornerRadius="5" Background="{StaticResource TowerMaterial}" BorderBrush="#788B9A9F" BorderThickness="1" Padding="4,7">
+        <StackPanel>
+            <Grid Height="22" Background="#C415232D">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/><ColumnDefinition Width="58"/><ColumnDefinition Width="64"/>
+                    <ColumnDefinition Width="108"/><ColumnDefinition Width="94"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" Margin="6,0">
+                    <TextBlock Text="남은 시간  " Foreground="#BDC9CF" FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding RemainingTimeText}" Foreground="White" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="클래스" Foreground="#DEE7EB" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="최고 랩" Foreground="#DEE7EB" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="상태" Foreground="#DEE7EB" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="페널티" Foreground="#FFD166" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
+            </Grid>
+            <!-- ClipToBounds keeps the broadcast-style row slide-in inside the tower panel. -->
+            <ItemsControl x:Name="RankingItems" ClipToBounds="True">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Height="36" Margin="0,1" Background="Transparent" BorderBrush="#55596B77" BorderThickness="0,0,0,1" Padding="7,0" ClipToBounds="True" Loaded="RankingRow_Loaded">
+                            <Grid>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/><ColumnDefinition Width="64"/><ColumnDefinition Width="108"/><ColumnDefinition Width="94"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Background="#EF05090D"/>
+                                    <Border Grid.Column="1" Grid.ColumnSpan="3" Background="#6D293A46"/>
+                                </Grid>
+                                <Border Background="{Binding RacingBackground}"/>
+                                <!-- Broadcast flash layer: position gain/loss and fastest-lap sweeps.
+                                     Only this layer animates its opacity; the row itself never dims. -->
+                                <Border x:Name="FlashLayer" Margin="-7,0" Opacity="0" IsHitTestVisible="False" Background="#82F1D0" RenderTransformOrigin="0,0.5">
+                                    <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></Border.RenderTransform>
+                                </Border>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="30"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="58"/>
+                                        <ColumnDefinition Width="64"/>
+                                        <ColumnDefinition Width="108"/>
+                                        <ColumnDefinition Width="94"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="PositionText" Text="{Binding PositionLabel}" Foreground="{Binding Foreground}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontBody}" Style="{StaticResource HudNumericText}" VerticalAlignment="Center">
+                                        <TextBlock.RenderTransform><TranslateTransform /></TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <Border Grid.Column="1" Width="5" Margin="1,7,0,7" HorizontalAlignment="Left" Background="{Binding ClassBackground}">
+                                        <Border.RenderTransform><SkewTransform AngleX="-12"/></Border.RenderTransform>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{Binding Foreground}" FontWeight="SemiBold" FontSize="21" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="13,0,7,0" />
+                                    <Border Grid.Column="2" Background="#DBF3F4F5" CornerRadius="1" Padding="4,1" Margin="3,7,6,7" HorizontalAlignment="Right" VerticalAlignment="Stretch" MinWidth="39" MaxWidth="52">
+                                        <TextBlock Text="{Binding Class}" Foreground="#111820" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <Viewbox Grid.Column="4" Stretch="Uniform" StretchDirection="DownOnly" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                        <TextBlock Foreground="{Binding TimeForeground}" FontWeight="Bold" TextAlignment="Right">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}">
+                                                    <Setter Property="Text" Value="{Binding CurrentTime}"/>
+                                                    <Setter Property="FontSize" Value="{x:Static core:OverlayUiMetrics.FontTiming}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding CurrentTime}" Value="랩 타임 주행 중">
+                                                            <Setter Property="Text" Value="랩 타임&#x0a;주행 중"/>
+                                                            <Setter Property="FontSize" Value="{x:Static core:OverlayUiMetrics.FontSmall}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Viewbox>
+                                    <TextBlock x:Name="StatusText" Grid.Column="3" Text="{Binding StatusLabel}" Foreground="{Binding StatusColor}" FontWeight="Bold" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Center" RenderTransformOrigin="1,0.5">
+                                        <TextBlock.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <Border Grid.Column="5" BorderBrush="#555D6A76" BorderThickness="1,0,0,0" Margin="4,4,0,4" Padding="4,0,0,0">
+                                        <TextBlock x:Name="PenaltyText" Text="{Binding PenaltyText}" Foreground="#FFD166" FontWeight="SemiBold" FontSize="14.5" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Visibility="{Binding IsDiagnostic, Converter={StaticResource BooleanToVisibilityConverter}}" Background="{StaticResource MainPanelBackgroundBrush}" BorderBrush="#33445A70" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,7,0,0">
+                <StackPanel>
+
+                    <TextBlock Text="{Binding DiagnosticLabel}" Foreground="#B68CFF" FontWeight="SemiBold" FontSize="{x:Static core:OverlayUiMetrics.FontSmall}"/>
+                    <TextBlock Text="{Binding ParticipantCount, StringFormat=원본 참가자: {0}}" Foreground="#DDE7F1" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}"/>
+                    <TextBlock Text="{Binding LeagueParticipantCount, StringFormat=리그 참가자: {0}}" Foreground="#DDE7F1" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}"/>
+                    <TextBlock Text="{Binding SafetyCarsExcluded, StringFormat=제외된 세이프티카: {0}}" Foreground="#FFD166" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}"/>
+                    <TextBlock Text="{Binding TrackLengthText, StringFormat=트랙 길이: {0}}" Foreground="#DDE7F1" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}"/>
+                    <TextBlock Text="{Binding EventTimeRemainingText, StringFormat=원본 남은 시간: {0}}" Foreground="#DDE7F1" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}"/>
+                    <TextBlock Text="{Binding CurrentEventText, StringFormat=이벤트: {0}}" Foreground="#B68CFF" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}"/>
+                    <TextBlock Text="{Binding DiagnosticParticipantText, StringFormat=참가자: {0}}" Foreground="#DDE7F1" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}"/>
+                    <TextBlock Text="{Binding DerivedRaceControlText, StringFormat=레이스 컨트롤: {0}}" Foreground="#82F1D0" FontSize="{x:Static core:OverlayUiMetrics.FontTiny}"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+        </ControlTemplate>
+    </UserControl.Resources>
+    <ContentControl x:Name="TowerContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Top"/>
 </UserControl>

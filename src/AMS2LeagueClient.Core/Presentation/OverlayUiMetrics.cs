@@ -46,10 +46,13 @@ namespace AMS2LeagueClient.Core.Presentation
         public const int EventWidth = 520;
         public const int EventHeight = 84;
         public const int PedalWidth = 560;
+        public const int PedalGaugeWidth = 160;
         public const int PedalHeight = 160;
         public const int SpeedWidth = 220;
         public const int SpeedHeight = 80;
         public const int GearSize = 100;
+        public const int DashboardWidth = 340;
+        public const int DashboardHeight = 120;
 
         public const double FontMicro = 10;
         public const double FontTiny = 11.5;
@@ -111,7 +114,7 @@ namespace AMS2LeagueClient.Core.Presentation
             OverlayBounds raceControl,
             OverlayBounds waiting,
             int bottomInset,
-            OverlayBounds pedals, OverlayBounds speed, OverlayBounds gear)
+            OverlayBounds pedals, OverlayBounds pedalGauge, OverlayBounds speed, OverlayBounds gear, OverlayBounds dashboard)
         {
             Timing = timing;
             Relative = relative;
@@ -121,7 +124,7 @@ namespace AMS2LeagueClient.Core.Presentation
             RaceControl = raceControl;
             Waiting = waiting;
             BottomInset = bottomInset;
-            Pedals = pedals; Speed = speed; Gear = gear;
+            Pedals = pedals; PedalGauge = pedalGauge; Speed = speed; Gear = gear; Dashboard = dashboard;
         }
 
         public OverlayBounds Timing { get; }
@@ -133,8 +136,10 @@ namespace AMS2LeagueClient.Core.Presentation
         public OverlayBounds Waiting { get; }
         public int BottomInset { get; }
         public OverlayBounds Pedals { get; }
+        public OverlayBounds PedalGauge { get; }
         public OverlayBounds Speed { get; }
         public OverlayBounds Gear { get; }
+        public OverlayBounds Dashboard { get; }
     }
 
     public static class OverlayComponentLayoutCalculator
@@ -175,6 +180,7 @@ namespace AMS2LeagueClient.Core.Presentation
 
             int pedalWidth = Math.Min(viewportWidth, Scale(OverlayUiMetrics.PedalWidth, dpiScale));
             int pedalHeight = Math.Min(viewportHeight, Scale(OverlayUiMetrics.PedalHeight, dpiScale));
+            int gaugeWidth = Math.Min(viewportWidth, Scale(OverlayUiMetrics.PedalGaugeWidth, dpiScale));
             int pedalTop = Math.Max(0, viewportHeight - bottomInset - pedalHeight);
             int speedWidth = Scale(OverlayUiMetrics.SpeedWidth, dpiScale);
             int speedHeight = Scale(OverlayUiMetrics.SpeedHeight, dpiScale);
@@ -190,8 +196,12 @@ namespace AMS2LeagueClient.Core.Presentation
                 new OverlayBounds(leftInset, topInset, Scale(OverlayUiMetrics.WaitingWidth, dpiScale), Scale(OverlayUiMetrics.WaitingHeight, dpiScale)),
                 bottomInset,
                 new OverlayBounds(Math.Max(0, viewportWidth - leftInset - pedalWidth), pedalTop, pedalWidth, pedalHeight),
+                new OverlayBounds(Math.Max(0, viewportWidth - leftInset - pedalWidth - componentGap - gaugeWidth), pedalTop, gaugeWidth, pedalHeight),
                 new OverlayBounds(Math.Max(0, viewportWidth - leftInset - speedWidth), Math.Max(0, pedalTop - componentGap - speedHeight), speedWidth, speedHeight),
-                new OverlayBounds(Math.Max(0, viewportWidth - leftInset - speedWidth - componentGap - gearSize), Math.Max(0, pedalTop - componentGap - gearSize), gearSize, gearSize));
+                new OverlayBounds(Math.Max(0, viewportWidth - leftInset - speedWidth - componentGap - gearSize), Math.Max(0, pedalTop - componentGap - gearSize), gearSize, gearSize),
+                new OverlayBounds(Math.Max(0, viewportWidth - leftInset - Scale(OverlayUiMetrics.DashboardWidth, dpiScale)),
+                    Math.Max(0, pedalTop - 2 * componentGap - gearSize - Scale(OverlayUiMetrics.DashboardHeight, dpiScale)),
+                    Scale(OverlayUiMetrics.DashboardWidth, dpiScale), Scale(OverlayUiMetrics.DashboardHeight, dpiScale)));
         }
 
         private static int Scale(int logicalPixels, double dpiScale)

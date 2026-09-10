@@ -1,9 +1,9 @@
 param(
     [string]$DotnetExecutable = 'dotnet',
     [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$')]
-    [string]$Version = '0.6.1',
+    [string]$Version = '0.7.0',
     [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$')]
-    [string]$DisplayVersion = '0.6.1',
+    [string]$DisplayVersion = '0.7.0',
     [string]$IsccExecutable = ''
 )
 
@@ -124,7 +124,7 @@ $manifest = [ordered]@{
     architecture = 'win-x64'
     selfContained = $true
     minimumOs = 'Windows 10'
-    serverApiCompatibility = '>=1.6.0/schema15 for compact telemetry; >=1.4.0 for legacy activity and distributed witness'
+    serverApiCompatibility = '>=1.6.0/schema15; long tracks require additive schemas 0x0101,0x0110,0x0120,0x0121,0x0130,0x0140; >=1.4.0 for legacy activity and distributed witness'
     assets = $manifestAssets
 }
 [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 5), $utf8NoBom)

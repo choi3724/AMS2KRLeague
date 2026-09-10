@@ -13,17 +13,26 @@ namespace AMS2LeagueClient.Presentation
 {
     public sealed class PedalTelemetryView : UserControl
     {
-        private readonly PedalGraph _graph = new PedalGraph();
-        public PedalTelemetryView()
+        private readonly PedalGraph _graph;
+        private readonly SteeringWheelView _wheel = new SteeringWheelView();
+        public PedalTelemetryView(bool gaugesOnly = false)
         {
+            _graph = new PedalGraph(gaugesOnly);
             FontFamily = DrivingNumberView.ResolveFont(DrivingHudSettings.DefaultFontName);
             var grid = new Grid { Margin = new Thickness(10, 6, 10, 6) };
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(22) });
-            grid.RowDefinitions.Add(new RowDefinition());
-            grid.Children.Add(new TextBlock { Text = "텔레메트리", FontSize = 13, Foreground = Brushes.White });
-            Grid.SetRow(_graph, 1); grid.Children.Add(_graph);
-            Content = new Border { Background = new SolidColorBrush(Color.FromArgb(185, 10, 17, 28)), Child = grid };
-            AutomationProperties.SetName(this, "브레이크, 악셀, 클러치, 핸드브레이크 입력 그래프");
+            grid.Children.Add(_graph);
+            if (!gaugesOnly)
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(84) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition());
+                Grid.SetColumn(_graph, 1);
+                grid.Children.Add(_wheel);
+            }
+            var background = new SolidColorBrush(Color.FromArgb(245, 14, 20, 25));
+            background.Freeze();
+            Content = new Border { Background = background, BorderBrush = new SolidColorBrush(Color.FromArgb(45, 149, 172, 179)),
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(5), Child = grid };
+            AutomationProperties.SetName(this, gaugesOnly ? "악셀, 브레이크, 클러치, 핸드브레이크 페달 게이지" : "브레이크, 악셀, 클러치, 핸드브레이크 입력 그래프");
             ApplySettings(new DrivingHudSettings());
         }
 
@@ -36,11 +45,14 @@ namespace AMS2LeagueClient.Presentation
                 brush.Freeze(); _graph.Colors[i] = brush;
             }
             _graph.InvalidateVisual();
+            _wheel.RotationRange = settings.Normalize().SteeringRangeDegrees;
+            _wheel.InvalidateVisual();
         }
 
         public void SetHistory(DrivingTelemetryHistory history)
         {
             _graph.SetHistory(history);
+            _wheel.SetSample(history.Current);
         }
 
         private sealed class PedalGraph : FrameworkElement
@@ -48,11 +60,17 @@ namespace AMS2LeagueClient.Presentation
             private DrivingTelemetryHistory _history = new DrivingTelemetryHistory();
             private DrivingTelemetrySample? _current;
             private readonly Stopwatch _scrollClock = new Stopwatch();
-            private bool _rendering;
+            private readonly TranslateTransform _scroll = new TranslateTransform();
+            private int _renderCount;
+            private bool _curvesDirty = true;
+            private Size _curveSize;
+            private readonly StreamGeometry?[] _curves = new StreamGeometry?[5];
+            private readonly bool _gaugesOnly;
             private readonly Typeface _typeface = new Typeface(DrivingNumberView.ResolveFont(DrivingHudSettings.DefaultFontName),
                 FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
             public void SetHistory(DrivingTelemetryHistory history)
             {
+                if (!ReferenceEquals(_history, history) || !ReferenceEquals(_current, history.Current)) _curvesDirty = true;
                 _history = history;
                 if (!ReferenceEquals(_current, history.Current))
                 {
@@ -63,32 +81,24 @@ namespace AMS2LeagueClient.Presentation
                 InvalidateVisual();
             }
             public Brush[] Colors { get; } = { Brushes.Red, Brushes.Lime, Brushes.DodgerBlue, Brushes.MediumPurple };
-            public PedalGraph()
+            public PedalGraph(bool gaugesOnly)
             {
+                _gaugesOnly = gaugesOnly;
                 ClipToBounds = true;
-                SizeChanged += (s, e) => InvalidateVisual();
+                SizeChanged += (s, e) => { UpdateRendering(); InvalidateVisual(); };
                 IsVisibleChanged += (s, e) => UpdateRendering();
                 Loaded += (s, e) => UpdateRendering();
-                Unloaded += (s, e) => { CompositionTarget.Rendering -= OnFrame; _rendering = false; };
+                Unloaded += (s, e) => _scroll.BeginAnimation(TranslateTransform.XProperty, null);
             }
 
             private void UpdateRendering()
             {
-                bool needed = IsVisible && _current != null;
-                if (needed == _rendering) return;
-                _rendering = needed;
-                if (needed) CompositionTarget.Rendering += OnFrame;
-                else CompositionTarget.Rendering -= OnFrame;
-            }
-
-            private void OnFrame(object? sender, EventArgs args)
-            {
-                // Move observed points between 20 Hz samples; never invent pedal values.
-                if (_scrollClock.Elapsed.TotalSeconds <= 1) InvalidateVisual();
+                HudMotion.ScrollHistory(_scroll, Math.Max(1, ActualWidth), _scrollClock.Elapsed.TotalSeconds,
+                    !_gaugesOnly && IsLoaded && IsVisible && _current != null);
             }
 
             private static StreamGeometry CreateCurve(DrivingTelemetryHistory history, int channel,
-                DateTimeOffset rightEdge, double width, double height)
+                DateTimeOffset rightEdge, double width, double height, bool absOnly = false)
             {
                 var geometry = new StreamGeometry();
                 using (StreamGeometryContext context = geometry.Open())
@@ -96,13 +106,15 @@ namespace AMS2LeagueClient.Presentation
                     Point? previous = null;
                     DateTimeOffset previousTime = default;
                     double filtered = 0;
+                    bool drawing = false;
+                    Point curveEnd = default;
                     foreach (DrivingTelemetrySample sample in history.Samples)
                     {
                         double? value = sample.Pedals[channel];
                         if (!value.HasValue)
                         {
-                            if (previous.HasValue) context.LineTo(previous.Value, true, false);
-                            previous = null;
+                            if (drawing && previous.HasValue) context.LineTo(previous.Value, true, false);
+                            previous = null; drawing = false;
                             continue;
                         }
                         // Display-only 100 ms smoothing. Bars and recorded samples remain raw.
@@ -110,14 +122,28 @@ namespace AMS2LeagueClient.Presentation
                             ? filtered + (value.Value - filtered) * (1 - Math.Exp(-(sample.CapturedAt - previousTime).TotalSeconds / 0.1))
                             : value.Value;
                         var point = new Point(width * (1 - (rightEdge - sample.CapturedAt).TotalSeconds / DrivingTelemetryHistory.DurationSeconds),
-                            20 + (1 - filtered) * height);
-                        if (!previous.HasValue) context.BeginFigure(point, false, false);
-                        else context.QuadraticBezierTo(previous.Value,
-                            new Point((previous.Value.X + point.X) / 2, (previous.Value.Y + point.Y) / 2), true, false);
+                            4 + (1 - filtered) * height);
+                        bool include = !absOnly || sample.AbsActive;
+                        if (!previous.HasValue)
+                        {
+                            curveEnd = point;
+                            if (include) { context.BeginFigure(point, false, false); drawing = true; }
+                        }
+                        else
+                        {
+                            var end = new Point((previous.Value.X + point.X) / 2, (previous.Value.Y + point.Y) / 2);
+                            if (include)
+                            {
+                                if (!drawing) context.BeginFigure(curveEnd, false, false);
+                                context.QuadraticBezierTo(previous.Value, end, true, false);
+                            }
+                            drawing = include;
+                            curveEnd = end;
+                        }
                         previous = point;
                         previousTime = sample.CapturedAt;
                     }
-                    if (previous.HasValue) context.LineTo(previous.Value, true, false);
+                    if (drawing && previous.HasValue) context.LineTo(previous.Value, true, false);
                 }
                 geometry.Freeze();
                 return geometry;
@@ -126,36 +152,57 @@ namespace AMS2LeagueClient.Presentation
             protected override void OnRender(DrawingContext dc)
             {
                 base.OnRender(dc);
-                double plotWidth = Math.Max(1, ActualWidth - 160), plotHeight = Math.Max(1, ActualHeight - 42);
-                var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)), 1);
-                for (int row = 0; row < 3; row++)
-                    dc.DrawLine(gridPen, new Point(0, row * plotHeight / 2 + 20), new Point(plotWidth, row * plotHeight / 2 + 20));
+                _renderCount++;
+                double plotWidth = Math.Max(1, ActualWidth), plotHeight = Math.Max(1, ActualHeight - (_gaugesOnly ? 36 : 8));
+                var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)), 1);
+                for (int row = 0; !_gaugesOnly && row < 3; row++)
+                    dc.DrawLine(gridPen, new Point(0, row * plotHeight / 2 + 4), new Point(plotWidth, row * plotHeight / 2 + 4));
+                if (!_gaugesOnly)
+                    for (int column = 1; column < 8; column++)
+                        dc.DrawLine(gridPen, new Point(plotWidth * column / 8, 4), new Point(plotWidth * column / 8, 4 + plotHeight));
                 DrivingTelemetrySample? current = _history.Current;
-                DateTimeOffset rightEdge = (current?.CapturedAt ?? DateTimeOffset.MinValue).AddSeconds(Math.Min(1, _scrollClock.Elapsed.TotalSeconds));
+                if (!_gaugesOnly && current != null)
+                {
+                    if (_curvesDirty || _curveSize != RenderSize)
+                    {
+                        for (int i = 0; i < 4; i++) _curves[i] = CreateCurve(_history, i, current.CapturedAt, plotWidth, plotHeight);
+                        _curves[4] = CreateCurve(_history, 0, current.CapturedAt, plotWidth, plotHeight, absOnly: true);
+                        _curvesDirty = false; _curveSize = RenderSize;
+                    }
+                    // Reuse observed curves until the next sample; only their screen position changes each frame.
+                    dc.PushTransform(_scroll);
+                }
                 for (int channel = 0; channel < 4; channel++)
                 {
-                    if (current != null)
+                    if (!_gaugesOnly && current != null)
                     {
-                        StreamGeometry geometry = CreateCurve(_history, channel, rightEdge, plotWidth, plotHeight);
-                        dc.DrawGeometry(null, new Pen(Colors[channel], 2) {
+                        StreamGeometry? geometry = _curves[channel];
+                        dc.DrawGeometry(null, new Pen(Colors[channel], 3) {
                             StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round
                         }, geometry);
+                        if (channel == 0)
+                            dc.DrawGeometry(null, new Pen(Brushes.Gold, 3) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round },
+                                _curves[4]);
                     }
+                    if (!_gaugesOnly) continue;
                     // Input history remains B/A/C/H; display the bars in A/B/C/H order.
                     int column = channel < 2 ? 1 - channel : channel;
-                    double barX = plotWidth + 16 + column * 36;
-                    dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)), null, new Rect(barX, 20, 24, plotHeight));
+                    double columnWidth = ActualWidth / 4;
+                    double barWidth = Math.Max(1, columnWidth - 10);
+                    double barX = column * columnWidth + 5;
+                    dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)), null, new Rect(barX, 20, barWidth, plotHeight));
                     double? level = current?.Pedals[channel];
                     if (level.HasValue)
-                        dc.DrawRectangle(Colors[channel], null, new Rect(barX, 20 + plotHeight * (1 - level.Value), 24, plotHeight * level.Value));
+                        dc.DrawRectangle(Colors[channel], null, new Rect(barX, 20 + plotHeight * (1 - level.Value), barWidth, plotHeight * level.Value));
                     var text = new FormattedText(level.HasValue ? (level.Value * 100).ToString("0", CultureInfo.InvariantCulture) : "—",
                         CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, 12, Brushes.White,
                         VisualTreeHelper.GetDpi(this).PixelsPerDip);
-                    dc.DrawText(text, new Point(barX + (24 - text.Width) / 2, 0));
+                    dc.DrawText(text, new Point(barX + (barWidth - text.Width) / 2, 0));
                     var label = new FormattedText("BACH"[channel].ToString(), CultureInfo.InvariantCulture,
                         FlowDirection.LeftToRight, _typeface, 12, Colors[channel], VisualTreeHelper.GetDpi(this).PixelsPerDip);
-                    dc.DrawText(label, new Point(barX + (24 - label.Width) / 2, 22 + plotHeight));
+                    dc.DrawText(label, new Point(barX + (barWidth - label.Width) / 2, 22 + plotHeight));
                 }
+                if (!_gaugesOnly && current != null) dc.Pop();
             }
         }
     }

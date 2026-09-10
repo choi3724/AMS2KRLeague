@@ -16,6 +16,7 @@ namespace AMS2LeagueActivity.Tests
     {
         public static IEnumerable<TestCase> Cases()
         {
+            yield return new TestCase("Long-track product archive finalizes all six extended schemas", LongTrackFinalizes);
             yield return new TestCase("Future telemetry fixture inventory", FixedFixtureInventory);
             yield return new TestCase("Future telemetry identity joins all streams and separates attempts", IdentityAndAttempts);
             yield return new TestCase("Future telemetry clock is monotonic and independent from lap time", MonotonicCaptureClock);
@@ -33,8 +34,51 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Archive fault ledger distinguishes serialization disk and finalize failures", ArchiveFailureStagesAreDistinct);
             yield return new TestCase("Expired invalid compact chunk does not block healthy streams", ExpiredCompactFailureIsIsolated);
             yield return new TestCase("Partial compact write retries identical bytes without losing dictionary", PartialCompactWriteRetriesIdentically);
+            yield return new TestCase("Long-track partial write retries identical V2 bytes", () => PartialCompactWriteRetriesIdentically(true));
             yield return new TestCase("Archive failure diagnostics are sanitized and rate limited", FailureDiagnosticsAreBounded);
             yield return new TestCase("Compact replay world cadence option changes world row density only", ReplayWorldCadenceOption);
+        }
+
+        private static void LongTrackFinalizes()
+        {
+            using var directory = new TemporaryDirectory("long-track-finalize");
+            var identity = FixedIdentity("long-track");
+            var options = new TelemetryArchiveOptions { IncidentPreRollMs = 100, IncidentPostRollMs = 100, IncidentRingDurationMs = 500 };
+            var store = new CompactTelemetryChunkStore(directory.Root, identity, options);
+            var archive = new LocalDurableTelemetryArchive(directory.Root, identity, options, store.Commit, null);
+            try
+            {
+                var metadata = Metadata(0); metadata.TrackLengthMeters = 20_815.41;
+                AssertEx.True(archive.TryCaptureSessionMetadata(metadata));
+                AssertEx.True(archive.TryCaptureRaceStory(new RaceStoryEventSample {
+                    EventId = "long-event", EventType = "SESSION_START", CapturedAtUtc = At(0),
+                    SessionElapsedMs = 0, LapDistanceMeters = 20_815.41 }));
+                for (int elapsed = 0; elapsed <= 400; elapsed += 50)
+                {
+                    var frame = Frame(elapsed, 2, true);
+                    foreach (var participant in frame.Participants) participant.LapDistanceMeters = 20_800 + elapsed * 0.01;
+                    frame.LocalDriver!.LapDistanceMeters = 20_800 + elapsed * 0.01;
+                    if (elapsed == 100) frame.IncidentCandidate = new IncidentCandidateSample {
+                        CandidateId = "long-incident", TriggerCode = "RAW_PROXIMITY_AND_POSITION_CHANGE",
+                        RelatedParticipantRefs = new[] { 1 } };
+                    AssertEx.True(archive.TryCaptureFrame(frame));
+                }
+            }
+            finally { archive.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+            AssertEx.True(archive.CompletionReport.FinalizeAcknowledged, "Long-track archive must acknowledge close.");
+            AssertEx.Equal(0L, archive.Counters.CommitFailures);
+            var metadataFiles = Directory.GetFiles(directory.Root, "*.upload.json", SearchOption.AllDirectories)
+                .Select(p => TelemetryChunkSerializer.DeserializeMetadata(File.ReadAllBytes(p))).ToArray();
+            ushort[] ids = metadataFiles.Select(m => m.CompactSchemaId.GetValueOrDefault()).ToArray();
+            foreach (ushort id in new ushort[] { 0x0101, 0x0110, 0x0120, 0x0121, 0x0130, 0x0140 })
+                AssertEx.True(ids.Contains(id), "Missing long-track schema " + id);
+            AssertEx.True(metadataFiles.Where(m => m.CompactSchemaId == 0x0130)
+                .All(m => m.Visibility == TelemetryVisibility.PRIVATE_DRIVER_ANALYTICS));
+            foreach (string path in Directory.GetFiles(directory.Root, "*.a2ct.gz", SearchOption.AllDirectories))
+            {
+                using var stream = File.OpenRead(path);
+                CompactTelemetryCodec.Decode(TelemetryChunkSerializer.Gunzip(stream));
+            }
         }
 
         private static void ReplayWorldCadenceOption()
@@ -654,16 +698,23 @@ namespace AMS2LeagueActivity.Tests
             diagnostics.Report(new IOException("fixture"), FixedIdentity("diagnostic"), "LEDGER_WRITE");
         }
 
-        private static void PartialCompactWriteRetriesIdentically()
+        private static void PartialCompactWriteRetriesIdentically() => PartialCompactWriteRetriesIdentically(false);
+
+        private static void PartialCompactWriteRetriesIdentically(bool longTrack)
         {
             using var directory = new TemporaryDirectory("compact-partial-write");
             TelemetryArchiveIdentity identity = FixedIdentity("partial-write");
             var accumulator = new TelemetryChunkAccumulator(identity, TelemetryStreamType.PARTICIPANT_REPLAY, 0, 5);
-            for (int elapsed = 0; elapsed < 30_000; elapsed += 200) accumulator.AddReplay(Frame(elapsed, 3, true), 1, 64);
+            for (int elapsed = 0; elapsed < 30_000; elapsed += 200)
+            {
+                var frame = Frame(elapsed, 3, true);
+                if (longTrack) foreach (var participant in frame.Participants) participant.LapDistanceMeters = 20_800;
+                accumulator.AddReplay(frame, 1, 64);
+            }
             TelemetryChunkEnvelope source = accumulator.Build();
             var store = new CompactTelemetryChunkStore(directory.Root, identity);
             string session = new TelemetryChunkStore(directory.Root, identity).SessionDirectory;
-            string blocked = Path.Combine(session, "chunks", "compact", "replay", "00000012-0020.upload.json");
+            string blocked = Path.Combine(session, "chunks", "compact", "replay", longTrack ? "00000012-0120.upload.json" : "00000012-0020.upload.json");
             Directory.CreateDirectory(blocked);
             bool failed = false;
             try { store.Commit(source); }

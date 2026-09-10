@@ -104,7 +104,11 @@ namespace AMS2LeagueClient.Core.Events
             DetectRaceFastest(league, detected, now);
             DetectFinalLap(snapshot, league, local, detected, now);
             DetectInvalidLap(snapshot, local, detected, now, outLapParticipants);
-            if (!EventSuppressionPolicy.ShouldSuppress(overlayState, OverlayEventType.Battle)) DetectBattle(snapshot, league, local, detected, now);
+            if (!EventSuppressionPolicy.ShouldSuppress(overlayState, OverlayEventType.Battle))
+            {
+                DetectBattle(snapshot, league, local, detected, now, behind: false);
+                DetectBattle(snapshot, league, local, detected, now, behind: true);
+            }
 
             _lastSnapshotAt = snapshot.CapturedAt;
             _lastCurrentLap = local.CurrentLap;
@@ -542,35 +546,38 @@ namespace AMS2LeagueClient.Core.Events
             LeagueClassification league,
             ParticipantSnapshot local,
             List<OverlayEvent> detected,
-            DateTimeOffset now)
+            DateTimeOffset now,
+            bool behind)
         {
             // Pit-relative proximity is useful to the driver, but not a racing battle.
             if (local.KnownPitMode != PitMode.None) return;
             if (local.LapsCompleted == 0 && local.CurrentLapDistance < 100.0f) return;
             TrackProximity proximity = new TrackProximityResolver().Resolve(snapshot.TrackLength, local, snapshot.Participants);
-            ParticipantSnapshot? physicalAhead = proximity.Ahead;
-            LeagueParticipant? ahead = physicalAhead == null ? null : league.Participants.FirstOrDefault(item => item.Source.Index == physicalAhead.Index);
-            if (ahead == null || league.Ahead?.Source.Index != ahead.Source.Index || !league.CanUseAheadGameSplit) return;
-            float gap = snapshot.SplitTimeAhead;
+            ParticipantSnapshot? physical = behind ? proximity.Behind : proximity.Ahead;
+            LeagueParticipant? opponent = behind ? league.Behind : league.Ahead;
+            if (opponent == null || physical?.Index != opponent.Source.Index
+                || !(behind ? league.CanUseBehindGameSplit : league.CanUseAheadGameSplit)) return;
+            TrackProgressDistance distance = behind ? proximity.BehindDistance : proximity.AheadDistance;
+            float gap = behind ? snapshot.SplitTimeBehind : snapshot.SplitTimeAhead;
             if (float.IsNaN(gap) || float.IsInfinity(gap) || gap < 0 || gap > BattleThresholdSeconds) return;
-            if (!proximity.AheadDistance.IsAvailable || proximity.AheadDistance.SignedMeters > 100) return;
+            if (!distance.IsAvailable || Math.Abs(distance.SignedMeters) > 100) return;
             if (_cooldowns.TryGetValue("BATTLE_INIT", out DateTimeOffset init) && now < init) return;
 
-            string key = "BATTLE:" + ahead.Source.Index.ToString(CultureInfo.InvariantCulture);
+            string key = (behind ? "BATTLE_BEHIND:" : "BATTLE:") + opponent.Source.Index.ToString(CultureInfo.InvariantCulture);
             if (_cooldowns.TryGetValue(key, out DateTimeOffset next) && now < next) return;
             _cooldowns[key] = now + BattleCooldown;
             Emit(new OverlayEvent(
-                OverlayEventType.Battle,
+                behind ? OverlayEventType.BattleBehind : OverlayEventType.Battle,
                 OverlayEventPriority.Low,
                 now,
                 TimeSpan.FromSeconds(3),
                 TimeSpan.FromSeconds(10),
-                _text.Get(OverlayTextKey.BattleAhead),
-                "P" + ahead.LeaguePosition + " " + ahead.Source.Name,
-                "+" + gap.ToString("0.000", CultureInfo.InvariantCulture) + " · " + proximity.AheadDistance.Text,
-                "PHYSICAL_AHEAD_DIRECT_GAME_SPLIT_MATCHED",
+                _text.Get(behind ? OverlayTextKey.BattleBehind : OverlayTextKey.BattleAhead),
+                "P" + opponent.LeaguePosition + " " + opponent.Source.Name,
+                "+" + gap.ToString("0.000", CultureInfo.InvariantCulture) + " · " + distance.Text,
+                behind ? "PHYSICAL_BEHIND_DIRECT_GAME_SPLIT_MATCHED" : "PHYSICAL_AHEAD_DIRECT_GAME_SPLIT_MATCHED",
                 cooldownKey: key,
-                driver: ahead.Source.Name), detected, now);
+                driver: opponent.Source.Name), detected, now);
         }
 
         private void Emit(OverlayEvent item, List<OverlayEvent> detected, DateTimeOffset now)

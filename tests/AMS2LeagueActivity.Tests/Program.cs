@@ -7,8 +7,10 @@ namespace AMS2LeagueActivity.Tests
 {
     internal static class Program
     {
-        private static int Main()
+        private static int Main(string[] args)
         {
+            if (args.Length == 3 && args[0] == "--long-track-recheck") return LongTrackTests.Recheck(args[1], args[2]);
+            if (args.Length == 2 && args[0] == "--long-track-vectors") return LongTrackTests.Export(args[1]);
             IReadOnlyList<TestCase> tests = ActivityCaptureTests.Cases()
                 .Concat(UploadQueueTests.Cases())
                 .Concat(PayloadContractTests.Cases())
@@ -16,6 +18,7 @@ namespace AMS2LeagueActivity.Tests
                 .Concat(FutureTelemetryArchiveTests.Cases())
                 .Concat(FutureTelemetryRuntimeAdapterTests.Cases())
                 .Concat(CompactTelemetryCodecTests.Cases())
+                .Concat(LongTrackTests.Cases())
                 .ToArray();
             int passed = 0;
             int failed = 0;

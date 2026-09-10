@@ -34,7 +34,13 @@ namespace AMS2LeagueClient.Core.CompactTelemetry
         DriverChangeV1 = 0x0033,
         IncidentV1 = 0x0040,
         LossLedgerV1 = 0x0050,
-        AttemptFinalizeV1 = 0x0051
+        AttemptFinalizeV1 = 0x0051,
+        SessionStaticV2 = 0x0101,
+        RaceEventV2 = 0x0110,
+        ParticipantReplayV2 = 0x0120,
+        TrackGeometryV2 = 0x0121,
+        DriverFastV2 = 0x0130,
+        IncidentV2 = 0x0140
     }
 
     /// <summary>

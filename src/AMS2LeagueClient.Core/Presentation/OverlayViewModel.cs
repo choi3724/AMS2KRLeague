@@ -15,6 +15,9 @@ namespace AMS2LeagueClient.Core.Presentation
     {
         public int ParticipantIndex { get; set; } = -1;
         public string Position { get; set; } = "P—";
+        public string PositionLabel => Position.TrimStart('P');
+        public string RacingBackground => IsDimmed ? OverlayUiPalette.InactiveRowBackground : IsPlayer ? "#AA7A681B" : "#100A0F13";
+        public string LegacyTimeForeground => IsDimmed ? OverlayUiPalette.InactiveTime : OverlayUiPalette.ActiveTime;
         public string Name { get; set; } = "—";
         public string Class { get; set; } = "—";
         public string Lap { get; set; } = "L—";
@@ -430,7 +433,8 @@ namespace AMS2LeagueClient.Core.Presentation
                             : player ? "#FFFFFF" : OverlayUiPalette.ActiveText,
                         ClassBackground = dimmed ? "#394652" : classBadge.Background,
                         ClassForeground = dimmed ? "#AAB4BE" : classBadge.Foreground,
-                        TimeForeground = dimmed ? OverlayUiPalette.InactiveTime : OverlayUiPalette.ActiveTime,
+                        TimeForeground = dimmed ? OverlayUiPalette.InactiveTime
+                            : visibleFastestIndex == item.Source.Index ? "#E765F4" : OverlayUiPalette.ActiveTime,
                         PenaltyText = StateText.Penalty(item.Source),
                         Status = terminal.Length > 0 ? terminal : StatusOf(item.Source.Index, broadcastStates, visibleFastestIndex),
                         StatusColor = terminal.Length > 0 ? (dimmed ? "#FF7777" : "#91A5B8")

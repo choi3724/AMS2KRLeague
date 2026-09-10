@@ -9,6 +9,26 @@ namespace AMS2LeagueClient.Runtime
 {
     public static class DemoSnapshotFactory
     {
+        internal static DrivingTelemetryHistory CreateDrivingPreview()
+        {
+            var history = new DrivingTelemetryHistory();
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            for (int i = 0; i <= 200; i++)
+            {
+                history.Add(CreatePreviewSample(now.AddSeconds((i - 200) * 0.05)));
+            }
+            return history;
+        }
+
+        internal static DrivingTelemetrySample CreatePreviewSample(DateTimeOffset time)
+        {
+            double phase = time.ToUnixTimeMilliseconds() / 1000.0 * 1.5;
+            return new DrivingTelemetrySample(time, 0, 0, 0.5 + Math.Sin(phase) * 0.45,
+                0.5 + Math.Sin(phase + 2.1) * 0.45, 0.5 + Math.Sin(phase + 4.2) * 0.45,
+                Math.Max(0, Math.Sin(phase * 0.5) - 0.9) * 3, 123 / 3.6, 3,
+                absActive: Math.Sin(phase) > 0.5, steering: Math.Sin(phase * 0.4) * 0.3, rpm: 5941, maxRpm: 8000);
+        }
+
         public static TelemetrySnapshot CreateSnapshot()
         {
             string[] names = new string[30];
@@ -115,6 +135,12 @@ namespace AMS2LeagueClient.Runtime
                     return new OverlayEvent(type, OverlayEventPriority.Low, now, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(12), text.Get(OverlayTextKey.PersonalBest), "1:40.973", "-0.547", "DEMO");
                 case OverlayEventType.RaceFastestLap:
                     return new OverlayEvent(type, OverlayEventPriority.Normal, now, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(12), text.Get(OverlayTextKey.RaceFastestLap), "LEE", "1:40.973", "DEMO");
+                case OverlayEventType.Battle:
+                case OverlayEventType.BattleBehind:
+                    bool behind = type == OverlayEventType.BattleBehind;
+                    return new OverlayEvent(type, OverlayEventPriority.Low, now, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(10),
+                        text.Get(behind ? OverlayTextKey.BattleBehind : OverlayTextKey.BattleAhead), behind ? "P5 드라이버 05" : "P3 드라이버 03",
+                        behind ? "+0.420 · 40m" : "+0.680 · 60m", "DEMO");
                 case OverlayEventType.PitEntry:
                     return new OverlayEvent(type, OverlayEventPriority.Normal, now, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), text.Get(OverlayTextKey.PitEntry), "랩 3", string.Empty, "DEMO");
                 case OverlayEventType.FinalLap:

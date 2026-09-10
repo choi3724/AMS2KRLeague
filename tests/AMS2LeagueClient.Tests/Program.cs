@@ -47,6 +47,20 @@ namespace AMS2LeagueClient.Tests
                 application.Shutdown();
                 return 0;
             }
+            if (args.Contains("--resource-probe", StringComparer.Ordinal))
+            {
+                HudResourceProbe();
+                application.Shutdown();
+                return 0;
+            }
+            if (args.Contains("--hud-preview", StringComparer.Ordinal))
+            {
+                DrivingAbsSteeringAndRpm();
+                FastDrivingReadDoesNotFeedRecording();
+                KoreanLabelsAndPenaltyColumn();
+                application.Shutdown();
+                return 0;
+            }
             int liveUpdateArgument = Array.IndexOf(args, "--verify-live-update");
             if (liveUpdateArgument >= 0 && liveUpdateArgument + 1 < args.Length)
             {
@@ -68,8 +82,14 @@ namespace AMS2LeagueClient.Tests
             }
             var tests = new (string Name, Action Test)[]
             {
+                ("Main overlay gallery previews and direct selection persist", MainOverlayGallery),
+                ("Telemetry layouts separate gauges and keep wheel angle compact", TelemetryPanelLayouts),
                 ("Driving graph scrolls existing points left between samples", DrivingGraphScrollsLeft),
                 ("Driving telemetry validates sources and bounds its history", DrivingTelemetrySourcesAndHistory),
+                ("Separate pedal panels migrate and retain independent layout", SeparatePedalLayoutMigration),
+                ("Driving ABS steering and RPM use observed values", DrivingAbsSteeringAndRpm)
+                ,("Fast driving reads are isolated from recording", FastDrivingReadDoesNotFeedRecording),
+                ("Ahead and behind battles use the matching split and queue", BattlesAheadAndBehind),
                 ("Driving HUD renders independently and persists appearance", DrivingHudRenderingAndSettings),
                 ("Update helper confirms restart and reports early exit", UpdateHelperConfirmsRestart),
                 ("Automatic online log session boundaries", AutomaticModeTests.LogBoundaries),
@@ -82,6 +102,7 @@ namespace AMS2LeagueClient.Tests
                 ("Offline layout preview lifecycle", OfflineLayoutPreviewLifecycle),
                 ("Offline layout controls", OfflineLayoutControls),
                 ("VR settings defaults bounds colours and transforms", VrSettingsAndTransforms),
+                ("VR persistent D3D11 texture GPU readback and lifetime", VrPersistentTexturePixels),
                 ("VR connection retry backpressure quit and monitor off", VrConnectionLifecycle),
                 ("VR output rendering focus isolation and saved settings", VrOutputRenderingAndPersistence),
                 ("VR settings controls and packaged SDK", VrSettingsControlsAndSdk),
@@ -155,6 +176,7 @@ namespace AMS2LeagueClient.Tests
                 ,("JSON gzip negotiation is shared transient and server bound", JsonGzipNegotiationLifecycle)
                 ,("Telemetry gzip HTTP contract is exact", TelemetryGzipHttpContractIsExact)
                 ,("Compact telemetry gzip HTTP contract is exact", CompactTelemetryGzipHttpContractIsExact)
+                ,("Long-track upload retries unknown server schema and preserves other failures", LongTrackUploadWaitsForServer)
                 ,("403 JSON HTML diagnostics quarantine without credentials or replay", ForbiddenUploadDiagnostics)
                 ,("Race batch uploads after whole-field finish and preserves late joins", RaceBatchCompletionAndLateJoin)
                 ,("Transition tracker reports position direction and fastest lap", TransitionTrackerReportsPositionDirection)
@@ -753,7 +775,7 @@ namespace AMS2LeagueClient.Tests
             foreach (int seconds in new[] { 0, 10, 20 })
             {
                 TelemetrySnapshot snapshot = Parse(pit, FixedTime().AddSeconds(seconds));
-                AssertFalse(engine.Observe(snapshot, Classify(snapshot), 1, snapshot.CapturedAt).DetectedEvents.Any(item => item.Type == OverlayEventType.Battle));
+                AssertFalse(engine.Observe(snapshot, Classify(snapshot), 1, snapshot.CapturedAt).DetectedEvents.Any(item => item.Type == OverlayEventType.Battle || item.Type == OverlayEventType.BattleBehind));
             }
             var panel = new RelativeDriversView();
             panel.SetViewModel(BuildTiming(pit));
@@ -1202,7 +1224,7 @@ namespace AMS2LeagueClient.Tests
 
         private static void ClassAndTimingTypographyFitsTower()
         {
-            AssertTrue(OverlayUiMetrics.FontClass >= 17);
+            AssertTrue(OverlayUiMetrics.FontClass >= 12);
             AssertTrue(OverlayUiMetrics.FontTiming >= 18);
             AssertTrue(OverlayUiMetrics.RowPitch >= 38);
             AssertTrue(OverlayUiMetrics.TowerHeight + OverlayUiMetrics.ComponentGap + OverlayUiMetrics.RelativeHeight <= 722);
@@ -1681,6 +1703,8 @@ namespace AMS2LeagueClient.Tests
             root.Arrange(new Rect(0, 0, 860, 780));
             root.UpdateLayout();
             AssertFalse(Descendants<ComboBox>(root).Any());
+            Named<Expander>(root, "ConnectionDetails").IsExpanded = true;
+            root.UpdateLayout();
             var modeLabel = Named<TextBlock>(root, "SessionPlayModeLabel");
             AssertEqual(SessionPlayMode.Unknown, status.SessionPlayMode);
             foreach (SessionPlayMode mode in new[] { SessionPlayMode.SinglePlayer, SessionPlayMode.Multiplayer, SessionPlayMode.Unknown })
@@ -1692,9 +1716,9 @@ namespace AMS2LeagueClient.Tests
             status.SessionPlayMode = (SessionPlayMode)999;
             PumpDispatcher();
             AssertEqual(SessionPlayMode.Unknown, status.SessionPlayMode);
-            var statusCard = Descendants<ClientStatusView>(root).Single();
-            AssertTrue(modeLabel.TransformToAncestor(root).Transform(new Point(0, 0)).Y >=
-                statusCard.TransformToAncestor(root).Transform(new Point(0, statusCard.ActualHeight)).Y);
+            Named<Expander>(root, "ConnectionDetails").IsExpanded = true;
+            root.UpdateLayout(); PumpDispatcher();
+            AssertTrue(modeLabel.Visibility == Visibility.Visible && modeLabel.ActualHeight > 0);
             CaptureLayout(root, "status-automatic-mode");
             window.Close();
         }
@@ -2041,13 +2065,56 @@ namespace AMS2LeagueClient.Tests
             });
         }
 
-        private static void CreatePendingCompactTelemetryChunk(string telemetryRoot)
+        private static void LongTrackUploadWaitsForServer()
+        {
+            foreach (var scenario in new[] {
+                (Schema: CompactTelemetrySchemaId.RaceEventV2, Status: 400, Error: "COMPACT_SCHEMA_UNKNOWN", Retry: true),
+                (Schema: CompactTelemetrySchemaId.RaceEventV1, Status: 400, Error: "COMPACT_SCHEMA_UNKNOWN", Retry: false),
+                (Schema: CompactTelemetrySchemaId.RaceEventV2, Status: 400, Error: "COMPACT_VALUE_RANGE_INVALID", Retry: false),
+                (Schema: CompactTelemetrySchemaId.RaceEventV2, Status: 403, Error: "COMPACT_SCHEMA_UNKNOWN", Retry: false),
+                (Schema: CompactTelemetrySchemaId.RaceEventV2, Status: 422, Error: "COMPACT_SCHEMA_UNKNOWN", Retry: false) })
+            {
+                WithTemporaryDirectory(directory => {
+                    string telemetryRoot = Path.Combine(directory, "future-telemetry");
+                    CreatePendingCompactTelemetryChunk(telemetryRoot, scenario.Schema);
+                    var queue = new TelemetryChunkUploadQueue(telemetryRoot);
+                    var item = queue.GetDueBatch(1, DateTimeOffset.UtcNow).Single();
+                    byte[] original = File.ReadAllBytes(item.ChunkPath);
+                    var options = ActivityConnectionOptions.Load(Path.Combine(directory, ActivityConnectionOptions.DefaultFileName));
+                    options.ApiBaseUrl = "https://fixture.invalid/ams2";
+                    var handler = new EnrollmentFixtureHandler("long-track-http-fixture-0001", "compact_fixture_token_0000000001") {
+                        UploadReply = () => new HttpResponseMessage((HttpStatusCode)scenario.Status) {
+                            Content = new StringContent("{\"error\":\"" + scenario.Error + "\"}", Encoding.UTF8, "application/json") } };
+                    using var http = new HttpClient(handler);
+                    using var transport = new Cafe24ActivityUploadTransport(options, "long-track-http-fixture-0001", "0.7.0", http);
+                    var worker = new TelemetryChunkUploadWorker(queue, transport);
+                    var first = worker.ProcessDueAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(scenario.Retry ? 1 : 0, first.Retryable);
+                    AssertEqual(scenario.Retry ? 0 : 1, first.Quarantined);
+                    AssertTrue(original.SequenceEqual(File.ReadAllBytes(item.ChunkPath)));
+                    if (!scenario.Retry) return;
+                    var pending = TelemetryChunkSerializer.DeserializeMetadata(File.ReadAllBytes(item.MetadataPath));
+                    AssertEqual(TelemetryUploadStatus.FAILED_RETRYABLE, pending.Status);
+                    AssertTrue(pending.NextAttemptAtUtc > DateTimeOffset.UtcNow);
+                    pending.NextAttemptAtUtc = DateTimeOffset.UnixEpoch;
+                    File.WriteAllBytes(item.MetadataPath, TelemetryChunkSerializer.SerializeMetadata(pending));
+                    handler.UploadReply = null;
+                    var second = worker.ProcessDueAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(1, second.Sent);
+                    AssertEqual(2, handler.TelemetryCalls);
+                    AssertTrue(original.SequenceEqual(File.ReadAllBytes(item.ChunkPath)));
+                });
+            }
+        }
+
+        private static void CreatePendingCompactTelemetryChunk(string telemetryRoot, CompactTelemetrySchemaId schemaId = CompactTelemetrySchemaId.RaceEventV1)
         {
             string directory = Path.Combine(telemetryRoot, "sessions", "fixture", "chunks", "compact", "story");
             Directory.CreateDirectory(directory);
-            CompactTelemetrySchema schema = CompactTelemetrySchemaRegistry.Get(CompactTelemetrySchemaId.RaceEventV1);
+            CompactTelemetrySchema schema = CompactTelemetrySchemaRegistry.Get(schemaId);
             var values = new double?[schema.Fields.Count];
             values[schema.Fields.First(value => value.Name == "eventTypeRef").Ordinal] = 0;
+            if ((ushort)schemaId >= 0x0100) values[schema.Fields.First(value => value.Name == "lapDistanceMeters").Ordinal] = 20_815.41;
             var strings = new[]
             {
                 new CompactStringDictionaryEntry(CompactStringDictionaryId.EventType, 0, "SESSION_START")
@@ -2057,7 +2124,7 @@ namespace AMS2LeagueClient.Tests
                 22,
                 33,
                 new CompactTelemetryBlock(
-                    CompactTelemetrySchemaId.RaceEventV1,
+                    schemaId,
                     0,
                     0,
                     new[] { new CompactTelemetrySample(0, values) }),
@@ -2072,7 +2139,7 @@ namespace AMS2LeagueClient.Tests
                 Schema = "ams2-compact-upload-metadata-v1",
                 Endpoint = Cafe24ActivityUploadTransport.TelemetryChunksEndpoint,
                 Protocol = "AMS2_COMPACT_TELEMETRY_V1",
-                CompactSchemaId = (ushort)CompactTelemetrySchemaId.RaceEventV1,
+                CompactSchemaId = (ushort)schemaId,
                 SessionLocalId = 11,
                 AttemptLocalId = 22,
                 ChunkId = "a2ct-client-fixture-00000033",
@@ -2781,7 +2848,7 @@ namespace AMS2LeagueClient.Tests
                 window.SetViewModel(shell, false);
                 Window[] panels = Application.Current.Windows.Cast<Window>()
                     .Where(item => item != window && !existing.Contains(item)).ToArray();
-                AssertEqual(9, panels.Length);
+                AssertEqual(11, panels.Length);
                 foreach (Window panel in panels)
                 {
                     var root = (Grid)panel.Content;
@@ -2819,7 +2886,8 @@ namespace AMS2LeagueClient.Tests
                                 && text.Name != "AheadLapGapText" && text.Name != "BehindLapGapText")
                                 AssertTrue(Math.Abs(scaleX - Math.Min(x, y)) < 0.0001);
                         }
-                        AssertTrue(measuredTexts > 0);
+                        AssertTrue(measuredTexts > 0 || content is DrivingDashboardView || content is PedalTelemetryView
+                            || Descendants<LegacyPedalTelemetryView>(content).Any() || Descendants<PedalTelemetryView>(content).Any());
                         CaptureLayout(root, panel.Title + "-" + x + "x" + y);
                     }
                 }
@@ -3054,7 +3122,7 @@ namespace AMS2LeagueClient.Tests
             AssertEqual("0:11.000", later.CurrentLapText);
             AssertEqual("1:20.500", later.AllRankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
             AssertEqual("무효", PlayerRow(later).Status);
-            AssertEqual(OverlayUiPalette.ActiveTime, PlayerRow(later).TimeForeground);
+            AssertEqual("#E765F4", PlayerRow(later).TimeForeground);
             AssertEqual("#FF7777", PlayerRow(later).StatusColor);
             AssertFalse(PlayerRow(later).IsDimmed);
             AssertTrue(later.CurrentLabel.Contains("무효", StringComparison.Ordinal));

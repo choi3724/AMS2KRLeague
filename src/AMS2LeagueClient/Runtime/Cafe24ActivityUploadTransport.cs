@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
 using AMS2LeagueClient.Core.FutureTelemetry;
+using AMS2LeagueClient.Core.CompactTelemetry;
 using AMS2LeagueClient.Core.Security;
 
 namespace AMS2LeagueClient.Runtime
@@ -323,11 +324,19 @@ namespace AMS2LeagueClient.Runtime
                         "RESPONSE_TOO_LARGE",
                         IsTelemetryRetryableStatus(statusCode));
                 }
-                return ParseTelemetryUploadResponse(
+                TelemetryChunkUploadTransportResult result = ParseTelemetryUploadResponse(
                     statusCode,
                     responseBytes,
                     metadata.ChunkId,
                     metadata.PayloadSha256);
+                // A server deployed before the additive long-track schemas must not
+                // permanently quarantine valid local records during a rolling update.
+                if (statusCode == 400 && result.ResultCode == "COMPACT_SCHEMA_UNKNOWN"
+                    && metadata.CompactSchemaId >= 0x0100
+                    && Enum.IsDefined(typeof(CompactTelemetrySchemaId), metadata.CompactSchemaId.Value))
+                    return TelemetryChunkUploadTransportResult.Failure(
+                        statusCode, "COMPACT_SCHEMA_UNKNOWN", true);
+                return result;
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {

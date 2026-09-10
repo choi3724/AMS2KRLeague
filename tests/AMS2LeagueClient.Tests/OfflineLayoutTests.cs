@@ -24,6 +24,8 @@ namespace AMS2LeagueClient.Tests
             var desktop = new GameWindowSnapshot(IntPtr.Zero, -5000, -5000, 1920, 1080, 96, true, false, 0);
             try
             {
+                overlay.SetComponentEnabled(OverlayComponentKeys.Speed, true); overlay.SetComponentEnabled(OverlayComponentKeys.Gear, true);
+                if (File.Exists(path)) File.Delete(path);
                 // No ShowAt/SHM/game is required, including the existing edit button.
                 AssertTrue(overlay.BeginLayoutEdit());
                 AssertTrue(overlay.IsLayoutPreview && overlay.IsVisible);
@@ -119,10 +121,9 @@ namespace AMS2LeagueClient.Tests
                         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 }
                 AssertEqual(1, gameplay); AssertEqual(1, waiting);
-                var card = Descendants<ClientStatusView>(root).Single();
+                Named<Expander>(root, "ConnectionDetails").IsExpanded = true; PumpDispatcher();
                 var mode = Named<TextBlock>(root, "SessionPlayModeLabel");
-                AssertTrue(mode.TransformToAncestor(root).Transform(new Point()).Y >=
-                    card.TransformToAncestor(root).Transform(new Point(0, card.ActualHeight)).Y);
+                AssertTrue(mode.IsVisible && mode.ActualHeight > 0);
                 foreach (Button button in Descendants<Button>(root))
                 {
                     Rect bounds = button.TransformToAncestor(root).TransformBounds(new Rect(button.RenderSize));

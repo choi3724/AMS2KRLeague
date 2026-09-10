@@ -13,8 +13,10 @@ namespace AMS2LeagueClient.Core.Presentation
         public const string RaceControl = "raceControl";
         public const string Waiting = "waiting";
         public const string PedalTelemetry = "pedalTelemetry";
+        public const string PedalGauge = "pedalGauge";
         public const string Speed = "speed";
         public const string Gear = "gear";
+        public const string DrivingDashboard = "drivingDashboard";
         public static readonly string[] All =
         {
             TimingTower,
@@ -25,8 +27,10 @@ namespace AMS2LeagueClient.Core.Presentation
             RaceControl,
             Waiting,
             PedalTelemetry,
+            PedalGauge,
             Speed,
-            Gear
+            Gear,
+            DrivingDashboard
         };
     }
 
@@ -49,6 +53,13 @@ namespace AMS2LeagueClient.Core.Presentation
             = new Dictionary<string, NormalizedOverlayBounds>(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, bool> EnabledComponents { get; set; }
             = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        public void SetDrivingPanelDefaults()
+        {
+            EnabledComponents ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            EnabledComponents.TryAdd(OverlayComponentKeys.DrivingDashboard, false);
+            EnabledComponents.TryAdd(OverlayComponentKeys.PedalGauge, false);
+        }
 
         public bool IsEnabled(string component)
             => string.IsNullOrWhiteSpace(component)

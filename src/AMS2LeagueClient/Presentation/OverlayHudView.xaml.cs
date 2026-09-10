@@ -41,9 +41,21 @@ namespace AMS2LeagueClient.Presentation
         private long _entryBatchTick = long.MinValue;
         private int _entryBatchOrdinal;
 
+        private ItemsControl RankingItems = null!;
+        private bool? _racingDesign;
         public OverlayHudView()
         {
             InitializeComponent();
+            SetRacingDesign(false);
+        }
+
+        public void SetRacingDesign(bool racing)
+        {
+            if (_racingDesign == racing) return;
+            _racingDesign = racing;
+            TowerContent.Template = (ControlTemplate)FindResource(racing ? "RacingTowerTemplate" : "LegacyTowerTemplate");
+            TowerContent.ApplyTemplate();
+            RankingItems = (ItemsControl)TowerContent.Template.FindName("RankingItems", TowerContent);
             RankingItems.ItemsSource = _rankingRows;
         }
 
@@ -59,7 +71,8 @@ namespace AMS2LeagueClient.Presentation
                 UnitSeparator,
                 viewModel.RankingRows.Select(row => row.ParticipantIndex + "|" + row.Position + "|" + row.Name + "|"
                     + row.Class + "|" + row.CurrentTime + "|" + row.Status + "|" + row.IsPlayer + "|" + row.DisplayState
-                    + "|" + row.ClassBackground + "|" + row.Foreground));
+                    + "|" + row.ClassBackground + "|" + row.Foreground + "|" + row.TimeForeground
+                    + "|" + row.PenaltyText + "|" + row.StatusColor));
             if (rankingKey == _rankingKey)
             {
                 return;

@@ -20,6 +20,23 @@ Synthetic evidence is in the
 storage/decoder evidence is in the
 [local Server replay report](../../AMS2League/server/cafe24_telemetry014/docs/P024_SERVER_COMPACT_PROTOCOL_REPORT.md).
 
+## 0.7.0 장거리 확장
+
+기존 V1 ID와 계약은 유지합니다. 20km 거리 범위를 넘는 블록에만 V2를 사용합니다.
+V2는 최대 100km를 지원하며, 필드 순서·인코딩·정밀도·privacy·protocol version 1은 그대로입니다.
+
+| V1 | V2 | 이름 | 거리 최대 양자화 값 |
+|---|---|---|---|
+| 0x0001 | 0x0101 | SESSION_STATIC_V2 | 10,000,000 (0.01m) |
+| 0x0010 | 0x0110 | RACE_EVENT_V2 | 10,000,000 (0.01m) |
+| 0x0020 | 0x0120 | PARTICIPANT_REPLAY_V2 | 1,000,000 (0.1m) |
+| 0x0021 | 0x0121 | TRACK_GEOMETRY_V2 | 10,000,000 (0.01m) |
+| 0x0030 | 0x0130 | DRIVER_FAST_V2 (비공개) | 10,000,000 (0.01m) |
+| 0x0040 | 0x0140 | INCIDENT_V2 | 10,000,000 (0.01m) |
+
+서버는 V1/V2 혼합 기록을 수신하고 결과·리플레이·사고 조회에서 두 ID를 함께 읽어야 합니다.
+검증/배포 조건: [0.7.0 장거리 보고서](LONG_TRACK_0.7.0_2026-09-10_KO.md).
+
 ## Registry rules
 
 - Ordinals are zero-based, contiguous, and immutable within V1.

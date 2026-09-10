@@ -93,6 +93,7 @@ namespace AMS2LeagueClient
                 {
                     // Per-overlay toggles work at any time; reflect the saved state now.
                     OverlayWindow overlay = _overlay;
+                    _statusWindow.SetDesignLabels(overlay.GetDrivingHudSettings());
                     _statusWindow.SetLayoutComponentStates(OverlayComponentKeys.All.ToDictionary(
                         key => key,
                         key => overlay.IsComponentEnabled(key),
@@ -135,11 +136,26 @@ namespace AMS2LeagueClient
                         new VrSettingsWindow(overlay.GetVrHudSettings(), overlay.SaveVrHudSettings, overlay.RecenterVr)
                             { Owner = _statusWindow }.ShowDialog();
                     };
+                    _statusWindow.OverlayDesignSelected += (sender, designArgs) =>
+                    {
+                        DrivingHudSettings settings = overlay.GetDrivingHudSettings();
+                        if (designArgs.Component == OverlayComponentKeys.TimingTower) settings.TowerDesign = designArgs.Design;
+                        else if (designArgs.Component == OverlayComponentKeys.PedalTelemetry) settings.TelemetryDesign = designArgs.Design;
+                        else return;
+                        try { overlay.SaveDrivingHudSettings(settings); _statusWindow.SetDesignLabels(settings); }
+                        catch (Exception exception)
+                        {
+                            _statusWindow.SetDesignLabels(overlay.GetDrivingHudSettings());
+                            _logger?.Warning("OVERLAY_DESIGN", "reason=" + exception.GetType().Name);
+                            MessageBox.Show(_statusWindow, "디자인을 저장하지 못했습니다. 저장 폴더의 권한과 여유 공간을 확인해 주세요.",
+                                "오버레이 디자인", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    };
                     _statusWindow.DrivingHudSettingsRequested += (sender, settingsArgs) =>
                     {
                         var dialog = new DrivingHudSettingsWindow(overlay.GetDrivingHudSettings()) { Owner = _statusWindow };
                         if (dialog.ShowDialog() != true) return;
-                        try { overlay.SaveDrivingHudSettings(dialog.Settings); }
+                        try { overlay.SaveDrivingHudSettings(dialog.Settings); _statusWindow.SetDesignLabels(dialog.Settings); }
                         catch (Exception exception)
                         {
                             _logger?.Warning("DRIVING_HUD_SETTINGS", "reason=" + exception.GetType().Name);

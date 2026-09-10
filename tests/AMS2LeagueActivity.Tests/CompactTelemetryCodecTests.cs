@@ -47,7 +47,7 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal((byte)0, (byte)CompactTelemetryCompletenessCode.InProgress);
             AssertEx.Equal((byte)1, (byte)CompactTelemetryCompletenessCode.Partial);
             AssertEx.Equal((byte)2, (byte)CompactTelemetryCompletenessCode.Complete);
-            AssertEx.Equal(12, CompactTelemetrySchemaRegistry.Schemas.Count);
+            AssertEx.Equal(18, CompactTelemetrySchemaRegistry.Schemas.Count);
 
             CompactTelemetrySchema driver = CompactTelemetrySchemaRegistry.Get(CompactTelemetrySchemaId.DriverFastV1);
             AssertEx.Equal("DRIVER_FAST_V1", driver.Name);

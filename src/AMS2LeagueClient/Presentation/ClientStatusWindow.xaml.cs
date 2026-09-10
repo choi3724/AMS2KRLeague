@@ -12,6 +12,11 @@ namespace AMS2LeagueClient.Presentation
         public ClientStatusWindow(ClientStatusViewModel viewModel)
         {
             InitializeComponent();
+            MinWidth = Math.Min(MinWidth, SystemParameters.WorkArea.Width);
+            MinHeight = Math.Min(MinHeight, SystemParameters.WorkArea.Height);
+            Width = Math.Min(Width, SystemParameters.WorkArea.Width);
+            Height = Math.Min(Height, SystemParameters.WorkArea.Height);
+            BuildGallery();
             ViewModel = viewModel;
             DataContext = viewModel;
         }
@@ -78,8 +83,10 @@ namespace AMS2LeagueClient.Presentation
                 RaceControlCheck,
                 WaitingCheck,
                 PedalTelemetryCheck,
+                PedalGaugeCheck,
                 SpeedCheck,
-                GearCheck
+                GearCheck,
+                DrivingDashboardCheck
             };
 
         private void LayoutEditButton_Click(object sender, RoutedEventArgs eventArgs)

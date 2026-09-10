@@ -25,11 +25,15 @@ namespace AMS2LeagueClient.Overlay
 
         private readonly bool _diagnostic;
         private readonly PedalTelemetryView _pedalView = new PedalTelemetryView();
+        private readonly LegacyPedalTelemetryView _legacyPedalView = new LegacyPedalTelemetryView();
+        private readonly ContentControl _telemetryHost = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
+        private readonly PedalTelemetryView _pedalGaugeView = new PedalTelemetryView(gaugesOnly: true);
+        private readonly DrivingDashboardView _dashboardView = new DrivingDashboardView();
         private readonly DrivingNumberView _speedView = new DrivingNumberView(false);
         private readonly DrivingNumberView _gearView = new DrivingNumberView(true);
         private readonly AuxiliaryOverlayWindow[] _drivingWindows;
         private readonly DrivingTelemetryHistory _drivingHistory = new DrivingTelemetryHistory();
-        private DrivingTelemetryHistory _drivingPreview = CreateDrivingPreview();
+        private DrivingTelemetryHistory _drivingPreview = DemoSnapshotFactory.CreateDrivingPreview();
         private readonly DispatcherTimer _drivingPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         private readonly RelativeDriversView _relativeView = new RelativeDriversView();
         private readonly LapTimingView _lapTimingView = new LapTimingView();
@@ -73,6 +77,7 @@ namespace AMS2LeagueClient.Overlay
                 "overlay-layout.json");
             _layoutStore = new OverlayLayoutStore(resolvedLayoutPath);
             _layoutProfile = _layoutStore.Load();
+            _layoutProfile.SetDrivingPanelDefaults();
 
             _relativeWindow = new AuxiliaryOverlayWindow(
                 OverlayComponentKeys.RelativeDrivers,
@@ -112,14 +117,16 @@ namespace AMS2LeagueClient.Overlay
                 OverlayUiMetrics.WaitingHeight);
             _drivingWindows = new[]
             {
-                new AuxiliaryOverlayWindow(OverlayComponentKeys.PedalTelemetry, "텔레메트리", _pedalView, OverlayUiMetrics.PedalWidth, OverlayUiMetrics.PedalHeight),
+                new AuxiliaryOverlayWindow(OverlayComponentKeys.PedalTelemetry, "텔레메트리", _telemetryHost, OverlayUiMetrics.PedalWidth, OverlayUiMetrics.PedalHeight),
+                new AuxiliaryOverlayWindow(OverlayComponentKeys.PedalGauge, "페달 게이지", _pedalGaugeView, OverlayUiMetrics.PedalGaugeWidth, OverlayUiMetrics.PedalHeight),
                 new AuxiliaryOverlayWindow(OverlayComponentKeys.Speed, "속도계", _speedView, OverlayUiMetrics.SpeedWidth, OverlayUiMetrics.SpeedHeight),
-                new AuxiliaryOverlayWindow(OverlayComponentKeys.Gear, "기어", _gearView, OverlayUiMetrics.GearSize, OverlayUiMetrics.GearSize)
+                new AuxiliaryOverlayWindow(OverlayComponentKeys.Gear, "기어", _gearView, OverlayUiMetrics.GearSize, OverlayUiMetrics.GearSize),
+                new AuxiliaryOverlayWindow(OverlayComponentKeys.DrivingDashboard, "레이싱 계기판", _dashboardView, OverlayUiMetrics.DashboardWidth, OverlayUiMetrics.DashboardHeight)
             };
             ApplyDrivingAppearance();
             _drivingPreviewTimer.Tick += (sender, args) =>
             {
-                _drivingPreview.Add(CreatePreviewSample(DateTimeOffset.UtcNow));
+                _drivingPreview.Add(DemoSnapshotFactory.CreatePreviewSample(DateTimeOffset.UtcNow));
                 RefreshDrivingViews();
             };
         }
@@ -138,18 +145,37 @@ namespace AMS2LeagueClient.Overlay
         private void ApplyDrivingAppearance()
         {
             DrivingHudSettings settings = GetDrivingHudSettings();
+            _telemetryHost.Content = settings.TelemetryDesign == "racing" ? (object)_pedalView : _legacyPedalView;
+            TimingHud.SetRacingDesign(settings.TowerDesign == "racing");
+            Title = settings.TowerDesign == "racing" ? "AMS2 순위 타워 (개량)" : "AMS2 순위 타워 (기본)";
+            _drivingWindows[0].Title = settings.TelemetryDesign == "racing" ? "AMS2 텔레메트리 (개량)" : "AMS2 텔레메트리 (기본)";
+            _legacyPedalView.ApplySettings(settings);
             _pedalView.ApplySettings(settings);
+            _pedalGaugeView.ApplySettings(settings);
+            _dashboardView.ApplySettings(settings);
             _speedView.ApplyFont(settings.SpeedFont);
             _gearView.ApplyFont(settings.GearFont);
             _speedView.ApplyShadow(settings.SpeedShadowColor);
             _gearView.ApplyShadow(settings.GearShadowColor);
         }
 
+        public bool WantsDrivingTelemetry => !_layoutPreview && Array.Exists(_drivingWindows, panel => panel.IsVisible);
+
+        public void UpdateDrivingSession(TelemetrySnapshot snapshot)
+            => _dashboardView.SetSession(snapshot.TrackTemperature, _viewModel.Timing.RemainingTimeText);
+
         public void UpdateDrivingTelemetry(TelemetrySnapshot snapshot, int localIndex, int generation)
         {
             if (_layoutPreview) return;
+            UpdateDrivingSession(snapshot);
+            UpdateDrivingSample(DrivingTelemetrySample.FromSnapshot(snapshot, localIndex, generation));
+        }
+
+        public void UpdateDrivingSample(DrivingTelemetrySample? sample)
+        {
+            if (_layoutPreview) return;
             DrivingTelemetrySample? previous = _drivingHistory.Current;
-            _drivingHistory.Add(DrivingTelemetrySample.FromSnapshot(snapshot, localIndex, generation));
+            _drivingHistory.Add(sample);
             if (!ReferenceEquals(previous, _drivingHistory.Current)) RefreshDrivingViews();
         }
 
@@ -158,33 +184,18 @@ namespace AMS2LeagueClient.Overlay
             bool animatePreview = _layoutEditing && _displayMode == DisplayMode.Gameplay && _drivingHistory.Current == null;
             if (animatePreview && !_drivingPreviewTimer.IsEnabled)
             {
-                _drivingPreview = CreateDrivingPreview();
+                _drivingPreview = DemoSnapshotFactory.CreateDrivingPreview();
                 _drivingPreviewTimer.Start();
             }
             else if (!animatePreview) _drivingPreviewTimer.Stop();
+            if (_layoutEditing && _drivingHistory.Current == null) _dashboardView.SetSession(27, "14:03");
             DrivingTelemetryHistory shown = _layoutEditing && _drivingHistory.Current == null ? _drivingPreview : _drivingHistory;
+            _legacyPedalView.SetHistory(shown);
             _pedalView.SetHistory(shown);
+            _pedalGaugeView.SetHistory(shown);
             _speedView.SetSample(shown.Current);
             _gearView.SetSample(shown.Current);
-        }
-
-        private static DrivingTelemetryHistory CreateDrivingPreview()
-        {
-            var history = new DrivingTelemetryHistory();
-            DateTimeOffset now = DateTimeOffset.UtcNow;
-            for (int i = 0; i <= 200; i++)
-            {
-                history.Add(CreatePreviewSample(now.AddSeconds((i - 200) * 0.05)));
-            }
-            return history;
-        }
-
-        private static DrivingTelemetrySample CreatePreviewSample(DateTimeOffset time)
-        {
-            double phase = time.ToUnixTimeMilliseconds() / 1000.0 * 1.5;
-            return new DrivingTelemetrySample(time, 0, 0, 0.5 + Math.Sin(phase) * 0.45,
-                0.5 + Math.Sin(phase + 2.1) * 0.45, 0.5 + Math.Sin(phase + 4.2) * 0.45,
-                Math.Max(0, Math.Sin(phase * 0.5) - 0.9) * 3, 123 / 3.6, 3);
+            _dashboardView.SetSample(shown.Current, _layoutEditing && _drivingHistory.Current == null ? "P12" : _viewModel.Timing.PositionText.Split('/')[0].Trim());
         }
 
         public bool IsLayoutEditing => _layoutEditing;
@@ -437,6 +448,7 @@ namespace AMS2LeagueClient.Overlay
         public void ResetLayout()
         {
             _layoutProfile = new OverlayLayoutProfile { DrivingHud = GetDrivingHudSettings(), VrHud = GetVrHudSettings() };
+            _layoutProfile.SetDrivingPanelDefaults();
             _layoutStore.Save(_layoutProfile);
             InvalidateBounds();
             if (_lastGameWindow == null) return;
@@ -511,7 +523,7 @@ namespace AMS2LeagueClient.Overlay
                 _diagnostic,
                 _viewModel.RaceControl.IsExpanded);
 
-            OverlayBounds[] drivingBounds = { defaults.Pedals, defaults.Speed, defaults.Gear };
+            OverlayBounds[] drivingBounds = { defaults.Pedals, defaults.PedalGauge, defaults.Speed, defaults.Gear, defaults.Dashboard };
             for (int i = 0; i < _drivingWindows.Length; i++)
             {
                 AuxiliaryOverlayWindow panel = _drivingWindows[i];

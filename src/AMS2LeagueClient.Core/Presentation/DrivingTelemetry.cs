@@ -10,6 +10,9 @@ namespace AMS2LeagueClient.Core.Presentation
     {
         public const string DefaultFontName = "Pretendard";
         public string BrakeColor { get; set; } = "#FF3030";
+        public double SteeringRangeDegrees { get; set; } = 900;
+        public string TowerDesign { get; set; } = "legacy";
+        public string TelemetryDesign { get; set; } = "legacy";
         public string ThrottleColor { get; set; } = "#20E050";
         public string ClutchColor { get; set; } = "#3399FF";
         public string HandBrakeColor { get; set; } = "#BE60FF";
@@ -21,6 +24,9 @@ namespace AMS2LeagueClient.Core.Presentation
         public DrivingHudSettings Normalize() => new DrivingHudSettings
         {
             BrakeColor = Color(BrakeColor, "#FF3030"),
+            TowerDesign = TowerDesign == "racing" ? "racing" : "legacy",
+            TelemetryDesign = TelemetryDesign == "racing" ? "racing" : "legacy",
+            SteeringRangeDegrees = double.IsFinite(SteeringRangeDegrees) ? Math.Clamp(SteeringRangeDegrees, 180, 1440) : 900,
             ThrottleColor = Color(ThrottleColor, "#20E050"),
             ClutchColor = Color(ClutchColor, "#3399FF"),
             HandBrakeColor = Color(HandBrakeColor, "#BE60FF"),
@@ -40,13 +46,18 @@ namespace AMS2LeagueClient.Core.Presentation
     public sealed class DrivingTelemetrySample
     {
         public DrivingTelemetrySample(DateTimeOffset capturedAt, int generation, int participantIndex,
-            double brake, double throttle, double clutch, double handBrake, double speedMetresPerSecond, int gear)
+            double brake, double throttle, double clutch, double handBrake, double speedMetresPerSecond, int gear,
+            bool absActive = false, double steering = double.NaN, double rpm = double.NaN, double maxRpm = double.NaN)
         {
             CapturedAt = capturedAt; Generation = generation; ParticipantIndex = participantIndex;
             Pedals = Array.AsReadOnly(new[] { Pedal(brake), Pedal(throttle), Pedal(clutch), Pedal(handBrake) });
             SpeedKmh = double.IsFinite(speedMetresPerSecond) && speedMetresPerSecond >= 0
                 && speedMetresPerSecond <= 1000 ? (double?)(speedMetresPerSecond * 3.6) : null;
             Gear = gear >= -1 && gear <= 32 ? (int?)gear : null;
+            AbsActive = absActive && Pedals[0] > 0;
+            Steering = double.IsFinite(steering) && Math.Abs(steering) <= 1 ? (double?)steering : null;
+            Rpm = double.IsFinite(rpm) && rpm >= 0 && rpm <= 100000 ? (double?)rpm : null;
+            MaxRpm = double.IsFinite(maxRpm) && maxRpm > 0 && maxRpm <= 100000 ? (double?)maxRpm : null;
         }
 
         public DateTimeOffset CapturedAt { get; }
@@ -55,6 +66,12 @@ namespace AMS2LeagueClient.Core.Presentation
         public IReadOnlyList<double?> Pedals { get; }
         public double? SpeedKmh { get; }
         public int? Gear { get; }
+        public bool AbsActive { get; }
+        public double? Steering { get; }
+        public double? Rpm { get; }
+        public double? MaxRpm { get; }
+        public double? SteeringDegrees(double range) => Steering * range / 2;
+        public string RpmText => Rpm?.ToString("0", CultureInfo.InvariantCulture) ?? "—";
         public string SpeedText => (SpeedKmh?.ToString("0", CultureInfo.InvariantCulture) ?? "—") + " km/h";
         public string GearText => Gear?.ToString(CultureInfo.InvariantCulture) ?? "—";
 
@@ -63,7 +80,8 @@ namespace AMS2LeagueClient.Core.Presentation
             ViewedVehicleTelemetrySnapshot? vehicle = snapshot.ViewedVehicleTelemetry;
             if (vehicle == null || localIndex < 0 || snapshot.ViewedParticipantIndex != localIndex) return null;
             return new DrivingTelemetrySample(snapshot.CapturedAt, generation, localIndex, vehicle.Brake,
-                vehicle.Throttle, vehicle.Clutch, vehicle.HandBrake, vehicle.SpeedMetresPerSecond, vehicle.Gear);
+                vehicle.Throttle, vehicle.Clutch, vehicle.HandBrake, vehicle.SpeedMetresPerSecond, vehicle.Gear,
+                vehicle.AntiLockActive, vehicle.UnfilteredSteering, vehicle.Rpm, vehicle.MaxRpm);
         }
 
         private static double? Pedal(double value)
@@ -72,7 +90,7 @@ namespace AMS2LeagueClient.Core.Presentation
 
     public sealed class DrivingTelemetryHistory
     {
-        public const int MaximumSamples = 256;
+        public const int MaximumSamples = 1024;
         public const double DurationSeconds = 10;
         private readonly Queue<DrivingTelemetrySample> _samples = new Queue<DrivingTelemetrySample>();
         public IEnumerable<DrivingTelemetrySample> Samples => _samples;

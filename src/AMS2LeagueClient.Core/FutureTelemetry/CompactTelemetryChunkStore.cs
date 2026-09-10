@@ -690,7 +690,8 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             long compressedBytes)
         {
             DateTimeOffset now = DateTimeOffset.UtcNow;
-            bool isPrivate = artifact.SchemaId == CompactTelemetrySchemaId.DriverFastV1
+            bool isPrivate = artifact.SchemaId == CompactTelemetrySchemaId.DriverFastV2
+                || artifact.SchemaId == CompactTelemetrySchemaId.DriverFastV1
                 || artifact.SchemaId == CompactTelemetrySchemaId.DriverMotionV1
                 || artifact.SchemaId == CompactTelemetrySchemaId.DriverSlowV1
                 || artifact.SchemaId == CompactTelemetrySchemaId.DriverChangeV1;
@@ -1079,7 +1080,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 IReadOnlyList<CompactStringDictionaryEntry>? strings)
             {
                 Family = family;
-                SchemaId = schemaId;
+                SchemaId = CompactTelemetrySchemaRegistry.SelectForWrite(schemaId, samples);
                 Samples = samples;
                 CadenceMs = cadenceMs;
                 Participants = participants;

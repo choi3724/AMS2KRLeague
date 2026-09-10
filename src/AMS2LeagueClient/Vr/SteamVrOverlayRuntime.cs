@@ -11,13 +11,12 @@ namespace AMS2LeagueClient.Vr
         private CVRSystem? _system;
         private CVROverlay? _overlay;
         private ulong _handle;
-        private bool _initialized, _shown, _pending;
-        private DateTime _submittedAt;
-        private GCHandle _pixels;
+        private bool _initialized, _shown;
+        private D3D11OverlayTexture? _texture;
         private HmdMatrix34_t? _anchor;
         private readonly TrackedDevicePose_t[] _poses = new TrackedDevicePose_t[1];
         public uint SceneProcessId { get; private set; }
-        public bool CanSubmit => !_pending;
+        public bool CanSubmit => _texture != null;
 
         public bool Connect(out string status)
         {
@@ -45,6 +44,9 @@ namespace AMS2LeagueClient.Vr
                 Check(_overlay.CreateOverlay("kr.ams2league.hud." + Environment.ProcessId, "AMS2 리그 오버레이", ref _handle));
                 Check(_overlay.SetOverlayInputMethod(_handle, VROverlayInputMethod.None));
                 Check(_overlay.SetOverlayFlag(_handle, VROverlayFlags.IsPremultiplied, true));
+                int adapterIndex = -1;
+                _system.GetDXGIOutputInfo(ref adapterIndex);
+                _texture = new D3D11OverlayTexture(adapterIndex);
                 _anchor = null;
                 status = "VR: SteamVR 연결됨 · 시험 기능";
                 return true;
@@ -69,19 +71,15 @@ namespace AMS2LeagueClient.Vr
             }
             for (int i = 0; i < 32 && _overlay.PollNextOverlayEvent(_handle, ref item, size); i++)
             {
-                if (item.eventType == (uint)EVREventType.VREvent_ImageLoaded) ReleasePixels();
-                if (item.eventType == (uint)EVREventType.VREvent_ImageFailed)
-                    throw new InvalidOperationException("VR 이미지 전송 실패");
+                // Drain notifications; persistent D3D textures do not use the raw image loader.
             }
-            if (_pending && DateTime.UtcNow - _submittedAt > TimeSpan.FromSeconds(3))
-                throw new TimeoutException("VR 이미지 응답 없음");
             SceneProcessId = OpenVR.Applications.GetCurrentSceneProcessId();
             return _system.IsTrackedDeviceConnected(OpenVR.k_unTrackedDeviceIndex_Hmd);
         }
 
         public void Submit(VrFrame frame, VrHudSettings settings)
         {
-            if (_overlay == null || _system == null || _pending) return;
+            if (_overlay == null || _system == null || _texture == null) return;
             Check(_overlay.SetOverlayWidthInMeters(_handle, (float)settings.WidthMetres));
             HmdMatrix34_t transform = RelativeTransform(settings);
             if (settings.FollowHead)
@@ -97,11 +95,11 @@ namespace AMS2LeagueClient.Vr
                 transform = Multiply(_anchor.Value, transform);
                 Check(_overlay.SetOverlayTransformAbsolute(_handle, ETrackingUniverseOrigin.TrackingUniverseStanding, ref transform));
             }
-            // One bounded CPU image in flight. Keep its storage alive until ImageLoaded/shutdown.
-            _pixels = GCHandle.Alloc(frame.Rgba, GCHandleType.Pinned);
-            _pending = true;
-            _submittedAt = DateTime.UtcNow;
-            Check(_overlay.SetOverlayRaw(_handle, _pixels.AddrOfPinnedObject(), (uint)frame.Width, (uint)frame.Height, 4));
+            _texture.Submit(frame, pointer =>
+            {
+                var texture = new Texture_t { handle = pointer, eType = ETextureType.DirectX, eColorSpace = EColorSpace.Gamma };
+                Check(_overlay.SetOverlayTexture(_handle, ref texture));
+            });
             if (!_shown) { Check(_overlay.ShowOverlay(_handle)); _shown = true; }
         }
 
@@ -140,11 +138,6 @@ namespace AMS2LeagueClient.Vr
         public void Recenter() => _anchor = null;
         private static void Check(EVROverlayError error)
         { if (error != EVROverlayError.None) throw new InvalidOperationException("SteamVR: " + error); }
-        private void ReleasePixels()
-        {
-            if (_pixels.IsAllocated) _pixels.Free();
-            _pending = false;
-        }
         public void Dispose()
         {
             try
@@ -156,7 +149,7 @@ namespace AMS2LeagueClient.Vr
                 try { if (_initialized) OpenVR.Shutdown(); }
                 finally
                 {
-                    ReleasePixels();
+                    _texture?.Dispose(); _texture = null;
                     _initialized = _shown = false; _handle = 0; SceneProcessId = 0;
                     _overlay = null; _system = null; _anchor = null;
                 }

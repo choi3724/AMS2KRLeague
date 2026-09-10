@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using System.Windows.Media;
 using AMS2LeagueClient.Core.Diagnostics;
 using AMS2LeagueClient.Core.Events;
 using AMS2LeagueClient.Core.Localization;
@@ -44,6 +45,10 @@ namespace AMS2LeagueClient.Runtime
         private readonly Task _telemetryLogTask;
         private readonly DispatcherTimer _processTimer;
         private readonly DispatcherTimer _uiTimer;
+        private int _drivingLocalIndex = -1, _drivingUpdateCount;
+        private long _nextDrivingTicks;
+        private double _drivingRate;
+        private DateTimeOffset _lastDrivingDataAt = DateTimeOffset.MinValue;
         private readonly Stopwatch _uiCadenceClock = Stopwatch.StartNew();
         private readonly Stopwatch _rateClock = Stopwatch.StartNew();
         private readonly Stopwatch _performanceClock = Stopwatch.StartNew();
@@ -120,7 +125,8 @@ namespace AMS2LeagueClient.Runtime
         public void Start()
         {
             _status.SetWaiting();
-            _logger.Info("CLIENT_START", "mode=REAL_CLIENT readOnly=true shmRate=30Hz uiMaxRate=20Hz overlayWindows=BOUNDED_MULTI_HWND diagnostic=" + _diagnostic);
+            _logger.Info("CLIENT_START", "mode=REAL_CLIENT readOnly=true shmRate=30Hz uiMaxRate=20Hz drivingMaxRate=60Hz animationTarget=144Hz overlayWindows=BOUNDED_MULTI_HWND diagnostic=" + _diagnostic);
+            CompositionTarget.Rendering += DrivingFrame;
             _processTimer.Start();
             _uiTimer.Start();
             _telemetryTimer = new System.Threading.Timer(ReadTelemetry, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(33.333));
@@ -283,6 +289,32 @@ namespace AMS2LeagueClient.Runtime
             }
         }
 
+        private void DrivingFrame(object? sender, EventArgs eventArgs)
+        {
+            long ticks = Stopwatch.GetTimestamp();
+            if (ticks < _nextDrivingTicks) return;
+            long interval = Stopwatch.Frequency / 60;
+            if (_nextDrivingTicks == 0) _nextDrivingTicks = ticks;
+            do { _nextDrivingTicks += interval; } while (_nextDrivingTicks <= ticks);
+            if (_disposed || Volatile.Read(ref _processId) < 0 || !_overlay.WantsDrivingTelemetry) return;
+            TelemetrySnapshot? snapshot = Volatile.Read(ref _latest);
+            DrivingTelemetrySample? sample = null;
+            if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CapturedAt < TimeSpan.FromMilliseconds(500)
+                && Monitor.TryEnter(_readerGate))
+            {
+                try { sample = _reader.TryReadDriving(_drivingLocalIndex, _sessionTracker.Generation, snapshot.GameStateRaw, snapshot.SessionStateRaw); }
+                finally { Monitor.Exit(_readerGate); }
+            }
+            if (sample != null)
+            {
+                _lastDrivingDataAt = sample.CapturedAt;
+                _overlay.UpdateDrivingSample(sample);
+                _drivingUpdateCount++;
+            }
+            else if (DateTimeOffset.UtcNow - _lastDrivingDataAt > TimeSpan.FromMilliseconds(150))
+                _overlay.UpdateDrivingSample(null);
+        }
+
         private void UiTick(object? sender, EventArgs eventArgs)
         {
             long nowTicks = _uiCadenceClock.ElapsedTicks;
@@ -320,6 +352,7 @@ namespace AMS2LeagueClient.Runtime
                     : _multiplayerOverlayController.Observe(snapshot, _sessionTracker.Generation, now, _status.SessionPlayMode);
                 LocalParticipantResolution? local = snapshot == null ? null : _localResolver.Resolve(snapshot);
                 bool gameplayValid = snapshot != null && local != null && local.IsValid && local.Participant != null;
+                _drivingLocalIndex = gameplayValid ? local!.Participant!.Index : -1;
                 bool waitingValid = multiplayerDecision?.Mode == MultiplayerOverlayMode.Waiting
                     && multiplayerDecision.Waiting != null;
                 GameWindowSnapshot? outputWindow = _overlay.ResolveOutputWindow(window, _overlay.IsVrSceneActive(pid), pid);
@@ -527,7 +560,7 @@ namespace AMS2LeagueClient.Runtime
                 Interlocked.Increment(ref _uiUpdateCount);
             }
 
-            _overlay.UpdateDrivingTelemetry(snapshot, local.Participant.Index, _sessionTracker.Generation);
+            _overlay.UpdateDrivingSession(snapshot);
             _overlay.ShowAt(window);
             if (!_styleLogged)
             {
@@ -599,6 +632,7 @@ namespace AMS2LeagueClient.Runtime
 
             _snapshotRate = Interlocked.Exchange(ref _successCount, 0) / elapsed;
             _uiRate = Interlocked.Exchange(ref _uiUpdateCount, 0) / elapsed;
+            _drivingRate = _drivingUpdateCount / elapsed; _drivingUpdateCount = 0;
             _rateClock.Restart();
         }
 
@@ -623,6 +657,7 @@ namespace AMS2LeagueClient.Runtime
                     + "% ramMB=" + (process.WorkingSet64 / 1048576.0).ToString("0.0", CultureInfo.InvariantCulture)
                     + " shmHz=" + _snapshotRate.ToString("0.0", CultureInfo.InvariantCulture)
                     + " uiHz=" + _uiRate.ToString("0.0", CultureInfo.InvariantCulture)
+                    + " drivingHz=" + _drivingRate.ToString("0.0", CultureInfo.InvariantCulture)
                     + " queue=" + _eventEngine.Queue.WaitingCount
                     + " animationWindows=" + animationWindows);
                 _lastCpuTime = cpu;
@@ -635,6 +670,7 @@ namespace AMS2LeagueClient.Runtime
         private void Detach(string reason)
         {
             int oldPid = Interlocked.Exchange(ref _processId, -1);
+            _drivingLocalIndex = -1; _lastDrivingDataAt = DateTimeOffset.MinValue;
             lock (_telemetryGate)
             {
                 lock (_readerGate)
@@ -732,6 +768,7 @@ namespace AMS2LeagueClient.Runtime
             }
 
             _disposed = true;
+            CompositionTarget.Rendering -= DrivingFrame;
             _processTimer.Stop();
             _uiTimer.Stop();
             System.Threading.Timer? telemetryTimer = _telemetryTimer;

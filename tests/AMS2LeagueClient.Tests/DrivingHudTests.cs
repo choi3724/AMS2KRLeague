@@ -42,14 +42,13 @@ namespace AMS2LeagueClient.Tests
                     // Render at the graph's own origin, excluding the parent Grid row offset.
                     var visual = new DrawingVisual();
                     using (DrawingContext drawing = visual.RenderOpen())
-                        drawing.DrawRectangle(new VisualBrush(graph) { ViewboxUnits = BrushMappingMode.Absolute,
-                            Viewbox = new Rect(graph.RenderSize), Stretch = Stretch.Fill }, null, new Rect(graph.RenderSize));
+                        drawing.DrawDrawing(VisualTreeHelper.GetDrawing(graph));
                     bitmap.Render(visual);
                     byte[] pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
                     bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
                     var points = new System.Collections.Generic.List<(int X, int Y)>();
                     for (int y = 0; y < bitmap.PixelHeight; y++)
-                        for (int x = 1; x < graph.ActualWidth - 160; x++)
+                        for (int x = 1; x < graph.ActualWidth; x++)
                         {
                             int offset = (y * bitmap.PixelWidth + x) * 4;
                             if (pixels[offset + 2] > 180 && pixels[offset + 1] < 100 && pixels[offset] < 100) points.Add((x, y));
@@ -64,7 +63,7 @@ namespace AMS2LeagueClient.Tests
                     int peakY = points.Min(point => point.Y);
                     return points.Where(point => point.Y <= peakY + 5).Average(point => point.X);
                 }
-                AssertEqual("텔레메트리", Descendants<TextBlock>(view).Single().Text);
+                AssertFalse(Descendants<TextBlock>(view).Any(text => text.Text == "텔레메트리"));
                 var buildCurve = graph.GetType().GetMethod("CreateCurve", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
                 var noisy = new DrivingTelemetryHistory();
                 double rawVariation = 0, lastRaw = 0;
@@ -74,7 +73,7 @@ namespace AMS2LeagueClient.Tests
                     rawVariation += Math.Abs(value - lastRaw); lastRaw = value;
                     noisy.Add(new DrivingTelemetrySample(now.AddSeconds((i - 200) * 0.05), 1, 3, value, 1 - value, 0, 0, 30, 2));
                 }
-                var curve = (StreamGeometry)buildCurve.Invoke(null, new object[] { noisy, 0, now, 380.0, 100.0 })!;
+                var curve = (StreamGeometry)buildCurve.Invoke(null, new object[] { noisy, 0, now, 380.0, 100.0, false })!;
                 // WPF flattening drops unfilled figures. Mark only the measurement copy as filled.
                 PathGeometry measured = PathGeometry.CreateFromGeometry(curve).Clone();
                 foreach (PathFigure figure in measured.Figures) figure.IsFilled = true;
@@ -89,22 +88,26 @@ namespace AMS2LeagueClient.Tests
                 }
                 Console.WriteLine("PROOF smoothing-measure variation=" + variation + " raw=" + rawVariation + " figures=" + flat.Figures.Count + " bounds=" + curve.Bounds);
                 view.SetHistory(noisy); PumpDispatcher(); CaptureLayout(view, "driving-smoothed-noisy-input");
-                AssertTrue(curve.Bounds.Top >= 20 && curve.Bounds.Bottom <= 120.001);
+                AssertTrue(curve.Bounds.Top >= 4 && curve.Bounds.Bottom <= 104.001);
                 AssertTrue(variation > 0 && variation < rawVariation * 0.4);
                 AssertEqual(0.0, noisy.Current!.Pedals[0]!.Value);
                 view.SetHistory(noisy); PumpDispatcher(); CaptureLayout(view, "driving-smoothed-noisy-input");
                 Console.WriteLine("PROOF graph-display variation=" + variation.ToString("F1") + " raw=" + rawVariation.ToString("F1") + "; samples unchanged");
                 noisy.Add(new DrivingTelemetrySample(now.AddSeconds(0.05), 1, 3, double.NaN, 0, 0, 0, 30, 2));
                 noisy.Add(new DrivingTelemetrySample(now.AddSeconds(0.1), 1, 3, 0.5, 0, 0, 0, 30, 2));
-                curve = (StreamGeometry)buildCurve.Invoke(null, new object[] { noisy, 0, now.AddSeconds(0.1), 380.0, 100.0 })!;
+                curve = (StreamGeometry)buildCurve.Invoke(null, new object[] { noisy, 0, now.AddSeconds(0.1), 380.0, 100.0, false })!;
                 AssertEqual(2, PathGeometry.CreateFromGeometry(curve).Figures.Count);
                 view.SetHistory(history); PumpDispatcher();
                 double before = PeakX();
+                var renderCountField = graph.GetType().GetField("_renderCount", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                int rendersBefore = (int)renderCountField.GetValue(graph)!;
                 var frame = new DispatcherFrame();
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
                 timer.Tick += (s, e) => { timer.Stop(); frame.Continue = false; };
                 timer.Start(); Dispatcher.PushFrame(frame);
                 double after = PeakX();
+                AssertTrue((int)renderCountField.GetValue(graph)! - rendersBefore <= 1);
+                Console.WriteLine("PROOF retained graph moves without per-frame OnRender");
                 AssertTrue(before - after > 8 && before - after < 30);
                 AssertEqual(201, history.Count);
                 Console.WriteLine("PROOF graph-left-scroll peakX=" + before.ToString("F1") + " -> " + after.ToString("F1") + " without changing input values");
@@ -116,7 +119,7 @@ namespace AMS2LeagueClient.Tests
                 {
                     overlay.SetViewModel(DemoSnapshotFactory.CreateShell(false), false);
                     overlay.ShowDemoAt(-5000, -5000, 96); AssertTrue(overlay.BeginLayoutEdit());
-                    Window panel = Application.Current.Windows.Cast<Window>().Single(w => w.Title == "AMS2 텔레메트리");
+                    Window panel = Application.Current.Windows.Cast<Window>().Single(w => w.Title == "AMS2 텔레메트리 (기본)");
                     if (_layoutCaptureDirectory != null)
                         for (int i = 0; i < 30; i++) CaptureLayout((FrameworkElement)panel.Content, "driving-motion-" + i.ToString("D2"), 100);
                     overlay.EndLayoutEdit(false);
@@ -154,11 +157,11 @@ namespace AMS2LeagueClient.Tests
             history.Add(new DrivingTelemetrySample(last.AddMilliseconds(100), 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(1, history.Count);
             history.Add(new DrivingTelemetrySample(last.AddSeconds(5), 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(1, history.Count);
             history.Add(new DrivingTelemetrySample(last, 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(1, history.Count);
-            for (int i = 1; i <= 1000; i++)
+            for (int i = 1; i <= 2000; i++)
                 history.Add(new DrivingTelemetrySample(last.AddMilliseconds(i), 2, 4, 0, 0, 0, 0, 0, 0));
             AssertEqual(DrivingTelemetryHistory.MaximumSamples, history.Count);
             history.Add(null); AssertEqual(0, history.Count); AssertTrue(history.Current == null);
-            Console.WriteLine("PROOF driving-history 10000 samples, 20Hz window=201, hardLimit=256, elapsedMs=" + watch.ElapsedMilliseconds);
+            Console.WriteLine("PROOF driving-history 10000 samples, 20Hz window=201, hardLimit=1024, elapsedMs=" + watch.ElapsedMilliseconds);
             var bad = new DrivingHudSettings { BrakeColor = "#xyzxyz", ClutchColor = "#123abc", SpeedFont = "https://remote/font", GearFont = "", SpeedShadowColor = "invalid", GearShadowColor = "#aabbcc" }.Normalize();
             AssertEqual("#FF3030", bad.BrakeColor); AssertEqual("#123ABC", bad.ClutchColor);
             AssertEqual("Pretendard", bad.SpeedFont); AssertEqual("Pretendard", bad.GearFont);
@@ -172,10 +175,14 @@ namespace AMS2LeagueClient.Tests
             var window = new OverlayWindow(false, path);
             try
             {
+                window.SetComponentEnabled(OverlayComponentKeys.Speed, true); window.SetComponentEnabled(OverlayComponentKeys.Gear, true);
+                window.SetComponentEnabled(OverlayComponentKeys.PedalGauge, true); window.SetComponentEnabled(OverlayComponentKeys.DrivingDashboard, true);
+                AssertEqual("legacy", window.GetDrivingHudSettings().TowerDesign);
+                window.SaveDrivingHudSettings(new DrivingHudSettings { TowerDesign = "racing", TelemetryDesign = "racing" });
                 window.SetViewModel(DemoSnapshotFactory.CreateShell(false), false);
                 window.ShowDemoAt(-5000, -5000, 96);
                 Window Panel(string title) => Application.Current.Windows.Cast<Window>().Single(w => w.Title == title);
-                Window pedals = Panel("AMS2 텔레메트리"), speed = Panel("AMS2 속도계"), gear = Panel("AMS2 기어");
+                Window pedals = Panel("AMS2 텔레메트리 (개량)"), gauges = Panel("AMS2 페달 게이지"), speed = Panel("AMS2 속도계"), gear = Panel("AMS2 기어"), dashboard = Panel("AMS2 레이싱 계기판");
                 var speedView = FindDescendant<DrivingNumberView>(speed)!;
                 var gearView = FindDescendant<DrivingNumberView>(gear)!;
                 AssertEqual("— km/h", speedView.ValueText.Text);
@@ -188,17 +195,20 @@ namespace AMS2LeagueClient.Tests
                 var pedalView = Descendants<PedalTelemetryView>(pedals).Single();
                 AssertFalse(Descendants<TextBlock>(pedalView).Any(text => new[] { "브레이크", "악셀", "클러치", "핸드브레이크" }.Contains(text.Text)));
                 Console.WriteLine("PROOF bundled-patch-font Pretendard Medium; Korean/numeric/bar glyphs present");
-                foreach (Window panel in new[] { pedals, speed, gear })
+                foreach (Window panel in new[] { pedals, gauges, speed, gear, dashboard })
                 {
                     AssertTrue(panel.IsVisible);
                     var root = (Grid)panel.Content;
                     AssertTrue(root.InputHitTest(new Point(12, panel.ActualHeight / 2)) is Border);
                     AssertFalse(OverlayWindowInterop.ReadStyleState(new WindowInteropHelper(panel).Handle).ClickThrough);
                     CaptureLayout(root, "driving-preview-" + panel.Title);
+                    var otherBounds = new[] { pedals, gauges, speed, gear, dashboard }.Where(other => other != panel)
+                        .Select(other => (Panel: other, Bounds: new Rect(other.Left, other.Top, other.Width, other.Height))).ToArray();
                     double oldWidth = panel.ActualWidth, oldHeight = panel.ActualHeight;
                     panel.Left += 40; panel.Top += 30; panel.Width *= 1.2; panel.Height *= 1.25;
                     PumpDispatcher();
                     AssertTrue(panel.ActualWidth > oldWidth && panel.ActualHeight > oldHeight);
+                    foreach (var other in otherBounds) AssertEqual(other.Bounds, new Rect(other.Panel.Left, other.Panel.Top, other.Panel.Width, other.Panel.Height));
                     Console.WriteLine("PROOF driving-resize " + panel.Title + " " + panel.ActualWidth + "x" + panel.ActualHeight);
                 }
                 window.EndLayoutEdit(true); PumpDispatcher();
@@ -213,14 +223,14 @@ namespace AMS2LeagueClient.Tests
                 }
                 PumpDispatcher();
                 AssertEqual("260 km/h", speedView.ValueText.Text); AssertEqual("4", gearView.ValueText.Text);
-                foreach (Window panel in new[] { pedals, speed, gear })
+                foreach (Window panel in new[] { pedals, gauges, speed, gear, dashboard })
                 {
                     AssertTrue(OverlayWindowInterop.ReadStyleState(new WindowInteropHelper(panel).Handle).ClickThrough);
                     CaptureLayout((FrameworkElement)panel.Content, "driving-live-" + panel.Title);
                 }
-                var settings = new DrivingHudSettings { BrakeColor = "#FFAA00", ThrottleColor = "#00CCFF",
+                var settings = new DrivingHudSettings { TowerDesign = "racing", TelemetryDesign = "racing", BrakeColor = "#FFAA00", ThrottleColor = "#00CCFF",
                     ClutchColor = "#FFFFFF", HandBrakeColor = "#FF55AA", SpeedFont = "Consolas", GearFont = "Arial",
-                    SpeedShadowColor = "#00AAFF", GearShadowColor = "#FF0066" };
+                    SpeedShadowColor = "#00AAFF", GearShadowColor = "#FF0066", SteeringRangeDegrees = 1080 };
                 window.SaveDrivingHudSettings(settings); PumpDispatcher();
                 AssertEqual("Consolas", speedView.ValueText.FontFamily.Source);
                 AssertEqual("Arial", gearView.ValueText.FontFamily.Source);
@@ -234,18 +244,21 @@ namespace AMS2LeagueClient.Tests
                         AssertTrue(shadow.IsFrozen && shadow.BlurRadius > 0 && shadow.Opacity > 0);
                     }
                 }
-                foreach (Window panel in new[] { pedals, speed, gear }) CaptureLayout((FrameworkElement)panel.Content, "driving-custom-" + panel.Title);
+                foreach (Window panel in new[] { pedals, gauges, speed, gear, dashboard }) CaptureLayout((FrameworkElement)panel.Content, "driving-custom-" + panel.Title);
                 foreach (TextBlock text in new[] { speedView.ValueText, gearView.ValueText })
                 {
                     var root = (FrameworkElement)(text == speedView.ValueText ? speed.Content : gear.Content);
                     Rect bounds = text.TransformToAncestor(root).TransformBounds(new Rect(text.RenderSize));
                     AssertTrue(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= root.ActualWidth + 1 && bounds.Bottom <= root.ActualHeight + 1);
                 }
+                window.SetComponentEnabled(OverlayComponentKeys.PedalTelemetry, false); AssertFalse(pedals.IsVisible); AssertTrue(gauges.IsVisible);
+                window.SetComponentEnabled(OverlayComponentKeys.PedalTelemetry, true);
+                window.SetComponentEnabled(OverlayComponentKeys.PedalGauge, false); AssertFalse(gauges.IsVisible); AssertTrue(pedals.IsVisible);
                 window.SetComponentEnabled(OverlayComponentKeys.Speed, false); AssertFalse(speed.IsVisible); AssertTrue(gear.IsVisible);
                 window.UpdateDrivingTelemetry(Parse(fixture.SetViewedIndex(2), FixedTime().AddSeconds(11)), 3, 1);
                 AssertEqual("—", gearView.ValueText.Text);
                 using (JsonDocument saved = JsonDocument.Parse(File.ReadAllText(path)))
-                    foreach (string key in new[] { OverlayComponentKeys.PedalTelemetry, OverlayComponentKeys.Speed, OverlayComponentKeys.Gear })
+                    foreach (string key in new[] { OverlayComponentKeys.PedalTelemetry, OverlayComponentKeys.PedalGauge, OverlayComponentKeys.Speed, OverlayComponentKeys.Gear, OverlayComponentKeys.DrivingDashboard })
                         AssertTrue(saved.RootElement.GetProperty("components").TryGetProperty(key, out _));
                 window.Close();
                 window = new OverlayWindow(false, path);
@@ -253,25 +266,32 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual("Consolas", window.GetDrivingHudSettings().SpeedFont);
                 AssertEqual("#00AAFF", window.GetDrivingHudSettings().SpeedShadowColor);
                 AssertEqual("#FF0066", window.GetDrivingHudSettings().GearShadowColor);
+                AssertEqual(1080.0, window.GetDrivingHudSettings().SteeringRangeDegrees);
+                AssertEqual("racing", window.GetDrivingHudSettings().TowerDesign); AssertEqual("racing", window.GetDrivingHudSettings().TelemetryDesign);
                 AssertFalse(window.IsComponentEnabled(OverlayComponentKeys.Speed));
+                AssertFalse(window.IsComponentEnabled(OverlayComponentKeys.PedalGauge));
+                AssertTrue(window.IsComponentEnabled(OverlayComponentKeys.PedalTelemetry));
                 window.ResetLayout();
                 AssertEqual("Consolas", window.GetDrivingHudSettings().SpeedFont);
                 AssertEqual("#FFAA00", window.GetDrivingHudSettings().BrakeColor);
 
                 AssertEqual("#00AAFF", window.GetDrivingHudSettings().SpeedShadowColor);
                 AssertEqual("#FF0066", window.GetDrivingHudSettings().GearShadowColor);
+                AssertEqual(1080.0, window.GetDrivingHudSettings().SteeringRangeDegrees);
+                AssertEqual("racing", window.GetDrivingHudSettings().TowerDesign); AssertEqual("racing", window.GetDrivingHudSettings().TelemetryDesign);
                 var dialog = new DrivingHudSettingsWindow(settings);
                 dialog.ShowActivated = false; dialog.Left = -5000; dialog.Top = -5000;
                 dialog.WindowStartupLocation = WindowStartupLocation.Manual;
                 dialog.Show(); PumpDispatcher();
                 AssertEqual(2, Descendants<ComboBox>(dialog).Count());
+                AssertTrue(dialog.ActualHeight <= SystemParameters.WorkArea.Height);
                 AssertEqual(6, Descendants<Button>(dialog).Count(button => button.Tag is string));
                 CaptureLayout((FrameworkElement)dialog.Content, "driving-settings-menu");
                 dialog.Close();
                 var status = new ClientStatusWindow(new ClientStatusViewModel()) { Width = 860, Height = 820 };
                 status.ShowActivated = false; status.WindowStartupLocation = WindowStartupLocation.Manual;
                 status.Left = -5000; status.Top = -5000; status.Show(); PumpDispatcher();
-                AssertEqual(10, status.GetLayoutComponentStates().Count);
+                AssertEqual(12, status.GetLayoutComponentStates().Count);
                 CaptureLayout((FrameworkElement)status.Content, "driving-status-menu-minimum");
                 status.Close();
             }

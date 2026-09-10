@@ -31,7 +31,7 @@ namespace AMS2LeagueClient.Core.RaceControl
         }
 
         private static bool IsBattle(OverlayEventType type)
-            => type == OverlayEventType.Battle;
+            => type == OverlayEventType.Battle || type == OverlayEventType.BattleBehind;
 
         private static bool IsPosition(OverlayEventType type)
             => type == OverlayEventType.PositionGained
