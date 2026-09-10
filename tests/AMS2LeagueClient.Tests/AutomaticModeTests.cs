@@ -128,7 +128,8 @@ namespace AMS2LeagueClient.Tests
             InDirectory(directory =>
             {
                 var detector = CreateMultiplayerDetector(directory);
-                using var runtime = new ActivityCaptureRuntime(Path.Combine(directory, "runtime"), "automatic-mode-fixture", "0.4.1", new FileLogger(Path.Combine(directory, "logs")), playModeDetector: detector);
+                using var logger = new FileLogger(Path.Combine(directory, "logs"));
+                using var runtime = new ActivityCaptureRuntime(Path.Combine(directory, "runtime"), "automatic-mode-fixture", "0.4.1", logger, playModeDetector: detector);
                 var start = DateTimeOffset.UtcNow.AddMinutes(-2);
                 var end = start.AddSeconds(30);
                 var queue = new ActivityUploadQueue(Path.Combine(directory, "queue"), uploadEligibility: runtime.IsActivityUploadAllowed);

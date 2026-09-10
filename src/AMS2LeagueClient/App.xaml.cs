@@ -42,6 +42,7 @@ namespace AMS2LeagueClient
         private DispatcherTimer? _demoEventTimer;
         private bool _allowInteractiveErrors;
         private bool _cleanupStarted;
+        private Task? _cleanupTask;
         private bool _exitStarted;
 
         protected override void OnStartup(StartupEventArgs eventArgs)
@@ -279,10 +280,10 @@ namespace AMS2LeagueClient
                         message => Dispatcher.BeginInvoke(new Action(() => { if (!_cleanupStarted) status.UpdateText = message; })),
                         async () => await Dispatcher.InvokeAsync(() =>
                         {
-                            if (_cleanupStarted) return false;
+                            if (_cleanupStarted || (_activityCapture != null && !_activityCapture.TryReserveUpdateExit())) return false;
                             ExitClient();
                             return true;
-                        }), _logger);
+                        }), _logger, () => _activityCapture?.CanInstallUpdate ?? true);
                     _autoUpdater.Start();
                 }
                 else status.UpdateText = "업데이트: 이 실행에서는 사용 안 함";
@@ -317,11 +318,11 @@ namespace AMS2LeagueClient
             }
         }
 
-        private void ExitClient()
+        private async void ExitClient()
         {
             if (_exitStarted) return;
             _exitStarted = true;
-            CleanupRuntime();
+            await BeginCleanupRuntime();
 
             if (_overlay != null)
             {
@@ -347,23 +348,33 @@ namespace AMS2LeagueClient
             base.OnExit(eventArgs);
         }
 
-        private void CleanupRuntime()
-        {
-            if (_cleanupStarted) return;
-            _cleanupStarted = true;
+        private void CleanupRuntime() => BeginCleanupRuntime().GetAwaiter().GetResult();
 
+        private Task BeginCleanupRuntime()
+        {
+            if (_cleanupTask != null) return _cleanupTask;
+            _cleanupStarted = true;
             CleanupComponent("VR", () => _overlay?.StopVr());
             CleanupComponent("AUTO_UPDATE", () => _autoUpdater?.Dispose());
             _autoUpdater = null;
-            _autoExitTimer?.Stop();
-            _demoEventTimer?.Stop();
+            _autoExitTimer?.Stop(); _demoEventTimer?.Stop();
             CleanupComponent("MEMORY_DIAGNOSTICS", () => _memoryDiagnostics?.Dispose());
             _memoryDiagnostics = null;
-            CleanupComponent("BOOTSTRAP", StopBootstrapRefresh);
-            CleanupComponent("COORDINATOR", () => _coordinator?.Dispose());
-            _coordinator = null;
-            CleanupComponent("ACTIVITY_CAPTURE", () => _activityCapture?.Dispose());
-            _activityCapture = null;
+            _bootstrapCancellation?.Cancel();
+            Task coordinator = Task.CompletedTask;
+            try { coordinator = _coordinator?.DisposeAsync().AsTask() ?? Task.CompletedTask; }
+            catch (Exception exception) { _logger?.Error("COORDINATOR_STOP_FAILED", exception); }
+            _cleanupTask = Task.Run(async () =>
+            {
+                CleanupComponent("BOOTSTRAP", StopBootstrapRefresh);
+                try { await coordinator.ConfigureAwait(false); }
+                catch (Exception exception) { _logger?.Error("COORDINATOR_DRAIN_FAILED", exception); }
+                _coordinator = null;
+                CleanupComponent("ACTIVITY_CAPTURE", () => _activityCapture?.Dispose());
+                _activityCapture = null;
+                if (_logger != null) await _logger.DisposeAsync().ConfigureAwait(false);
+            });
+            return _cleanupTask;
         }
 
         private void CleanupComponent(string component, Action cleanup)

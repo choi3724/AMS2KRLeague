@@ -158,19 +158,27 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
 
     public sealed class ActivityUploadTransportResult
     {
-        private ActivityUploadTransportResult(int? statusCode, bool duplicate, string resultCode)
+        private ActivityUploadTransportResult(int? statusCode, bool duplicate, string resultCode, bool acknowledged = false)
         {
             StatusCode = statusCode;
-            Duplicate = duplicate;
+            Acknowledged = acknowledged;
+            Duplicate = acknowledged && duplicate;
             ResultCode = resultCode ?? string.Empty;
         }
 
         public int? StatusCode { get; }
+        public bool Acknowledged { get; }
         public bool Duplicate { get; }
         public string ResultCode { get; }
 
         public static ActivityUploadTransportResult Http(int statusCode, bool duplicate = false, string resultCode = "")
             => new ActivityUploadTransportResult(statusCode, duplicate, resultCode);
+
+        public static ActivityUploadTransportResult Stored(int statusCode, bool duplicate = false)
+        {
+            if (statusCode < 200 || statusCode >= 300) throw new ArgumentOutOfRangeException(nameof(statusCode));
+            return new ActivityUploadTransportResult(statusCode, duplicate, duplicate ? "DUPLICATE" : "STORED", true);
+        }
 
         public static ActivityUploadTransportResult NetworkFailure(string resultCode = "NETWORK_UNAVAILABLE")
             => new ActivityUploadTransportResult(null, false, resultCode);

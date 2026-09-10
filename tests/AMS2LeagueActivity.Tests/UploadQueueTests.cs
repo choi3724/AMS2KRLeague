@@ -74,7 +74,7 @@ namespace AMS2LeagueActivity.Tests
             queue.Enqueue("activity-retry", "v1/player/activities", "idem-retry-0001", "{\"retry\":true}");
             var transport = new SequenceTransport(
                 ActivityUploadTransportResult.NetworkFailure(),
-                ActivityUploadTransportResult.Http(201));
+                ActivityUploadTransportResult.Stored(201));
             var worker = new ActivityUploadWorker(queue, transport, clock, new FixedJitter(0.5));
 
             ActivityUploadWorkerSummary first = worker.ProcessDueAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -131,7 +131,7 @@ namespace AMS2LeagueActivity.Tests
 
         private static void DuplicateResponseBecomesSent()
         {
-            ActivityUploadItem item = ProcessSingle("queue-duplicate", "idem-duplicate-01", ActivityUploadTransportResult.Http(200, true));
+            ActivityUploadItem item = ProcessSingle("queue-duplicate", "idem-duplicate-01", ActivityUploadTransportResult.Stored(200, true));
             AssertEx.Equal(ActivityUploadStatus.SENT, item.State.Status);
             AssertEx.Equal("DUPLICATE", item.State.LastResult);
         }
@@ -149,7 +149,7 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal(2, queue.GetDueBatch(99).Count);
             var worker = new ActivityUploadWorker(
                 queue,
-                new SequenceTransport(ActivityUploadTransportResult.Http(201), ActivityUploadTransportResult.Http(201)),
+                new SequenceTransport(ActivityUploadTransportResult.Stored(201), ActivityUploadTransportResult.Stored(201)),
                 clock,
                 new FixedJitter(0.5));
             ActivityUploadWorkerSummary summary = worker.ProcessDueAsync(CancellationToken.None).GetAwaiter().GetResult();

@@ -19,10 +19,11 @@ namespace AMS2LeagueClient.Runtime
         private readonly string[] _arguments;
         private readonly Action<string> _status;
         private readonly Func<Task<bool>> _exit;
+        private readonly Func<bool> _canInstall;
         private readonly FileLogger _logger;
         private Task? _worker;
 
-        public GitHubAutoUpdater(string version, string dataRoot, string[] arguments, Action<string> status, Func<Task<bool>> exit, FileLogger logger)
+        public GitHubAutoUpdater(string version, string dataRoot, string[] arguments, Action<string> status, Func<Task<bool>> exit, FileLogger logger, Func<bool>? canInstall = null)
         {
             _version = version;
             _directory = Path.Combine(dataRoot, "updates");
@@ -30,6 +31,7 @@ namespace AMS2LeagueClient.Runtime
             _arguments = arguments;
             _status = status;
             _exit = exit;
+            _canInstall = canInstall ?? (() => true);
             _logger = logger;
         }
 
@@ -82,6 +84,9 @@ namespace AMS2LeagueClient.Runtime
                         string attempt = Path.Combine(_directory, Guid.NewGuid().ToString("N"));
                         var progress = new UpdateProgress(percent => _status("업데이트: " + update.Version + " 다운로드 중 · " + percent + "%"));
                         string installer = downloadedInstaller = await client.DownloadAsync(update, attempt, progress, token).ConfigureAwait(false);
+                        if (!_canInstall())
+                            _status("업데이트: 다운로드 완료 · 경기 기록 저장이 끝나면 자동 설치합니다");
+                        while (!_canInstall()) await Task.Delay(TimeSpan.FromSeconds(5), token).ConfigureAwait(false);
                         _status("업데이트: 다운로드 검증 완료 · 오버레이를 저장하고 자동 설치합니다");
 
                         // The helper must be alive and holding the update lock before we release telemetry and exit.

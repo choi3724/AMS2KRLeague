@@ -33,6 +33,8 @@ namespace AMS2LeagueClient.Overlay
         private readonly DrivingNumberView _gearView = new DrivingNumberView(true);
         private readonly AuxiliaryOverlayWindow[] _drivingWindows;
         private readonly DrivingTelemetryHistory _drivingHistory = new DrivingTelemetryHistory();
+        private double _lastTrackTemperature = double.NaN;
+        public void ResetDrivingTelemetry() { _drivingHistory.Clear(); RefreshDrivingViews(); }
         private DrivingTelemetryHistory _drivingPreview = DemoSnapshotFactory.CreateDrivingPreview();
         private readonly DispatcherTimer _drivingPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         private readonly RelativeDriversView _relativeView = new RelativeDriversView();
@@ -124,6 +126,8 @@ namespace AMS2LeagueClient.Overlay
                 new AuxiliaryOverlayWindow(OverlayComponentKeys.DrivingDashboard, "레이싱 계기판", _dashboardView, OverlayUiMetrics.DashboardWidth, OverlayUiMetrics.DashboardHeight)
             };
             ApplyDrivingAppearance();
+            foreach (var panel in _drivingWindows)
+                panel.IsVisibleChanged += (_, args) => { if ((bool)args.NewValue) RefreshDrivingViews(); };
             _drivingPreviewTimer.Tick += (sender, args) =>
             {
                 _drivingPreview.Add(DemoSnapshotFactory.CreatePreviewSample(DateTimeOffset.UtcNow));
@@ -157,12 +161,16 @@ namespace AMS2LeagueClient.Overlay
             _gearView.ApplyFont(settings.GearFont);
             _speedView.ApplyShadow(settings.SpeedShadowColor);
             _gearView.ApplyShadow(settings.GearShadowColor);
+            RefreshDrivingViews();
         }
 
         public bool WantsDrivingTelemetry => !_layoutPreview && Array.Exists(_drivingWindows, panel => panel.IsVisible);
 
         public void UpdateDrivingSession(TelemetrySnapshot snapshot)
-            => _dashboardView.SetSession(snapshot.TrackTemperature, _viewModel.Timing.RemainingTimeText);
+        {
+            _lastTrackTemperature = snapshot.TrackTemperature;
+            if (_drivingWindows[4].IsVisible) _dashboardView.SetSession(_lastTrackTemperature, _viewModel.Timing.RemainingTimeText);
+        }
 
         public void UpdateDrivingTelemetry(TelemetrySnapshot snapshot, int localIndex, int generation)
         {
@@ -188,14 +196,16 @@ namespace AMS2LeagueClient.Overlay
                 _drivingPreviewTimer.Start();
             }
             else if (!animatePreview) _drivingPreviewTimer.Stop();
-            if (_layoutEditing && _drivingHistory.Current == null) _dashboardView.SetSession(27, "14:03");
+            if (_drivingWindows[4].IsVisible)
+                _dashboardView.SetSession(_layoutEditing && _drivingHistory.Current == null ? 27 : _lastTrackTemperature,
+                    _layoutEditing && _drivingHistory.Current == null ? "14:03" : _viewModel.Timing.RemainingTimeText);
             DrivingTelemetryHistory shown = _layoutEditing && _drivingHistory.Current == null ? _drivingPreview : _drivingHistory;
-            _legacyPedalView.SetHistory(shown);
-            _pedalView.SetHistory(shown);
-            _pedalGaugeView.SetHistory(shown);
-            _speedView.SetSample(shown.Current);
-            _gearView.SetSample(shown.Current);
-            _dashboardView.SetSample(shown.Current, _layoutEditing && _drivingHistory.Current == null ? "P12" : _viewModel.Timing.PositionText.Split('/')[0].Trim());
+            if (_drivingWindows[0].IsVisible && ReferenceEquals(_telemetryHost.Content, _legacyPedalView)) _legacyPedalView.SetHistory(shown);
+            if (_drivingWindows[0].IsVisible && ReferenceEquals(_telemetryHost.Content, _pedalView)) _pedalView.SetHistory(shown);
+            if (_drivingWindows[1].IsVisible) _pedalGaugeView.SetHistory(shown);
+            if (_drivingWindows[2].IsVisible) _speedView.SetSample(shown.Current);
+            if (_drivingWindows[3].IsVisible) _gearView.SetSample(shown.Current);
+            if (_drivingWindows[4].IsVisible) _dashboardView.SetSample(shown.Current, _layoutEditing && _drivingHistory.Current == null ? "P12" : _viewModel.Timing.PositionText.Split('/')[0].Trim());
         }
 
         public bool IsLayoutEditing => _layoutEditing;
@@ -699,7 +709,7 @@ namespace AMS2LeagueClient.Overlay
         private void HideGameplayWindows()
         {
             foreach (AuxiliaryOverlayWindow panel in _drivingWindows) panel.HideOverlay();
-            if (_drivingHistory.Current != null) { _drivingHistory.Clear(); RefreshDrivingViews(); }
+            if (_drivingHistory.Current != null) { _drivingHistory.MarkStale(); RefreshDrivingViews(); }
             if (IsVisible) Hide();
             _relativeWindow.HideOverlay();
             _lapTimingWindow.HideOverlay();

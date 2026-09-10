@@ -97,19 +97,22 @@ namespace AMS2LeagueClient.Core.Presentation
         public int Count => _samples.Count;
         public DrivingTelemetrySample? Current { get; private set; }
 
-        public void Clear() { _samples.Clear(); Current = null; }
+        public DrivingTelemetrySample? LastObserved { get; private set; }
+        public bool IsStale => Current == null && LastObserved != null;
+        public void MarkStale() { Current = null; }
+        public void Clear() { _samples.Clear(); Current = null; LastObserved = null; }
 
         public void Add(DrivingTelemetrySample? sample)
         {
-            if (sample == null) { Clear(); return; }
-            if (Current != null)
+            if (sample == null) { MarkStale(); return; }
+            if (LastObserved != null)
             {
-                double interval = (sample.CapturedAt - Current.CapturedAt).TotalSeconds;
-                if (sample.Generation != Current.Generation || sample.ParticipantIndex != Current.ParticipantIndex
-                    || interval < 0 || interval > 1) Clear();
+                double interval = (sample.CapturedAt - LastObserved.CapturedAt).TotalSeconds;
+                if (sample.Generation != LastObserved.Generation || sample.ParticipantIndex != LastObserved.ParticipantIndex
+                    || interval < 0) Clear();
                 else if (interval == 0) return;
             }
-            Current = sample;
+            Current = LastObserved = sample;
             _samples.Enqueue(sample);
             while (_samples.Count > MaximumSamples
                 || (sample.CapturedAt - _samples.Peek().CapturedAt).TotalSeconds > DurationSeconds)

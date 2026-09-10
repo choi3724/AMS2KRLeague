@@ -40,6 +40,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         public int ChunkIndex { get; }
         public double TargetRateHz { get; }
         public bool HasData => _actual > 0;
+        internal long Revision => (long)_expected + _droppedInputMessages;
 
         public void AddMetadata(SessionMetadataSample sample, int maximumRecords)
         {

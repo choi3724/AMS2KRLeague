@@ -141,7 +141,7 @@ namespace AMS2LeagueActivity.Tests
             {
                 await _release.Task.ConfigureAwait(false);
             }
-            return ActivityUploadTransportResult.Http(201);
+            return ActivityUploadTransportResult.Stored(201);
         }
     }
 

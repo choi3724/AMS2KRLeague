@@ -29,8 +29,10 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         private readonly ArchiveFailureDiagnostics _diagnostics = new ArchiveFailureDiagnostics();
         private readonly Dictionary<(TelemetryStreamType Stream, int Index), long> _retryAfter =
             new Dictionary<(TelemetryStreamType Stream, int Index), long>();
-        private readonly HashSet<(TelemetryStreamType Stream, int Index)> _preservedFailures =
-            new HashSet<(TelemetryStreamType Stream, int Index)>();
+        private readonly Dictionary<(TelemetryStreamType Stream, int Index), long> _preservedFailures =
+            new Dictionary<(TelemetryStreamType Stream, int Index), long>();
+        private readonly Dictionary<(TelemetryStreamType Stream, int Index), (long Revision, Exception Error)> _poison =
+            new Dictionary<(TelemetryStreamType Stream, int Index), (long Revision, Exception Error)>();
         private readonly Dictionary<(TelemetryStreamType Stream, int Index), TelemetryChunkAccumulator> _chunks =
             new Dictionary<(TelemetryStreamType Stream, int Index), TelemetryChunkAccumulator>();
         private readonly Queue<IncidentFrame> _incidentRing = new Queue<IncidentFrame>();
@@ -579,6 +581,11 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 int.MaxValue,
                 Interlocked.Exchange(ref _droppedInputByStream[(int)key.Stream], 0)));
             chunk.AddDroppedInputMessages(droppedInputs);
+            if (_poison.TryGetValue(key, out var failed) && failed.Revision == chunk.Revision)
+            {
+                PreserveFailedSource(key, chunk);
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failed.Error).Throw();
+            }
             string stage = "BUILD";
             try
             {
@@ -587,6 +594,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 TelemetryChunkCommitOutcome outcome = _commit(envelope);
                 _chunks.Remove(key);
                 _retryAfter.Remove(key);
+                _poison.Remove(key);
                 if (outcome.Disposition == TelemetryChunkCommitDisposition.CONFLICT_QUARANTINED)
                 {
                     PreserveFailedSource(key, chunk);
@@ -603,8 +611,10 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 // droppedInputs already belong to the retained chunk. Restoring them
                 // to the stream counter would count them twice on every retry.
                 Interlocked.Increment(ref _commitFailures);
-                if (exception is JsonException || exception is NotSupportedException || exception is CompactTelemetryFormatException)
+                if (exception is JsonException || exception is NotSupportedException || exception is CompactTelemetryFormatException
+                    || exception is InvalidDataException || exception is OverflowException)
                 {
+                    _poison[key] = (chunk.Revision, exception);
                     Interlocked.Increment(ref _serializationLossByStream[(int)key.Stream]);
                 }
                 else if (exception is IOException || exception is UnauthorizedAccessException)
@@ -623,7 +633,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
 
         private void PreserveFailedSource((TelemetryStreamType Stream, int Index) key, TelemetryChunkAccumulator chunk)
         {
-            if (_preservedFailures.Contains(key)) return;
+            if (_preservedFailures.TryGetValue(key, out long revision) && revision == chunk.Revision) return;
             try
             {
                 // Recovery evidence only, never an upload artifact or a durable ACK.
@@ -644,7 +654,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                     }
                     File.Move(temporary, path);
                 }
-                _preservedFailures.Add(key);
+                _preservedFailures[key] = chunk.Revision;
             }
             catch (Exception exception)
             {

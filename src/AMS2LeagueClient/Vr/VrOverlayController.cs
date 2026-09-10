@@ -66,6 +66,8 @@ namespace AMS2LeagueClient.Vr
             }
         }
 
+        public double LastSubmissionMs { get; private set; }
+
         public void Tick(DateTimeOffset now, bool visible, uint expectedSceneProcessId = 0)
         {
             if (_disposed || Output == OverlayOutputMode.Monitor) return;
@@ -91,7 +93,9 @@ namespace AMS2LeagueClient.Vr
                 _nextFrame = now + FrameInterval;
                 VrFrame? frame = _capture();
                 if (frame == null) { _runtime.Hide(); Report("VR: 연결됨 · 표시할 패널 없음"); return; }
-                _runtime.Submit(frame, _settings);
+                long submissionStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                try { _runtime.Submit(frame, _settings); }
+                finally { LastSubmissionMs = System.Diagnostics.Stopwatch.GetElapsedTime(submissionStart).TotalMilliseconds; }
                 Report("VR: SteamVR 전송 중 · 시험 기능 · 최대 15fps");
             }
             catch (Exception exception)

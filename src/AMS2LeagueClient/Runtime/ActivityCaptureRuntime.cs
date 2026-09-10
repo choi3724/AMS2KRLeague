@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -36,6 +37,8 @@ namespace AMS2LeagueClient.Runtime
         private readonly ActivityRecordStore _recordStore;
         private readonly SessionWitnessStore _witnessStore;
         private readonly ActivityUploadQueue _uploadQueue;
+        private readonly ProvisionalActivityStore _provisional;
+        private readonly Task _modeTask;
         private readonly TelemetryChunkUploadQueue _telemetryUploadQueue;
         private readonly ActivityUploadWorker? _uploadWorker;
         private readonly TelemetryChunkUploadWorker? _telemetryUploadWorker;
@@ -48,7 +51,37 @@ namespace AMS2LeagueClient.Runtime
         private readonly Task _witnessTask;
         private readonly Task? _uploadTask;
         private bool _disposed;
+        private bool _updateExitReserved;
+
+        // No filesystem work or waits on a busy capture thread from the UI.
+        public bool CanInstallUpdate
+        {
+            get
+            {
+                if (!Monitor.TryEnter(_engineGate)) return false;
+                try
+                {
+                    return !_disposed && !_updateExitReserved
+                        && _futureTelemetry.CurrentIdentity == null && _futureTelemetry.PendingRestartIdentity == null
+                        && _futureTelemetry.AttemptLossLedgers.All(value => value.CloseRequested && value.FinalizeAcknowledged && value.DurableAck);
+                }
+                finally { Monitor.Exit(_engineGate); }
+            }
+        }
+
+        public bool TryReserveUpdateExit()
+        {
+            if (!Monitor.TryEnter(_engineGate)) return false;
+            try
+            {
+                if (!CanInstallUpdate) return false;
+                _updateExitReserved = true;
+                return true;
+            }
+            finally { Monitor.Exit(_engineGate); }
+        }
         private string _lastModeDiagnostic = string.Empty;
+        private readonly Dictionary<string, string> _sessionDiagnostics = new Dictionary<string, string>();
 
         public ActivityCaptureRuntime(
             string dataRoot,
@@ -80,9 +113,11 @@ namespace AMS2LeagueClient.Runtime
             _completionGate = new RaceUploadCompletionGate(_futureTelemetry.ArchiveRoot);
             _telemetryUploadQueue = new TelemetryChunkUploadQueue(_futureTelemetry.ArchiveRoot,
                 uploadEligibility: metadata => _completionGate.Allows(metadata.SessionId) && IsTelemetryUploadAllowed(metadata));
+            _telemetryUploadQueue.DeliveryDiagnostic = details => LogInfoSafely("TELEMETRY_DELIVERY", details);
             _recordStore = new ActivityRecordStore(root);
             _witnessStore = new SessionWitnessStore(Path.Combine(root, "witness"));
             _uploadQueue = new ActivityUploadQueue(Path.Combine(root, "upload-queue"), uploadEligibility: item => _completionGate.Allows(item) && IsActivityUploadAllowed(item));
+            _provisional = new ProvisionalActivityStore(Path.Combine(root, "provisional-activities"));
             _persistChannel = Channel.CreateUnbounded<ActivityCaptureUpdate>(new UnboundedChannelOptions
             {
                 SingleReader = true,
@@ -112,7 +147,8 @@ namespace AMS2LeagueClient.Runtime
                 if (uploadTransport is Cafe24ActivityUploadTransport cafe24)
                     cafe24.FailureDiagnostic = details => LogInfoSafely("UPLOAD_FORBIDDEN", details);
                 _uploadTransportDisposable = uploadTransport as IDisposable;
-                _uploadWorker = new ActivityUploadWorker(_uploadQueue, uploadTransport);
+                _uploadWorker = new ActivityUploadWorker(_uploadQueue, uploadTransport)
+                { DeliveryDiagnostic = details => LogInfoSafely("ACTIVITY_DELIVERY", details) };
                 if (uploadTransport is ITelemetryChunkUploadTransport telemetryTransport)
                 {
                     _telemetryUploadWorker = new TelemetryChunkUploadWorker(
@@ -128,6 +164,7 @@ namespace AMS2LeagueClient.Runtime
             }
             _recordTask = Task.Run(PersistLoopAsync);
             _witnessTask = Task.Run(PersistWitnessLoopAsync);
+            _modeTask = Task.Run(() => ObserveModeLoopAsync(_uploadCancellation.Token));
             _uploadTask = Task.Run(() => UploadLoopAsync(_uploadCancellation.Token));
         }
 
@@ -160,7 +197,7 @@ namespace AMS2LeagueClient.Runtime
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             lock (_engineGate)
             {
-                if (_disposed) return;
+                if (_disposed || _updateExitReserved) return;
                 if (_completedRace != null)
                 {
                     bool gameplay = snapshot.KnownGameState == GameState.InGamePlaying
@@ -256,7 +293,7 @@ namespace AMS2LeagueClient.Runtime
                         {
                             try
                             {
-                                _uploadTask.GetAwaiter().GetResult();
+                                Task.WhenAll(_uploadTask, _modeTask).GetAwaiter().GetResult();
                             }
                             catch (OperationCanceledException)
                             {
@@ -402,7 +439,9 @@ namespace AMS2LeagueClient.Runtime
                 {
                     byte[] payload = SessionWitnessUploadPayloadBuilder.Build(witness);
                     SessionWitnessStoreOutcome stored = _witnessStore.Commit(witness, payload);
-                    ActivityEnqueueOutcome queued = _uploadQueue.Enqueue(
+                    if (stored.Disposition == SessionWitnessStoreDisposition.ConflictQuarantined)
+                        throw new InvalidDataException("WITNESS_LOCAL_IDENTITY_CONFLICT");
+                    _provisional.Stage(
                         witness.WitnessId,
                         Cafe24Routes.SessionWitnesses,
                         SessionWitnessUploadPayloadBuilder.CreateIdempotencyKey(witness),
@@ -414,8 +453,8 @@ namespace AMS2LeagueClient.Runtime
                         + " completeness=" + witness.CaptureCompleteness
                         + " disposition=" + stored.Disposition
                         + " bytes=" + payload.Length
-                        + " payloadSha256=" + queued.Item.Metadata.BodySha256
-                        + " path=" + stored.WitnessPath);
+                        + " captureSha256=" + stored.PayloadSha256
+                        + " envelope=PROVISIONAL path=" + stored.WitnessPath);
                     return;
                 }
                 catch (Exception exception)
@@ -449,7 +488,9 @@ namespace AMS2LeagueClient.Runtime
                         return;
                     }
 
-                    ActivityEnqueueOutcome queued = _uploadQueue.Enqueue(
+                    if (stored.Disposition == ActivityStoreDisposition.ConflictQuarantined)
+                        throw new InvalidDataException("ACTIVITY_LOCAL_IDENTITY_CONFLICT");
+                    _provisional.Stage(
                         record.ActivityId,
                         Cafe24Routes.PlayerActivities,
                         PlayerActivityUploadPayloadBuilder.CreateIdempotencyKey(record),
@@ -457,9 +498,8 @@ namespace AMS2LeagueClient.Runtime
                     LogInfoSafely("ACTIVITY_LOCAL_COMMIT", CommitDetails(record, stored));
                     LogInfoSafely(
                         "ACTIVITY_UPLOAD_QUEUE",
-                        "activity=" + record.ActivityId + " disposition=" + queued.Disposition
-                        + " queueItem=" + queued.Item.Metadata.QueueItemId
-                        + " payloadSha256=" + queued.Item.Metadata.BodySha256);
+                        "activity=" + record.ActivityId + " envelope=PROVISIONAL"
+                        + " captureSha256=" + stored.PayloadSha256);
                     return;
                 }
                 catch (Exception exception)
@@ -529,20 +569,61 @@ namespace AMS2LeagueClient.Runtime
             catch (Exception e) when (e is JsonException || e is InvalidOperationException || e is FormatException) { return false; }
         }
 
-        private async Task UploadLoopAsync(CancellationToken cancellationToken)
+        private async Task ObserveModeLoopAsync(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
                     _playModeDetector.Refresh();
-                    string modeDiagnostic = "mode=" + SessionPlayModeDetector.WireValue(DetectedPlayMode)
-                        + " source=AMS2_ONLINE_LOG detail=" + _playModeDetector.Diagnostic;
-                    if (_lastModeDiagnostic != modeDiagnostic)
+                    foreach (var ledger in _futureTelemetry.AttemptLossLedgers)
                     {
-                        _lastModeDiagnostic = modeDiagnostic;
-                        LogInfoSafely("SESSION_PLAY_MODE", modeDiagnostic);
+                        string state = "session=" + ledger.SessionId + " attempt=" + ledger.AttemptId
+                            + " capture=" + ledger.Completeness + " closeRequested=" + ledger.CloseRequested
+                            + " finalizeAck=" + ledger.FinalizeAcknowledged + " durableAck=" + ledger.DurableAck
+                            + " knownLoss=" + ledger.KnownLossCount + " completionGate=" + _completionGate.Allows(ledger.SessionId)
+                            + " currentMode=" + SessionPlayModeDetector.WireValue(DetectedPlayMode)
+                            + " block=" + (!ledger.FinalizeAcknowledged ? "WAIT_DURABLE_FINALIZE"
+                                : !_completionGate.Allows(ledger.SessionId) ? "WAIT_STABLE_RACE_WITNESS" : "MULTIPLAYER_RANGE_CHECK_PER_PAYLOAD");
+                        if (!_sessionDiagnostics.TryGetValue(ledger.AttemptId, out string? previous) || previous != state)
+                        { _sessionDiagnostics[ledger.AttemptId] = state; LogInfoSafely("SESSION_CAPTURE_STATE", state); }
                     }
+                    string diagnostic = "mode=" + SessionPlayModeDetector.WireValue(DetectedPlayMode)
+                        + " source=AMS2_ONLINE_LOG detail=" + _playModeDetector.Diagnostic;
+                    if (_lastModeDiagnostic != diagnostic)
+                    {
+                        _lastModeDiagnostic = diagnostic;
+                        LogInfoSafely("SESSION_PLAY_MODE", diagnostic);
+                    }
+                    await Task.Delay(UploadPollInterval, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+                catch (Exception exception)
+                {
+                    LogErrorSafely("SESSION_MODE_OBSERVATION_FAILED", exception);
+                    await Task.Delay(UploadPollInterval, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private async Task UploadLoopAsync(CancellationToken cancellationToken)
+        {
+            // New write-ahead manifests only. Existing unproven orphans are
+            // reported without mutation or automatic resend.
+            try
+            {
+                var recovery = CompactArchiveEvidence.Recover(_futureTelemetry.ArchiveRoot, apply: true);
+                LogInfoSafely("COMPACT_RECOVERY", "validated=" + recovery.ValidChunks
+                    + " rebuilt=" + recovery.RebuiltPendingMetadata + " blocked=" + recovery.Issues.Count);
+            }
+            catch (Exception exception) { LogErrorSafely("COMPACT_RECOVERY_FAILED", exception); }
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    _provisional.Reconcile(_uploadQueue, _playModeDetector.Classify,
+                        (first, last) => _playModeDetector.CanUpload(first, last),
+                        details => LogInfoSafely("ACTIVITY_ELIGIBILITY", details));
                     _completionGate.Refresh(_uploadQueue.Scan());
                     if (_uploadWorker != null)
                     {

@@ -64,7 +64,7 @@ namespace AMS2LeagueClient.Tests
                     return points.Where(point => point.Y <= peakY + 5).Average(point => point.X);
                 }
                 AssertFalse(Descendants<TextBlock>(view).Any(text => text.Text == "텔레메트리"));
-                var buildCurve = graph.GetType().GetMethod("CreateCurve", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+                var buildCurve = typeof(PedalTelemetryView).Assembly.GetType("AMS2LeagueClient.Presentation.PedalCurveBuilder")!.GetMethod("Create", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
                 var noisy = new DrivingTelemetryHistory();
                 double rawVariation = 0, lastRaw = 0;
                 for (int i = 0; i <= 200; i++)
@@ -155,12 +155,14 @@ namespace AMS2LeagueClient.Tests
             history.Add(new DrivingTelemetrySample(last.AddMilliseconds(50), 2, 3, 0, 0, 0, 0, 0, 0));
             AssertEqual(1, history.Count);
             history.Add(new DrivingTelemetrySample(last.AddMilliseconds(100), 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(1, history.Count);
-            history.Add(new DrivingTelemetrySample(last.AddSeconds(5), 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(1, history.Count);
+            history.Add(new DrivingTelemetrySample(last.AddSeconds(5), 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(2, history.Count);
             history.Add(new DrivingTelemetrySample(last, 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(1, history.Count);
             for (int i = 1; i <= 2000; i++)
                 history.Add(new DrivingTelemetrySample(last.AddMilliseconds(i), 2, 4, 0, 0, 0, 0, 0, 0));
             AssertEqual(DrivingTelemetryHistory.MaximumSamples, history.Count);
-            history.Add(null); AssertEqual(0, history.Count); AssertTrue(history.Current == null);
+            history.Add(null); AssertEqual(DrivingTelemetryHistory.MaximumSamples, history.Count); AssertTrue(history.Current == null);
+            AssertTrue(history.IsStale); AssertTrue(history.LastObserved != null);
+            history.Clear(); AssertEqual(0, history.Count); AssertFalse(history.IsStale);
             Console.WriteLine("PROOF driving-history 10000 samples, 20Hz window=201, hardLimit=1024, elapsedMs=" + watch.ElapsedMilliseconds);
             var bad = new DrivingHudSettings { BrakeColor = "#xyzxyz", ClutchColor = "#123abc", SpeedFont = "https://remote/font", GearFont = "", SpeedShadowColor = "invalid", GearShadowColor = "#aabbcc" }.Normalize();
             AssertEqual("#FF3030", bad.BrakeColor); AssertEqual("#123ABC", bad.ClutchColor);
@@ -254,6 +256,11 @@ namespace AMS2LeagueClient.Tests
                 window.SetComponentEnabled(OverlayComponentKeys.PedalTelemetry, false); AssertFalse(pedals.IsVisible); AssertTrue(gauges.IsVisible);
                 window.SetComponentEnabled(OverlayComponentKeys.PedalTelemetry, true);
                 window.SetComponentEnabled(OverlayComponentKeys.PedalGauge, false); AssertFalse(gauges.IsVisible); AssertTrue(pedals.IsVisible);
+                window.SetComponentEnabled(OverlayComponentKeys.Speed, false);
+                window.UpdateDrivingSample(new DrivingTelemetrySample(FixedTime().AddSeconds(11), 1, 3, 0, .5, 0, 0, 50, 4));
+                AssertEqual("260 km/h", speedView.ValueText.Text);
+                window.SetComponentEnabled(OverlayComponentKeys.Speed, true); PumpDispatcher();
+                AssertEqual("180 km/h", speedView.ValueText.Text);
                 window.SetComponentEnabled(OverlayComponentKeys.Speed, false); AssertFalse(speed.IsVisible); AssertTrue(gear.IsVisible);
                 window.UpdateDrivingTelemetry(Parse(fixture.SetViewedIndex(2), FixedTime().AddSeconds(11)), 3, 1);
                 AssertEqual("—", gearView.ValueText.Text);

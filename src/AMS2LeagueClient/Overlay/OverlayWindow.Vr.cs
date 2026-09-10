@@ -20,6 +20,10 @@ namespace AMS2LeagueClient.Overlay
         private uint _vrExpectedProcessId;
         private RenderTargetBitmap? _vrBitmap;
         private byte[]? _vrPixels;
+        public double LastVrComposeMs { get; private set; }
+        public double LastVrRenderMs { get; private set; }
+        public double LastVrCopyMs { get; private set; }
+        public double LastVrConvertMs { get; private set; }
 
         public VrHudSettings GetVrHudSettings() => (_layoutProfile.VrHud ?? new VrHudSettings()).Normalize();
 
@@ -97,6 +101,7 @@ namespace AMS2LeagueClient.Overlay
             double scale = Math.Min(1, VrFrame.MaximumDimension / (double)Math.Max(sourceWidth, sourceHeight));
             int width = Math.Max(1, (int)Math.Round(sourceWidth * scale));
             int height = Math.Max(1, (int)Math.Round(sourceHeight * scale));
+            long stage = System.Diagnostics.Stopwatch.GetTimestamp();
             var drawing = new DrawingVisual();
             bool hasContent = false;
             using (DrawingContext context = drawing.RenderOpen())
@@ -132,10 +137,17 @@ namespace AMS2LeagueClient.Overlay
                 _vrBitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
                 _vrPixels = new byte[width * height * 4];
             }
+            LastVrComposeMs = System.Diagnostics.Stopwatch.GetElapsedTime(stage).TotalMilliseconds;
+            stage = System.Diagnostics.Stopwatch.GetTimestamp();
             _vrBitmap.Clear();
             _vrBitmap.Render(drawing);
+            LastVrRenderMs = System.Diagnostics.Stopwatch.GetElapsedTime(stage).TotalMilliseconds;
+            stage = System.Diagnostics.Stopwatch.GetTimestamp();
             _vrBitmap.CopyPixels(_vrPixels!, width * 4, 0);
+            LastVrCopyMs = System.Diagnostics.Stopwatch.GetElapsedTime(stage).TotalMilliseconds;
+            stage = System.Diagnostics.Stopwatch.GetTimestamp();
             ConvertBgraToRgba(_vrPixels!);
+            LastVrConvertMs = System.Diagnostics.Stopwatch.GetElapsedTime(stage).TotalMilliseconds;
             return new VrFrame(width, height, _vrPixels!);
         }
 

@@ -12,6 +12,8 @@ namespace AMS2LeagueClient.Presentation
     public sealed class DrivingDashboardView : FrameworkElement
     {
         private DrivingTelemetrySample? _sample;
+        private readonly DrawingVisual _inputVisual = new DrawingVisual();
+        private readonly MatrixTransform _layoutTransform = new MatrixTransform();
         private static readonly BitmapImage Housing = LoadHousing();
         private static readonly Brush Body = Frozen(new ImageBrush(Housing) { Viewbox = new Rect(.38, .40, .35, .22), ViewboxUnits = BrushMappingMode.RelativeToBoundingBox, Stretch = Stretch.Fill });
         private static readonly Brush Dial = Frozen(new SolidColorBrush(Color.FromRgb(40, 43, 43)));
@@ -42,13 +44,14 @@ namespace AMS2LeagueClient.Presentation
 
         public DrivingDashboardView()
         {
+            AddVisualChild(_inputVisual); _inputVisual.Transform = _layoutTransform;
             IsVisibleChanged += (_, __) => { if (!IsVisible) ResetMotion(); };
             Unloaded += (_, __) => ResetMotion();
         }
 
         private static DependencyProperty MotionProperty(string name, double value)
             => DependencyProperty.Register(name, typeof(double), typeof(DrivingDashboardView),
-                new FrameworkPropertyMetadata(value, FrameworkPropertyMetadataOptions.AffectsRender));
+                new FrameworkPropertyMetadata(value, (sender, args) => ((DrivingDashboardView)sender).DrawInputArc()));
         private static T Frozen<T>(T value) where T : Freezable { value.Freeze(); return value; }
         private static BitmapImage LoadHousing()
         {
@@ -73,10 +76,11 @@ namespace AMS2LeagueClient.Presentation
         }
         public void SetSession(double trackTemperature, string remaining)
         {
+            string previousTemperature = _temperature, previousRemaining = _remaining;
             _temperature = double.IsFinite(trackTemperature) && trackTemperature >= -60 && trackTemperature <= 100
                 ? "노면 " + trackTemperature.ToString("0", CultureInfo.InvariantCulture) + "°C" : "노면 —";
             _remaining = "남은 " + (string.IsNullOrWhiteSpace(remaining) ? "—" : remaining);
-            InvalidateVisual();
+            if (previousTemperature != _temperature || previousRemaining != _remaining) InvalidateVisual();
         }
         public void SetSample(DrivingTelemetrySample? sample, string position)
         {
@@ -87,7 +91,9 @@ namespace AMS2LeagueClient.Presentation
             _sample = sample;
             if (sample == null) { _temperature = "노면 —"; _remaining = "남은 —"; }
             PositionText = string.IsNullOrWhiteSpace(position) ? "P—" : position;
+            bool priorBraking = _braking;
             _braking = (sample?.Pedals[0] ?? 0) > .01;
+            if (priorBraking != _braking) DrawInputArc();
             double input = (_braking ? sample?.Pedals[0] : sample?.Pedals[1]) ?? 0;
             if (!continuous || !IsVisible) { _inputTarget = input; ResetMotion(); }
             else if (Math.Abs(input - _inputTarget) > .005)
@@ -135,23 +141,11 @@ namespace AMS2LeagueClient.Presentation
         {
             _renderCount++;
             double scale = Math.Min(ActualWidth / 340, ActualHeight / 120);
-            drawing.PushTransform(new MatrixTransform(scale, 0, 0, scale, (ActualWidth - 340 * scale) / 2, (ActualHeight - 120 * scale) / 2));
+            _layoutTransform.Matrix = new Matrix(scale, 0, 0, scale, (ActualWidth - 340 * scale) / 2, (ActualHeight - 120 * scale) / 2);
+            drawing.PushTransform(_layoutTransform);
             drawing.DrawRoundedRectangle(Body, new Pen(Brushes.DimGray, .8), new Rect(47, 18, 282, 82), 41, 41);
             var center = new Point(55, 59);
             drawing.DrawEllipse(Dial, Rim, center, 43, 43);
-            if (InputLevel > .001)
-            {
-                double sweep = 300 * Math.Clamp(InputLevel, 0, 1);
-                Point ArcPoint(double degrees) => new Point(55 + 43 * Math.Cos(degrees * Math.PI / 180), 59 + 43 * Math.Sin(degrees * Math.PI / 180));
-                var arc = new StreamGeometry();
-                using (var context = arc.Open())
-                {
-                    context.BeginFigure(ArcPoint(150), false, false);
-                    context.ArcTo(ArcPoint(150 + sweep), new Size(43, 43), 0, sweep > 180, SweepDirection.Clockwise, true, false);
-                }
-                arc.Freeze();
-                drawing.DrawGeometry(null, new Pen(_braking ? Brushes.OrangeRed : Brushes.LimeGreen, 3.5), arc);
-            }
             drawing.DrawEllipse(_glow, null, center, 45, 45);
             for (int i = 0; i < 15; i++)
             {
@@ -170,6 +164,25 @@ namespace AMS2LeagueClient.Presentation
             Text(drawing, 6, _temperature, 11, 62, 101, Brushes.White, _speedFont);
             Text(drawing, 7, _remaining, 11, 177, 101, Brushes.White, _speedFont);
             drawing.Pop();
+        }
+        protected override int VisualChildrenCount => 1;
+        protected override Visual GetVisualChild(int index) => index == 0 ? _inputVisual : throw new ArgumentOutOfRangeException(nameof(index));
+        private void DrawInputArc()
+        {
+            using var drawing = _inputVisual.RenderOpen();
+            if (InputLevel > .001)
+            {
+                double sweep = 300 * Math.Clamp(InputLevel, 0, 1);
+                Point ArcPoint(double degrees) => new Point(55 + 43 * Math.Cos(degrees * Math.PI / 180), 59 + 43 * Math.Sin(degrees * Math.PI / 180));
+                var arc = new StreamGeometry();
+                using (var context = arc.Open())
+                {
+                    context.BeginFigure(ArcPoint(150), false, false);
+                    context.ArcTo(ArcPoint(150 + sweep), new Size(43, 43), 0, sweep > 180, SweepDirection.Clockwise, true, false);
+                }
+                arc.Freeze();
+                drawing.DrawGeometry(null, new Pen(_braking ? Brushes.OrangeRed : Brushes.LimeGreen, 3.5), arc);
+            }
         }
         private void Text(DrawingContext drawing, int slot, string value, double size, double x, double y, Brush color, Typeface font, bool centered = false)
         {

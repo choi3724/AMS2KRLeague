@@ -82,6 +82,16 @@ namespace AMS2LeagueClient.Tests
             }
             var tests = new (string Name, Action Test)[]
             {
+                ("401 credential recovery preserves identity and prevents storms", AuthenticationRecoveryPreservesIdentity),
+                ("Late mode evidence finalizes one immutable envelope", DelayedModeFinalizesOnce),
+                ("Bounded logger preserves order drains and survives IO", BoundedLoggerDrainsAndSurvivesIo),
+                ("History preserves stale gaps and resets identity", HistoryGapAndGenerationStayDistinct),
+                ("Anomalous speed diagnostics preserve SHM values", SpeedDiagnosticsPreserveSource),
+                ("UiTick fault boundary remains conservative", UiTickFaultBoundaryIsConservative),
+                ("Shutdown drains callbacks without blocking Dispatcher", CoordinatorShutdownDoesNotBlockDispatcher),
+                ("Telemetry 401 recovery retains the exact upload", TelemetryAuthenticationIsRetryable),
+                ("Activity semantic ACK never accepts ambiguous success", ActivitySemanticAcknowledgements),
+                ("Telemetry ambiguous ACK retains exact bytes for retry", AmbiguousTelemetryAcknowledgements),
                 ("Main overlay gallery previews and direct selection persist", MainOverlayGallery),
                 ("Telemetry layouts separate gauges and keep wheel angle compact", TelemetryPanelLayouts),
                 ("Driving graph scrolls existing points left between samples", DrivingGraphScrollsLeft),
@@ -2389,7 +2399,7 @@ namespace AMS2LeagueClient.Tests
             public Task<ActivityUploadTransportResult> SendAsync(
                 ActivityUploadItem item,
                 CancellationToken cancellationToken)
-                => Task.FromResult(ActivityUploadTransportResult.Http(201, false, "STORED"));
+                => Task.FromResult(ActivityUploadTransportResult.Stored(201));
 
             public Task<TelemetryChunkUploadTransportResult> SendTelemetryChunkAsync(
                 TelemetryChunkUploadItem item,

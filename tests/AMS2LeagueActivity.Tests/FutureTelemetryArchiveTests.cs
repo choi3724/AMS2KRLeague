@@ -18,6 +18,7 @@ namespace AMS2LeagueActivity.Tests
         {
             yield return new TestCase("Long-track product archive finalizes all six extended schemas", LongTrackFinalizes);
             yield return new TestCase("Future telemetry fixture inventory", FixedFixtureInventory);
+            yield return new TestCase("Compact recovery validates identity hash and private ownership", CompactRecoveryPreservesProvenance);
             yield return new TestCase("Future telemetry identity joins all streams and separates attempts", IdentityAndAttempts);
             yield return new TestCase("Future telemetry clock is monotonic and independent from lap time", MonotonicCaptureClock);
             yield return new TestCase("Future telemetry defaults are 30s 5Hz 20Hz 20Hz", DefaultTierPolicy);
@@ -650,7 +651,11 @@ namespace AMS2LeagueActivity.Tests
             var options = new TelemetryArchiveOptions { ChunkDurationMs = 1000 };
             var store = new CompactTelemetryChunkStore(directory.Root, identity, options);
             var diagnostics = new List<string>();
-            var archive = new LocalDurableTelemetryArchive(directory.Root, identity, options, store.Commit, null)
+            int invalidEncodings = 0;
+            var archive = new LocalDurableTelemetryArchive(directory.Root, identity, options, envelope => {
+                if (envelope.StreamType == TelemetryStreamType.RACE_STORY && envelope.ChunkIndex == 0) invalidEncodings++;
+                return store.Commit(envelope);
+            }, null)
             { FailureDiagnostic = diagnostics.Add };
             archive.TryCaptureRaceStory(new RaceStoryEventSample
             {
@@ -664,7 +669,9 @@ namespace AMS2LeagueActivity.Tests
                 CapturedAtUtc = At(1100), LapDistanceMeters = 25
             });
             archive.TryCaptureFrame(Frame(1100, 2, true));
+            archive.TryCaptureFrame(Frame(7000, 2, true));
             AssertDisposeFails(archive);
+            AssertEx.Equal(1, invalidEncodings);
             CompactTelemetryEnvelope[] frames = Directory.GetFiles(directory.Root, "*.a2ct.gz", SearchOption.AllDirectories)
                 .Select(path => { using var file = File.OpenRead(path); return CompactTelemetryCodec.Decode(TelemetryChunkSerializer.Gunzip(file)); })
                 .ToArray();
@@ -725,6 +732,13 @@ namespace AMS2LeagueActivity.Tests
             byte[] before = File.ReadAllBytes(payload);
             // Only this test's known empty blocking directory; never production evidence.
             Directory.Delete(blocked);
+            var dryRun = CompactArchiveEvidence.Recover(directory.Root);
+            AssertEx.Equal(1, dryRun.RebuiltPendingMetadata);
+            AssertEx.False(File.Exists(blocked));
+            var recovered = CompactArchiveEvidence.Recover(directory.Root, apply: true);
+            AssertEx.Equal(1, recovered.RebuiltPendingMetadata);
+            AssertEx.Equal(0, recovered.Issues.Count);
+            AssertEx.Equal(0, CompactArchiveEvidence.Recover(directory.Root, apply: true).RebuiltPendingMetadata);
             TelemetryChunkCommitOutcome result = store.Commit(source);
             AssertEx.True(result.Disposition != TelemetryChunkCommitDisposition.CONFLICT_QUARANTINED);
             AssertEx.True(before.SequenceEqual(File.ReadAllBytes(payload)), "Retry changed compact bytes after a partial durable write.");
@@ -732,6 +746,43 @@ namespace AMS2LeagueActivity.Tests
             CompactTelemetryEnvelope decoded = CompactTelemetryCodec.Decode(TelemetryChunkSerializer.Gunzip(file));
             AssertEx.True(decoded.Participants.Count == 3, "Retry lost the initial participant dictionary.");
             AssertEx.False(Directory.Exists(Path.Combine(session, "conflicts")));
+        }
+
+        private static void CompactRecoveryPreservesProvenance()
+        {
+            using var directory = new TemporaryDirectory("compact-recovery-private");
+            var identity = FixedIdentity("compact-recovery");
+            var store = new CompactTelemetryChunkStore(directory.Root, identity);
+            var accumulator = new TelemetryChunkAccumulator(identity, TelemetryStreamType.DRIVER_TELEMETRY, 0, 20);
+            accumulator.AddDriver(Frame(0, 1, true), 1);
+            store.Commit(accumulator.Build());
+            string[] metadataPaths = Directory.GetFiles(directory.Root, "*.upload.json", SearchOption.AllDirectories);
+            AssertEx.True(metadataPaths.Length > 0);
+            foreach (string path in metadataPaths) File.Delete(path);
+            var recovered = CompactArchiveEvidence.Recover(directory.Root, apply: true);
+            AssertEx.Equal(metadataPaths.Length, recovered.RebuiltPendingMetadata);
+            AssertEx.Equal(0, recovered.Issues.Count);
+            AssertEx.Equal(0, new TelemetryChunkUploadQueue(directory.Root).GetDueBatch(64, DateTimeOffset.UtcNow).Count);
+            foreach (string path in metadataPaths)
+                AssertEx.Equal(TelemetryVisibility.PRIVATE_DRIVER_ANALYTICS, TelemetryChunkSerializer.DeserializeMetadata(File.ReadAllBytes(path)).Visibility);
+            AssertEx.Equal(0, CompactArchiveEvidence.Recover(directory.Root, apply: true).RebuiltPendingMetadata);
+            string first = metadataPaths[0];
+            byte[] plan = File.ReadAllBytes(first + ".commit");
+            var metadata = TelemetryChunkSerializer.DeserializeMetadata(plan);
+            metadata.Visibility = TelemetryVisibility.PUBLIC_REPLAY;
+            File.WriteAllBytes(first + ".commit", TelemetryChunkSerializer.SerializeMetadata(metadata));
+            File.Delete(first);
+            AssertEx.Equal(1, CompactArchiveEvidence.Recover(directory.Root, apply: true).Issues.Count);
+            AssertEx.False(File.Exists(first));
+            File.WriteAllBytes(first + ".commit", plan);
+            string chunk = Path.Combine(directory.Root, metadata.RelativeChunkPath);
+            byte[] original = File.ReadAllBytes(chunk);
+            File.WriteAllBytes(chunk, new byte[] { 1, 2, 3 });
+            AssertEx.Equal(1, CompactArchiveEvidence.Recover(directory.Root, apply: true).Issues.Count);
+            File.WriteAllBytes(chunk, original);
+            File.Delete(first + ".commit");
+            AssertEx.Equal(1, CompactArchiveEvidence.Recover(directory.Root, apply: true).Issues.Count);
+            AssertEx.False(File.Exists(first));
         }
 
         private static void ArchiveFailureStagesAreDistinct()

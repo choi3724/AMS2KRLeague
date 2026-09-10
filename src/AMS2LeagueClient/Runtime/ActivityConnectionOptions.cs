@@ -47,6 +47,12 @@ namespace AMS2LeagueClient.Runtime
         // Binding the exact API path prevents reuse against a different server.
         private volatile Tuple<string, bool, bool>? _gzipRequestSupport;
 
+        // Shared by bootstrap/upload transports using this connection. Not serialized.
+        internal string RejectedBearerToken = string.Empty;
+        internal DateTimeOffset NextEnrollmentAttemptUtc;
+        internal int EnrollmentFailures;
+        internal string EnrollmentFailureCode = "AUTH_REQUIRED";
+
         internal void SetGzipRequestSupport(Uri? apiUri, bool activities = false, bool witnesses = false)
             => _gzipRequestSupport = apiUri == null ? null
                 : Tuple.Create(apiUri.GetLeftPart(UriPartial.Path), activities, witnesses);

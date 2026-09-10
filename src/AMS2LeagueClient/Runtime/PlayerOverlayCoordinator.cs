@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using System.Windows.Media;
@@ -20,7 +19,7 @@ using AMS2LeagueClient.Presentation;
 
 namespace AMS2LeagueClient.Runtime
 {
-    public sealed class PlayerOverlayCoordinator : IDisposable
+    public sealed class PlayerOverlayCoordinator : IDisposable, IAsyncDisposable
     {
         private readonly OverlayWindow _overlay;
         private readonly ClientStatusViewModel _status;
@@ -41,12 +40,11 @@ namespace AMS2LeagueClient.Runtime
         private readonly InvalidLapDisplayTracker _invalidLapDisplayTracker = new InvalidLapDisplayTracker();
         private readonly object _readerGate = new object();
         private readonly object _telemetryGate = new object();
-        private readonly Channel<TelemetryLogEntry> _telemetryLogChannel;
-        private readonly Task _telemetryLogTask;
         private readonly DispatcherTimer _processTimer;
         private readonly DispatcherTimer _uiTimer;
         private int _drivingLocalIndex = -1, _drivingUpdateCount;
         private long _nextDrivingTicks;
+        private DateTimeOffset _nextSpeedDiagnosticAt;
         private double _drivingRate;
         private DateTimeOffset _lastDrivingDataAt = DateTimeOffset.MinValue;
         private readonly Stopwatch _uiCadenceClock = Stopwatch.StartNew();
@@ -84,6 +82,8 @@ namespace AMS2LeagueClient.Runtime
         private TimeSpan _lastCpuTime;
         private DateTimeOffset _lastPerformanceAt = DateTimeOffset.UtcNow;
         private volatile bool _disposed;
+        private Task _detachTask = Task.CompletedTask;
+        private Task? _shutdownTask;
 
         public PlayerOverlayCoordinator(
             OverlayWindow overlay,
@@ -97,13 +97,6 @@ namespace AMS2LeagueClient.Runtime
             _logger = logger;
             _diagnostic = diagnostic;
             _activityCapture = activityCapture;
-            _telemetryLogChannel = Channel.CreateUnbounded<TelemetryLogEntry>(new UnboundedChannelOptions
-            {
-                SingleReader = true,
-                SingleWriter = false,
-                AllowSynchronousContinuations = false
-            });
-            _telemetryLogTask = Task.Run(TelemetryLogLoopAsync);
             _processTimer = new DispatcherTimer(DispatcherPriority.Background)
             {
                 Interval = TimeSpan.FromSeconds(1)
@@ -137,6 +130,8 @@ namespace AMS2LeagueClient.Runtime
         {
             try
             {
+                if (!_detachTask.IsCompleted) return; // Drain the old capture before accepting a new process.
+                if (_detachTask.IsFaulted) { _detachTask.GetAwaiter().GetResult(); return; }
                 Ams2ProcessInfo? process = _processMonitor.FindRunningProcess();
                 if (process == null)
                 {
@@ -155,6 +150,7 @@ namespace AMS2LeagueClient.Runtime
                     if (previous != -1)
                     {
                         Detach("process replaced");
+                        return;
                     }
 
                     _processName = process.ProcessName;
@@ -204,6 +200,12 @@ namespace AMS2LeagueClient.Runtime
                 if (result.Status == TelemetryReadStatus.Success && result.Snapshot != null)
                 {
                     TelemetrySnapshot snapshot = result.Snapshot;
+                    if (snapshot.CapturedAt >= _nextSpeedDiagnosticAt)
+                    {
+                        string? anomaly = DescribeSpeedAnomaly(snapshot, _sessionTracker.Generation);
+                        if (anomaly != null)
+                        { QueueTelemetryWarning("SHM_SPEED_RANGE", anomaly); _nextSpeedDiagnosticAt = snapshot.CapturedAt.AddSeconds(30); }
+                    }
                     Interlocked.Exchange(ref _latest, snapshot);
                     Interlocked.Increment(ref _successCount);
                     _activityCapture?.Observe(snapshot);
@@ -671,27 +673,24 @@ namespace AMS2LeagueClient.Runtime
         {
             int oldPid = Interlocked.Exchange(ref _processId, -1);
             _drivingLocalIndex = -1; _lastDrivingDataAt = DateTimeOffset.MinValue;
-            lock (_telemetryGate)
+            Interlocked.Exchange(ref _latest, null);
+            _lastReadStatus = TelemetryReadStatus.MappingUnavailable;
+            _sharedMemoryAttached = false;
+            _lastPresentationKey = _lastWindowKey = _lastInvalidSplitKey = _lastEventId = string.Empty;
+            _eventEngine.Reset();
+            _raceControlAnalyzer.Reset();
+            _multiplayerOverlayController.Reset();
+            _overlay.ResetDrivingTelemetry();
+            _overlay.HideOverlay();
+            _detachTask = Task.Run(() =>
             {
-                lock (_readerGate)
+                lock (_telemetryGate)
                 {
-                    _reader.Reset();
-                    _sessionTracker.Reset();
+                    lock (_readerGate) { _reader.Reset(); _sessionTracker.Reset(); }
+                    Interlocked.Exchange(ref _latest, null);
+                    _activityCapture?.GameDetached();
                 }
-
-                Interlocked.Exchange(ref _latest, null);
-                _lastReadStatus = TelemetryReadStatus.MappingUnavailable;
-                _sharedMemoryAttached = false;
-                _lastPresentationKey = string.Empty;
-                _lastWindowKey = string.Empty;
-                _lastInvalidSplitKey = string.Empty;
-                _lastEventId = string.Empty;
-                _eventEngine.Reset();
-                _raceControlAnalyzer.Reset();
-                _multiplayerOverlayController.Reset();
-                _overlay.HideOverlay();
-                _activityCapture?.GameDetached();
-            }
+            });
             _logger.Info("AMS2_DETACH", "pid=" + oldPid + " reason=" + reason + " reattach=WAIT");
         }
 
@@ -721,91 +720,63 @@ namespace AMS2LeagueClient.Runtime
                 + (currentEvent?.Id ?? "-") + "|" + queuedEvents;
         }
 
+        public static string? DescribeSpeedAnomaly(TelemetrySnapshot snapshot, int generation)
+        {
+            // Diagnostic only: schema 0x0030 stores 0.01m/s in [0,65535].
+            // Preserve the SHM value; neither clamp nor reinterpret it here.
+            float rootSpeed = snapshot.ViewedVehicleTelemetry?.SpeedMetresPerSecond ?? float.NaN;
+            ParticipantSnapshot? participant = null;
+            for (int index = 0; index < snapshot.Participants.Count; index++)
+            {
+                var value = snapshot.Participants[index];
+                if (float.IsFinite(value.SpeedMetresPerSecond) && value.SpeedMetresPerSecond > 655.35f)
+                { participant = value; break; }
+            }
+            if (!(float.IsFinite(rootSpeed) && rootSpeed > 655.35f) && participant == null) return null;
+            return "at=" + snapshot.CapturedAt.ToString("O") + " sequence=" + snapshot.SequenceNumber
+                + " generation=" + generation + " game=" + snapshot.GameStateRaw + " session=" + snapshot.SessionStateRaw
+                + " viewedSlot=" + snapshot.ViewedParticipantIndex + " rootSpeed=" + FormatFloat(rootSpeed)
+                + " rootBits=" + BitConverter.SingleToInt32Bits(rootSpeed).ToString("X8")
+                + " anomalySlot=" + participant?.Index + " participantSpeed=" + (participant == null ? "NONE" : FormatFloat(participant.SpeedMetresPerSecond))
+                + " active=" + participant?.IsActive + " raceState=" + participant?.RaceStateRaw
+                + " lap=" + participant?.CurrentLap + " distance=" + participant?.CurrentLapDistance
+                + " rootOffset=6848 participantOffset=10800 unit=m/s rawPreserved=true";
+        }
+
         private static string FormatFloat(float value)
         {
             return value.ToString("R", CultureInfo.InvariantCulture);
         }
 
-        private void QueueTelemetryInfo(string eventName, string details)
-            => _telemetryLogChannel.Writer.TryWrite(new TelemetryLogEntry("INFO", eventName, details, null));
+        // FileLogger already owns the bounded background writer. A second
+        // unbounded queue would defeat its memory ceiling during disk stalls.
+        private void QueueTelemetryInfo(string eventName, string details) => _logger.Info(eventName, details);
+        private void QueueTelemetryWarning(string eventName, string details) => _logger.Warning(eventName, details);
+        private void QueueTelemetryError(string eventName, Exception exception) => _logger.Error(eventName, exception);
 
-        private void QueueTelemetryWarning(string eventName, string details)
-            => _telemetryLogChannel.Writer.TryWrite(new TelemetryLogEntry("WARN", eventName, details, null));
+        public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
-        private void QueueTelemetryError(string eventName, Exception exception)
-            => _telemetryLogChannel.Writer.TryWrite(new TelemetryLogEntry("ERROR", eventName, string.Empty, exception));
-
-        private async Task TelemetryLogLoopAsync()
+        public ValueTask DisposeAsync()
         {
-            await foreach (TelemetryLogEntry entry in _telemetryLogChannel.Reader.ReadAllAsync())
-            {
-                try
-                {
-                    if (entry.Exception != null)
-                    {
-                        _logger.Error(entry.EventName, entry.Exception);
-                    }
-                    else if (entry.Level == "WARN")
-                    {
-                        _logger.Warning(entry.EventName, entry.Details);
-                    }
-                    else
-                    {
-                        _logger.Info(entry.EventName, entry.Details);
-                    }
-                }
-                catch (Exception exception) when (exception is System.IO.IOException || exception is UnauthorizedAccessException)
-                {
-                }
-            }
-        }
-
-        public void Dispose()
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
+            if (_shutdownTask != null) return new ValueTask(_shutdownTask);
             _disposed = true;
             CompositionTarget.Rendering -= DrivingFrame;
-            _processTimer.Stop();
-            _uiTimer.Stop();
+            _processTimer.Stop(); _uiTimer.Stop();
+            _overlay.HideOverlay();
             System.Threading.Timer? telemetryTimer = _telemetryTimer;
             _telemetryTimer = null;
-            if (telemetryTimer != null)
+            _shutdownTask = Task.Run(async () =>
             {
-                // DisposeAsync completes only after callbacks already in flight
-                // have returned, so child capture runtimes can be drained safely.
-                telemetryTimer.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            }
-            lock (_telemetryGate)
-            {
-                lock (_readerGate)
-                {
-                    _reader.Dispose();
-                }
-            }
-            _telemetryLogChannel.Writer.TryComplete();
-            _telemetryLogTask.GetAwaiter().GetResult();
-            _overlay.HideOverlay();
-            _logger.Info("CLIENT_STOP", "clean=true");
+                // Timer callbacks and a previous process detach finish before
+                // the reader and downstream capture are allowed to shut down.
+                if (telemetryTimer != null) await telemetryTimer.DisposeAsync().ConfigureAwait(false);
+                try { await _detachTask.ConfigureAwait(false); }
+                catch (Exception exception) { _logger.Error("DETACH_DRAIN_FAILED", exception); }
+                lock (_telemetryGate) { lock (_readerGate) { _reader.Dispose(); } }
+                _logger.Info("CLIENT_STOP", "clean=true");
+            });
+            return new ValueTask(_shutdownTask);
         }
 
-        private sealed class TelemetryLogEntry
-        {
-            public TelemetryLogEntry(string level, string eventName, string details, Exception? exception)
-            {
-                Level = level;
-                EventName = eventName;
-                Details = details;
-                Exception = exception;
-            }
-
-            public string Level { get; }
-            public string EventName { get; }
-            public string Details { get; }
-            public Exception? Exception { get; }
-        }
     }
 }

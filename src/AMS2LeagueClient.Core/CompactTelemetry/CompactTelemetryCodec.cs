@@ -300,6 +300,9 @@ namespace AMS2LeagueClient.Core.CompactTelemetry
                 {
                     throw new CompactTelemetryFormatException("Sample field count does not match the immutable schema.");
                 }
+                // Reject poison values before allocating encoded dictionaries or columns.
+                for (int field = 0; field < schema.Fields.Count; field++)
+                    if (sample.Values[field].HasValue) schema.Fields[field].Quantize(sample.Values[field]!.Value);
                 if (envelope.Block.CadenceMs == 0)
                 {
                     long minimum = sampleIndex == 0

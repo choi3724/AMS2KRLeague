@@ -670,10 +670,22 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                     payloadSha, compressedSha, payload.Length, compressed.Length);
             }
 
-            AtomicWrite(chunkPath, compressed);
-            AtomicWrite(metadataPath, TelemetryChunkSerializer.SerializeMetadata(CreateMetadata(
+            byte[] metadataBytes = TelemetryChunkSerializer.SerializeMetadata(CreateMetadata(
                 source, artifact, sequence, chunkId, chunkPath, payloadSha, compressedSha,
-                payload.Length, compressed.Length)));
+                payload.Length, compressed.Length));
+            string journalPath = metadataPath + ".commit";
+            if (!File.Exists(journalPath)) AtomicWrite(journalPath, metadataBytes);
+            else
+            {
+                var planned = TelemetryChunkSerializer.DeserializeMetadata(File.ReadAllBytes(journalPath));
+                if (planned.ChunkId != chunkId || planned.PayloadSha256 != payloadSha || planned.CompressedSha256 != compressedSha
+                    || planned.SessionId != source.SessionId || planned.AttemptId != source.AttemptId
+                    || planned.WitnessId != source.WitnessId || planned.SessionFingerprint != source.SessionFingerprint)
+                    throw new InvalidDataException("COMPACT_COMMIT_PLAN_CONFLICT");
+                metadataBytes = File.ReadAllBytes(journalPath);
+            }
+            AtomicWrite(chunkPath, compressed);
+            AtomicWrite(metadataPath, metadataBytes);
             return Outcome(TelemetryChunkCommitDisposition.STORED, chunkPath, metadataPath,
                 payloadSha, compressedSha, payload.Length, compressed.Length);
         }

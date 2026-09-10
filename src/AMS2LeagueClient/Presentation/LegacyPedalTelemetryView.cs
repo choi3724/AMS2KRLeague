@@ -54,7 +54,7 @@ namespace AMS2LeagueClient.Presentation
                 {
                     _current = history.Current;
                     _curvesDirty = true;
-                    _scrollClock.Restart();
+                    if (_current != null) _scrollClock.Restart();
                 }
                 UpdateRendering();
                 InvalidateVisual();
@@ -75,42 +75,6 @@ namespace AMS2LeagueClient.Presentation
                     IsLoaded && IsVisible && _current != null);
             }
 
-            private static StreamGeometry CreateCurve(DrivingTelemetryHistory history, int channel,
-                DateTimeOffset rightEdge, double width, double height)
-            {
-                var geometry = new StreamGeometry();
-                using (StreamGeometryContext context = geometry.Open())
-                {
-                    Point? previous = null;
-                    DateTimeOffset previousTime = default;
-                    double filtered = 0;
-                    foreach (DrivingTelemetrySample sample in history.Samples)
-                    {
-                        double? value = sample.Pedals[channel];
-                        if (!value.HasValue)
-                        {
-                            if (previous.HasValue) context.LineTo(previous.Value, true, false);
-                            previous = null;
-                            continue;
-                        }
-                        // Display-only 100 ms smoothing. Bars and recorded samples remain raw.
-                        filtered = previous.HasValue
-                            ? filtered + (value.Value - filtered) * (1 - Math.Exp(-(sample.CapturedAt - previousTime).TotalSeconds / 0.1))
-                            : value.Value;
-                        var point = new Point(width * (1 - (rightEdge - sample.CapturedAt).TotalSeconds / DrivingTelemetryHistory.DurationSeconds),
-                            4 + (1 - filtered) * height);
-                        if (!previous.HasValue) context.BeginFigure(point, false, false);
-                        else context.QuadraticBezierTo(previous.Value,
-                            new Point((previous.Value.X + point.X) / 2, (previous.Value.Y + point.Y) / 2), true, false);
-                        previous = point;
-                        previousTime = sample.CapturedAt;
-                    }
-                    if (previous.HasValue) context.LineTo(previous.Value, true, false);
-                }
-                geometry.Freeze();
-                return geometry;
-            }
-
             protected override void OnRender(DrawingContext dc)
             {
                 base.OnRender(dc);
@@ -119,10 +83,10 @@ namespace AMS2LeagueClient.Presentation
                 var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)), 1);
                 for (int row = 0; row < 3; row++)
                     dc.DrawLine(gridPen, new Point(0, row * plotHeight / 2 + 4), new Point(plotWidth, row * plotHeight / 2 + 4));
-                DrivingTelemetrySample? current = _history.Current;
+                DrivingTelemetrySample? current = _history.LastObserved;
                 if (current != null && (_curvesDirty || _curveSize != RenderSize))
                 {
-                    for (int i = 0; i < 4; i++) _curves[i] = CreateCurve(_history, i, current.CapturedAt, plotWidth, plotHeight);
+                    for (int i = 0; i < 4; i++) _curves[i] = PedalCurveBuilder.Create(_history, i, current.CapturedAt, plotWidth, plotHeight);
                     _curvesDirty = false; _curveSize = RenderSize;
                 }
                 for (int channel = 0; channel < 4; channel++)

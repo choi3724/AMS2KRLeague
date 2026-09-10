@@ -1,0 +1,86 @@
+{
+  "_comment": "canonical: 버전의 단일 출처. checks: 각 파일에서 pattern(정규식, 그룹1이 버전)으로 추출해 canonical과 비교. 파일 경로나 패턴이 실제와 다르면 Codex가 이 파일을 수정한다.",
+  "canonical": {
+    "file": "Directory.Build.props",
+    "pattern": "<Version>\\s*([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)\\s*</Version>"
+  },
+  "checks": [
+    {
+      "file": "Directory.Build.props",
+      "label": "VersionPrefix",
+      "pattern": "<VersionPrefix>\\s*([0-9]+\\.[0-9]+\\.[0-9]+)\\s*</VersionPrefix>",
+      "compare": "prefix",
+      "required": true
+    },
+    {
+      "file": "README.md",
+      "label": "README 현재 버전",
+      "pattern": "현재 버전 및 공개 Latest:\\s*\\*\\*([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)\\*\\*",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "README.md",
+      "label": "README Setup.exe 파일명",
+      "pattern": "AMS2-League-Overlay-([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)-Setup\\.exe",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "VERSIONING.md",
+      "label": "VERSIONING SemVer 기준",
+      "pattern": "SemVer 기준은 `([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)`",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "CHANGELOG.md",
+      "label": "CHANGELOG 최상단 항목",
+      "pattern": "##\\s+([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)\\s+—",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "installer/AMS2LeagueOverlay.iss",
+      "label": "Inno Setup AppVersion",
+      "pattern": "(?m)^\\s*#define\\s+AppVersion\\s+\"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)\"\\s*$",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "scripts/build-release.ps1",
+      "label": "build-release.ps1 기본 Version",
+      "pattern": "(?m)^\\s*\\[string\\]\\$Version\\s*=\\s*'([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)',\\s*$",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "release/RELEASE_NOTES_KO.md",
+      "label": "릴리스 노트 최상단",
+      "pattern": "(?m)^# AMS2 리그 오버레이 ([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?) 업데이트\\s*$",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "src/AMS2LeagueClient/Presentation/ClientStatusViewModel.cs",
+      "label": "ClientStatusViewModel 기본 버전 (02번 작업에서 단일화)",
+      "pattern": "public ClientStatusViewModel\\(string version = \"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)\"\\)",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "scripts/build-release.ps1",
+      "label": "build-release.ps1 기본 DisplayVersion",
+      "pattern": "(?m)^\\s*\\[string\\]\\$DisplayVersion\\s*=\\s*'([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)',\\s*$",
+      "compare": "exact",
+      "required": true
+    },
+    {
+      "file": "src/AMS2LeagueClient/Presentation/ClientStatusViewModel.cs",
+      "label": "ClientStatusViewModel 빈 버전 대체값",
+      "pattern": "string\\.IsNullOrWhiteSpace\\(version\\)\\s*\\?\\s*\"([0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.]+)?)\"",
+      "compare": "exact",
+      "required": true
+    }
+  ]
+}

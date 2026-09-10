@@ -21,20 +21,24 @@ namespace AMS2LeagueClient.Tests
                 var transports = new[] { new DualUploadFixtureTransport(), new DualUploadFixtureTransport() };
                 string[] roots = { Path.Combine(directory, "early"), Path.Combine(directory, "late") };
                 string unfinished = CreatePendingTelemetryChunk(Path.Combine(roots[0], "future-telemetry"), start);
+                FileLogger[] loggers = roots.Select(root => new FileLogger(Path.Combine(root, "logs"))).ToArray();
                 ActivityCaptureRuntime[] runtimes = roots.Select((root, index) => new ActivityCaptureRuntime(root,
-                    "client-race-batch-" + index, "0.4.5", new FileLogger(Path.Combine(root, "logs")),
+                    "client-race-batch-" + index, "0.4.5", loggers[index],
                     transports[index], AutomaticModeTests.CreateMultiplayerDetector(root))).ToArray();
                 string[] ids = new string[2];
                 try
                 {
+                    foreach (var runtime in runtimes) AssertTrue(runtime.CanInstallUpdate);
                     var fixture = new RawFixtureBuilder(5).SetViewedIndex(0).SetSession(SessionState.Practice)
                         .SetParticipant(4, true, "Safety Car", 0, 0, 1, RaceState.Racing, PitMode.None)
                         .SetParticipantVehicle(4, "Camaro SafetyCar", "SafetyCar");
                     runtimes[0].Observe(Parse(fixture, start));
                     ids[0] = runtimes[0].CurrentTelemetryIdentity!.SessionId;
+                    AssertFalse(runtimes[0].CanInstallUpdate); AssertFalse(runtimes[0].TryReserveUpdateExit());
                     Thread.Sleep(65);
                     fixture.SetSession(SessionState.Qualify);
                     runtimes[0].Observe(Parse(fixture, start.AddSeconds(10)));
+                    AssertFalse(runtimes[0].CanInstallUpdate);
                     Thread.Sleep(65);
                     fixture.SetSession(SessionState.Race);
                     runtimes[0].Observe(Parse(fixture, start.AddSeconds(30)));
@@ -46,13 +50,24 @@ namespace AMS2LeagueClient.Tests
                     foreach (var runtime in runtimes) runtime.Observe(Parse(fixture, start.AddSeconds(60)));
                     Thread.Sleep(5500); // Allow the real background upload poll while the race is unfinished.
                     foreach (var transport in transports) AssertEqual(0, transport.TelemetryCalls);
-                    foreach (var runtime in runtimes) AssertTrue(runtime.CurrentTelemetryIdentity != null);
+                    foreach (var runtime in runtimes) { AssertTrue(runtime.CurrentTelemetryIdentity != null); AssertFalse(runtime.CanInstallUpdate); }
 
                     for (int index = 0; index < 4; index++)
                         fixture.SetParticipant(index, true, "DRIVER_" + index, (uint)(index + 1), 10, 11, RaceState.Finished, PitMode.None);
                     foreach (var runtime in runtimes) runtime.Observe(Parse(fixture, start.AddSeconds(70)));
                     foreach (var runtime in runtimes) runtime.Observe(Parse(fixture, start.AddSeconds(72)));
                     foreach (var runtime in runtimes) AssertNull(runtime.CurrentTelemetryIdentity);
+                    foreach (var runtime in runtimes) AssertTrue(runtime.CanInstallUpdate);
+                    var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                    var capture = (FutureTelemetryCaptureRuntime)typeof(ActivityCaptureRuntime).GetField("_futureTelemetry", flags)!.GetValue(runtimes[0])!;
+                    var ledgers = (System.Collections.IDictionary)typeof(FutureTelemetryCaptureRuntime).GetField("_attemptLedgers", flags)!.GetValue(capture)!;
+                    object ledgerState = ledgers.Values.Cast<object>().Single();
+                    var ack = ledgerState.GetType().GetMethod("MarkFinalizeAcknowledged")!;
+                    ack.Invoke(ledgerState, new object[] { false });
+                    try { AssertFalse(runtimes[0].CanInstallUpdate); AssertFalse(runtimes[0].TryReserveUpdateExit()); }
+                    finally { ack.Invoke(ledgerState, new object[] { true }); }
+                    AssertTrue(runtimes[0].CanInstallUpdate);
+                    Console.WriteLine("PROOF update idle/active/stable-result-without-finalize-ACK/finalize-ACK gates checked");
                     foreach (var runtime in runtimes) runtime.Observe(Parse(fixture, start.AddSeconds(80)));
                     foreach (var runtime in runtimes) AssertNull(runtime.CurrentTelemetryIdentity);
                     AssertTrue(SpinWait.SpinUntil(() => transports.All(value => value.TelemetryCalls > 0), TimeSpan.FromSeconds(12)));
@@ -72,13 +87,64 @@ namespace AMS2LeagueClient.Tests
                         AssertEqual(5, resultRows.GetArrayLength());
                         AssertEqual(0u, resultRows.EnumerateArray().Single(row => row.GetProperty("slot").GetInt32() == 4).GetProperty("position").GetUInt32());
                         var gate = new RaceUploadCompletionGate(Path.Combine(roots[index], "future-telemetry"));
+                        gate.Refresh(items);
+                        AssertTrue(gate.Allows(ids[index]));
+                        var originalStatus = witnessItem.State.Status;
+                        var originalHttp = witnessItem.State.LastHttpStatus;
+                        witnessItem.State.Status = ActivityUploadStatus.QUARANTINED;
+                        witnessItem.State.LastHttpStatus = 401;
                         gate.Refresh(items); AssertTrue(gate.Allows(ids[index]));
+                        AssertEqual(ActivityUploadStatus.QUARANTINED, witnessItem.State.Status);
+                        witnessItem.State.LastHttpStatus = 403;
+                        gate.Refresh(items); AssertFalse(gate.Allows(ids[index]));
+                        witnessItem.State.Status = ActivityUploadStatus.CONFLICT;
+                        witnessItem.State.LastHttpStatus = 409;
+                        gate.Refresh(items); AssertFalse(gate.Allows(ids[index]));
+                        witnessItem.State.Status = originalStatus; witnessItem.State.LastHttpStatus = originalHttp;
+                        gate.Refresh(items);
                         // A different capture cannot be unlocked by an older finished race.
                         AssertFalse(gate.Allows("unrelated-race"));
                         string ledgerPath = Directory.GetFiles(Path.Combine(roots[index], "future-telemetry", "attempt-ledgers")).Single();
                         byte[] ledger = File.ReadAllBytes(ledgerPath);
                         File.WriteAllText(ledgerPath, "{}");
+                        gate.Refresh(items); AssertTrue(gate.Allows(ids[index]));
+                        File.Delete(ledgerPath);
+                        gate.Refresh(items); AssertTrue(gate.Allows(ids[index]));
+                        string finalChunk = Directory.GetFiles(Path.Combine(roots[index], "future-telemetry"),
+                            "*-0051.a2ct.gz", SearchOption.AllDirectories).Single();
+                        // Isolated copy: a durable journal must not mask a later
+                        // integrity conflict, while delivery-only 401 stays harmless.
+                        string archiveRoot = Path.Combine(roots[index], "future-telemetry");
+                        string proofRoot = Path.Combine(directory, "conflict-proof-" + index);
+                        foreach (string chunk in Directory.GetFiles(Path.GetDirectoryName(finalChunk)!, "*.a2ct.gz"))
+                        {
+                            string relative = Path.GetRelativePath(archiveRoot, chunk);
+                            string target = Path.Combine(proofRoot, relative);
+                            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                            File.Copy(chunk, target);
+                            string sidecar = chunk.Replace(".a2ct.gz", ".upload.json", StringComparison.Ordinal);
+                            string targetSidecar = target.Replace(".a2ct.gz", ".upload.json", StringComparison.Ordinal);
+                            File.Copy(sidecar + ".commit", targetSidecar + ".commit");
+                            File.Copy(sidecar + ".commit", targetSidecar);
+                        }
+                        string proofMetadata = Path.Combine(proofRoot, Path.GetRelativePath(archiveRoot, finalChunk))
+                            .Replace(".a2ct.gz", ".upload.json", StringComparison.Ordinal);
+                        var state = TelemetryChunkSerializer.DeserializeMetadata(File.ReadAllBytes(proofMetadata));
+                        bool Proof() => CompactArchiveEvidence.HasDurableFinalize(proofRoot, state.SessionId,
+                            state.SessionFingerprint, state.WitnessId, state.AttemptId);
+                        using (var replacementHandle = new FileStream(proofMetadata, FileMode.Open, FileAccess.ReadWrite,
+                            FileShare.ReadWrite | FileShare.Delete))
+                            AssertTrue(Proof());
+                        state.Status = TelemetryUploadStatus.FAILED_RETRYABLE; state.LastHttpStatus = 401;
+                        File.WriteAllBytes(proofMetadata, TelemetryChunkSerializer.SerializeMetadata(state));
+                        AssertTrue(Proof());
+                        state.Status = TelemetryUploadStatus.CONFLICT; state.LastHttpStatus = 409;
+                        File.WriteAllBytes(proofMetadata, TelemetryChunkSerializer.SerializeMetadata(state));
+                        AssertFalse(Proof());
+                        byte[] finalBytes = File.ReadAllBytes(finalChunk);
+                        File.WriteAllBytes(finalChunk, new byte[] { 1, 2, 3 });
                         gate.Refresh(items); AssertFalse(gate.Allows(ids[index]));
+                        File.WriteAllBytes(finalChunk, finalBytes);
                         File.WriteAllBytes(ledgerPath, ledger);
                         gate.Refresh(items); AssertTrue(gate.Allows(ids[index]));
                     }
@@ -90,7 +156,7 @@ namespace AMS2LeagueClient.Tests
                     AssertFalse(runtimes[0].CurrentTelemetryIdentity!.SessionId == ids[0]);
                     Console.WriteLine("PROOF race-batch upload-before-finish=0; starts=0s/40s ends=72s/72s; repeated-results=no-new-capture; durable-recovery=PASS");
                 }
-                finally { foreach (var runtime in runtimes) runtime.Dispose(); }
+                finally { foreach (var runtime in runtimes) runtime.Dispose(); foreach (var logger in loggers) logger.Dispose(); }
             });
         }
     }

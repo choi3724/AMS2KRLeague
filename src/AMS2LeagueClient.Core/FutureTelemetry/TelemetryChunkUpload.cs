@@ -212,21 +212,21 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             }
         }
 
-        public void MarkSent(TelemetryChunkUploadItem item, DateTimeOffset attemptedAtUtc, bool duplicate)
-            => Transition(item, TelemetryUploadStatus.SENT, attemptedAtUtc, null, duplicate ? "DUPLICATE" : "STORED", null);
+        public void MarkSent(TelemetryChunkUploadItem item, DateTimeOffset attemptedAtUtc, bool duplicate, int? httpStatus = null)
+            => Transition(item, TelemetryUploadStatus.SENT, attemptedAtUtc, httpStatus, duplicate ? "DUPLICATE" : "STORED", null);
 
         public void MarkRetryable(
             TelemetryChunkUploadItem item,
             DateTimeOffset attemptedAtUtc,
             string resultCode,
-            DateTimeOffset nextAttemptAtUtc)
-            => Transition(item, TelemetryUploadStatus.FAILED_RETRYABLE, attemptedAtUtc, null, resultCode, nextAttemptAtUtc);
+            DateTimeOffset nextAttemptAtUtc, int? httpStatus = null)
+            => Transition(item, TelemetryUploadStatus.FAILED_RETRYABLE, attemptedAtUtc, httpStatus, resultCode, nextAttemptAtUtc);
 
-        public void MarkConflict(TelemetryChunkUploadItem item, DateTimeOffset attemptedAtUtc, string resultCode)
-            => Transition(item, TelemetryUploadStatus.CONFLICT, attemptedAtUtc, null, resultCode, null);
+        public void MarkConflict(TelemetryChunkUploadItem item, DateTimeOffset attemptedAtUtc, string resultCode, int? httpStatus = null)
+            => Transition(item, TelemetryUploadStatus.CONFLICT, attemptedAtUtc, httpStatus, resultCode, null);
 
-        public void MarkQuarantined(TelemetryChunkUploadItem item, DateTimeOffset attemptedAtUtc, string resultCode)
-            => Transition(item, TelemetryUploadStatus.QUARANTINED, attemptedAtUtc, null, resultCode, null);
+        public void MarkQuarantined(TelemetryChunkUploadItem item, DateTimeOffset attemptedAtUtc, string resultCode, int? httpStatus = null)
+            => Transition(item, TelemetryUploadStatus.QUARANTINED, attemptedAtUtc, httpStatus, resultCode, null);
 
         private void Transition(
             TelemetryChunkUploadItem item,
@@ -253,9 +253,17 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 metadata.UpdatedAtUtc = attemptedAtUtc;
                 metadata.NextAttemptAtUtc = nextAttemptAtUtc;
                 metadata.LastError = status == TelemetryUploadStatus.SENT ? null : resultCode;
+                metadata.LastHttpStatus = httpStatus;
+                metadata.LastResultCode = resultCode;
                 AtomicWrite(item.MetadataPath, TelemetryChunkSerializer.SerializeMetadata(metadata));
+                DeliveryDiagnostic?.Invoke("session=" + metadata.SessionId + " attempt=" + metadata.AttemptId
+                    + " chunk=" + metadata.ChunkId + " state=" + status + " http=" + httpStatus
+                    + " code=" + resultCode + " receiverAck=" + (status == TelemetryUploadStatus.SENT)
+                    + " retryAt=" + nextAttemptAtUtc?.ToString("O"));
             }
         }
+
+        public Action<string>? DeliveryDiagnostic { get; set; }
 
         private void Quarantine(
             string metadataPath,
@@ -355,12 +363,14 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 result.Attempted++;
-                TelemetryChunkUploadTransportResult sent =
-                    await _transport.SendTelemetryChunkAsync(item, cancellationToken).ConfigureAwait(false);
+                TelemetryChunkUploadTransportResult sent;
+                try { sent = await _transport.SendTelemetryChunkAsync(item, cancellationToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception exception) { sent = TelemetryChunkUploadTransportResult.Failure(null, "TRANSPORT_" + exception.GetType().Name.ToUpperInvariant(), true); }
                 DateTimeOffset now = DateTimeOffset.UtcNow;
                 if (sent.Success)
                 {
-                    _queue.MarkSent(item, now, sent.Duplicate);
+                    _queue.MarkSent(item, now, sent.Duplicate, sent.HttpStatus);
                     result.Sent++;
                     continue;
                 }
@@ -368,18 +378,18 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                 {
                     int exponent = Math.Min(8, item.Metadata.AttemptCount);
                     TimeSpan delay = TimeSpan.FromSeconds(Math.Min(900, 5 * Math.Pow(2, exponent)));
-                    _queue.MarkRetryable(item, now, sent.ResultCode, now.Add(delay));
+                    _queue.MarkRetryable(item, now, sent.ResultCode, now.Add(delay), sent.HttpStatus);
                     result.Retryable++;
                     continue;
                 }
                 if (sent.HttpStatus == 409)
                 {
-                    _queue.MarkConflict(item, now, sent.ResultCode);
+                    _queue.MarkConflict(item, now, sent.ResultCode, sent.HttpStatus);
                     result.Conflicts++;
                 }
                 else
                 {
-                    _queue.MarkQuarantined(item, now, sent.ResultCode);
+                    _queue.MarkQuarantined(item, now, sent.ResultCode, sent.HttpStatus);
                     result.Quarantined++;
                 }
             }

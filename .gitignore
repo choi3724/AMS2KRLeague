@@ -30,3 +30,6 @@ Thumbs.db
 .env
 .env.*
 **/activity-connection.json
+
+# Development harness evidence
+harness/reports/

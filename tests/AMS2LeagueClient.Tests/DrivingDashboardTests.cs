@@ -105,7 +105,7 @@ namespace AMS2LeagueClient.Tests
             {
                 host.Show(); PumpDispatcher();
                 var graph = Descendants<FrameworkElement>(view).Single(item => item.GetType().Name == "PedalGraph");
-                var curve = graph.GetType().GetMethod("CreateCurve", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+                var curve = typeof(PedalTelemetryView).Assembly.GetType("AMS2LeagueClient.Presentation.PedalCurveBuilder")!.GetMethod("Create", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
                 foreach (bool abs in new[] { false, true })
                 {
                     var history = new DrivingTelemetryHistory();

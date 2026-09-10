@@ -59,6 +59,7 @@ namespace AMS2LeagueClient.Runtime
         private readonly HttpClient _httpClient;
         private readonly bool _ownsHttpClient;
         private bool _disposed;
+        private readonly TimeProvider _timeProvider;
         public Action<string>? FailureDiagnostic { private get; set; }
 
         public Cafe24ActivityUploadTransport(ActivityConnectionOptions options, HttpClient? httpClient = null)
@@ -70,9 +71,11 @@ namespace AMS2LeagueClient.Runtime
             ActivityConnectionOptions options,
             string installationId,
             string clientVersion,
-            HttpClient? httpClient = null)
+            HttpClient? httpClient = null,
+            TimeProvider? timeProvider = null)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
+            _timeProvider = timeProvider ?? TimeProvider.System;
             _installationId = (installationId ?? string.Empty).Trim();
             _clientVersion = (clientVersion ?? string.Empty).Trim();
             _credentialDirectory = Path.GetDirectoryName(_options.ConfigPath)
@@ -144,6 +147,10 @@ namespace AMS2LeagueClient.Runtime
             {
                 return ActivityUploadTransportResult.NetworkFailure("ENROLLMENT_IO_FAILURE");
             }
+            catch (AuthenticationRequiredException exception)
+            {
+                return ActivityUploadTransportResult.Http(401, false, exception.Code);
+            }
             catch (InvalidOperationException)
             {
                 return ActivityUploadTransportResult.NetworkFailure("ENROLLMENT_UNAVAILABLE");
@@ -178,6 +185,11 @@ namespace AMS2LeagueClient.Runtime
                     HttpCompletionOption.ResponseHeadersRead,
                     timeout.Token).ConfigureAwait(false);
                 int statusCode = (int)response.StatusCode;
+                if (statusCode == 401)
+                {
+                    await RejectCredentialAsync(request.Headers.Authorization?.Parameter, cancellationToken).ConfigureAwait(false);
+                    return ActivityUploadTransportResult.Http(401, false, "AUTH_REQUIRED");
+                }
                 byte[]? responseBytes = await ReadUploadResponseAsync(response, timeout.Token, cancellationToken).ConfigureAwait(false);
                 if (statusCode == 403)
                 {
@@ -191,7 +203,7 @@ namespace AMS2LeagueClient.Runtime
                         : ActivityUploadTransportResult.Http(statusCode, false, "RESPONSE_TOO_LARGE");
                 }
 
-                return ParseUploadResponse(statusCode, responseBytes);
+                return ParseUploadResponse(statusCode, responseBytes, endpoint, item);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -252,6 +264,10 @@ namespace AMS2LeagueClient.Runtime
             {
                 return TelemetryChunkUploadTransportResult.Failure(null, "ENROLLMENT_TIMEOUT", true);
             }
+            catch (AuthenticationRequiredException exception)
+            {
+                return TelemetryChunkUploadTransportResult.Failure(401, exception.Code, true);
+            }
             catch (Exception exception) when (exception is HttpRequestException
                 || exception is IOException
                 || exception is InvalidOperationException)
@@ -311,6 +327,11 @@ namespace AMS2LeagueClient.Runtime
                     HttpCompletionOption.ResponseHeadersRead,
                     timeout.Token).ConfigureAwait(false);
                 int statusCode = (int)response.StatusCode;
+                if (statusCode == 401)
+                {
+                    await RejectCredentialAsync(request.Headers.Authorization?.Parameter, cancellationToken).ConfigureAwait(false);
+                    return TelemetryChunkUploadTransportResult.Failure(401, "AUTH_REQUIRED", true);
+                }
                 byte[]? responseBytes = await ReadUploadResponseAsync(response, timeout.Token, cancellationToken).ConfigureAwait(false);
                 if (statusCode == 403)
                 {
@@ -401,7 +422,7 @@ namespace AMS2LeagueClient.Runtime
             CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            if (ActivityConnectionOptions.IsBearerTokenValid(_options.BearerToken))
+            if (CredentialIsUsable(_options.BearerToken))
             {
                 return new Cafe24AnonymousEnrollmentResponse
                 {
@@ -418,8 +439,11 @@ namespace AMS2LeagueClient.Runtime
             await EnrollmentGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                // Another in-flight request may already have recovered the same identity.
+                if (CredentialIsUsable(_options.BearerToken))
+                    return new Cafe24AnonymousEnrollmentResponse { InstallationId = _installationId, Duplicate = true };
                 string existing = PairingTokenStore.Load(_credentialDirectory);
-                if (ActivityConnectionOptions.IsBearerTokenValid(existing))
+                if (CredentialIsUsable(existing))
                 {
                     _options.BearerToken = existing;
                     return new Cafe24AnonymousEnrollmentResponse
@@ -433,6 +457,12 @@ namespace AMS2LeagueClient.Runtime
                     throw new InvalidOperationException("A valid HTTPS API base URL is required.");
                 }
 
+                if (_timeProvider.GetUtcNow() < _options.NextEnrollmentAttemptUtc)
+                    throw new AuthenticationRequiredException(_options.EnrollmentFailureCode);
+                _options.EnrollmentFailures = Math.Min(6, _options.EnrollmentFailures + 1);
+                _options.NextEnrollmentAttemptUtc = _timeProvider.GetUtcNow()
+                    + TimeSpan.FromSeconds(Math.Min(900, 30 * Math.Pow(2, _options.EnrollmentFailures - 1)));
+                _options.EnrollmentFailureCode = "AUTH_ENROLLMENT_RETRY";
                 byte[] body = JsonSerializer.SerializeToUtf8Bytes(new
                 {
                     schema = "ams2-anonymous-enrollment-v1",
@@ -456,7 +486,10 @@ namespace AMS2LeagueClient.Runtime
                 }
                 if (!IsSuccessStatus(statusCode))
                 {
-                    throw new HttpRequestException("Cafe24 anonymous enrollment failed with HTTP " + statusCode.ToString(CultureInfo.InvariantCulture) + ".");
+                    _options.EnrollmentFailureCode = "AUTH_ENROLLMENT_HTTP_" + statusCode.ToString(CultureInfo.InvariantCulture);
+                    if (statusCode == 403 || statusCode == 409)
+                        _options.NextEnrollmentAttemptUtc = _timeProvider.GetUtcNow() + TimeSpan.FromMinutes(15);
+                    throw new AuthenticationRequiredException(_options.EnrollmentFailureCode);
                 }
 
                 Cafe24AnonymousEnrollmentResponse enrolled = ParseEnrollment(responseBytes);
@@ -467,6 +500,8 @@ namespace AMS2LeagueClient.Runtime
                 }
                 PairingTokenStore.Save(_credentialDirectory, enrolled.InstallationToken);
                 _options.BearerToken = enrolled.InstallationToken;
+                _options.RejectedBearerToken = string.Empty;
+                _options.EnrollmentFailures = 0;
                 enrolled.InstallationToken = string.Empty;
                 return enrolled;
             }
@@ -474,6 +509,27 @@ namespace AMS2LeagueClient.Runtime
             {
                 EnrollmentGate.Release();
             }
+        }
+
+        private bool CredentialIsUsable(string credential)
+            => ActivityConnectionOptions.IsBearerTokenValid(credential)
+                && !string.Equals(credential, _options.RejectedBearerToken, StringComparison.Ordinal);
+
+        private async Task RejectCredentialAsync(string? credential, CancellationToken cancellationToken)
+        {
+            await EnrollmentGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                // A delayed 401 for an old request must not reject a newer credential.
+                if (credential == _options.BearerToken) _options.RejectedBearerToken = credential ?? string.Empty;
+            }
+            finally { EnrollmentGate.Release(); }
+        }
+
+        private sealed class AuthenticationRequiredException : InvalidOperationException
+        {
+            public AuthenticationRequiredException(string code) : base("Server authentication requires recovery.") => Code = code;
+            public string Code { get; }
         }
 
         public async Task<Cafe24HealthResponse> GetHealthAsync(CancellationToken cancellationToken)
@@ -738,12 +794,13 @@ namespace AMS2LeagueClient.Runtime
                 || (character >= 'A' && character <= 'F') || character == '-') ? value : string.Empty;
         }
 
-        private static ActivityUploadTransportResult ParseUploadResponse(int statusCode, byte[] responseBytes)
+        private static ActivityUploadTransportResult ParseUploadResponse(int statusCode, byte[] responseBytes,
+            string endpoint, ActivityUploadItem item)
         {
             if (responseBytes.Length == 0)
             {
                 return IsSuccessStatus(statusCode)
-                    ? ActivityUploadTransportResult.NetworkFailure("RESPONSE_EMPTY")
+                    ? ActivityUploadTransportResult.Http(statusCode, false, "RESPONSE_EMPTY")
                     : ActivityUploadTransportResult.Http(statusCode, false, "HTTP_" + statusCode.ToString(CultureInfo.InvariantCulture));
             }
 
@@ -756,30 +813,41 @@ namespace AMS2LeagueClient.Runtime
                 }
 
                 JsonElement root = document.RootElement;
-                bool duplicate = IsSuccessStatus(statusCode) && root.TryGetProperty("duplicate", out JsonElement duplicateElement)
-                    && (duplicateElement.ValueKind == JsonValueKind.True
-                        || (duplicateElement.ValueKind == JsonValueKind.String
-                            && bool.TryParse(duplicateElement.GetString(), out bool parsedDuplicate)
-                            && parsedDuplicate));
-                string resultCode = duplicate
-                    ? "DUPLICATE"
-                    : NormalizeResultCode(StringValue(root, "error"));
-                if (resultCode.Length == 0)
+                string error = NormalizeResultCode(StringValue(root, "error"));
+                string status = NormalizeResultCode(StringValue(root, "status"));
+                bool duplicate = BooleanValue(root, "duplicate") || status == "DUPLICATE";
+                bool hasErrors = HasResponseErrors(root);
+                if (IsSuccessStatus(statusCode) && error.Length == 0 && !hasErrors
+                    && (status == "STORED" || status == "DUPLICATE"))
                 {
-                    resultCode = NormalizeResultCode(StringValue(root, "status"));
+                    // Deployed activity/witness ACKs have no mandatory hash field.
+                    // Validate any echoed identity/hash without requiring a wire expansion.
+                    string identityField = endpoint == SessionWitnessEndpoint ? "witnessId" : "activityId";
+                    using var payload = JsonDocument.Parse(item.PayloadUtf8);
+                    string expectedId = StringValue(payload.RootElement, identityField);
+                    if ((root.TryGetProperty(identityField, out var id)
+                            && (id.ValueKind != JsonValueKind.String || expectedId.Length == 0
+                                || id.GetString() != expectedId))
+                        || !OptionalAckMatches(root, "bodySha256", item.Metadata.BodySha256, true)
+                        || !OptionalAckMatches(root, "contentSha256", item.Metadata.BodySha256, true)
+                        || !OptionalAckMatches(root, "idempotencyKey", item.Metadata.IdempotencyKey, false))
+                        return ActivityUploadTransportResult.Http(statusCode, false, "RESPONSE_INTEGRITY_MISMATCH");
+                    return ActivityUploadTransportResult.Stored(statusCode, duplicate);
                 }
-                if (resultCode.Length == 0)
-                {
-                    return InvalidResponse(statusCode);
-                }
-
-                return ActivityUploadTransportResult.Http(statusCode, duplicate, resultCode);
+                string code = error.Length > 0 ? error : hasErrors ? "RESPONSE_SEMANTIC_ERROR"
+                    : status.Length > 0 ? status : "RESPONSE_ACK_UNRESOLVED";
+                return ActivityUploadTransportResult.Http(statusCode, false, code);
             }
             catch (JsonException)
             {
                 return InvalidResponse(statusCode);
             }
         }
+
+        private static bool OptionalAckMatches(JsonElement root, string name, string expected, bool ignoreCase)
+            => !root.TryGetProperty(name, out var value)
+                || (value.ValueKind == JsonValueKind.String
+                    && string.Equals(value.GetString(), expected, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
 
         private static TelemetryChunkUploadTransportResult ParseTelemetryUploadResponse(
             int statusCode,
@@ -808,8 +876,9 @@ namespace AMS2LeagueClient.Runtime
                 bool duplicate = BooleanValue(root, "duplicate") || BooleanValue(root, "duplicateChunk");
                 string status = NormalizeResultCode(StringValue(root, "status"));
                 string error = NormalizeResultCode(StringValue(root, "error"));
-                if (IsSuccessStatus(statusCode)
-                    && (duplicate || status == "STORED" || status == "DUPLICATE"))
+                if (IsSuccessStatus(statusCode) && error.Length == 0
+                    && !HasResponseErrors(root)
+                    && (status == "STORED" || status == "DUPLICATE"))
                 {
                     string returnedChunkId = StringValue(root, "chunkId");
                     string contentSha256 = StringValue(root, "contentSha256");
@@ -824,6 +893,7 @@ namespace AMS2LeagueClient.Runtime
                     return TelemetryChunkUploadTransportResult.Stored(statusCode, duplicate || status == "DUPLICATE");
                 }
                 string code = error.Length > 0 && error != "UNKNOWN" ? error
+                    : HasResponseErrors(root) ? "RESPONSE_SEMANTIC_ERROR"
                     : status.Length > 0 && status != "UNKNOWN" ? status
                     : "HTTP_" + statusCode.ToString(CultureInfo.InvariantCulture);
                 return TelemetryChunkUploadTransportResult.Failure(
@@ -841,7 +911,8 @@ namespace AMS2LeagueClient.Runtime
         }
 
         private static bool IsTelemetryRetryableStatus(int statusCode)
-            => statusCode == 401
+            => IsSuccessStatus(statusCode)
+                || statusCode == 401
                 || statusCode == 404
                 || statusCode == 405
                 || statusCode == 408
@@ -860,7 +931,7 @@ namespace AMS2LeagueClient.Runtime
 
         private static ActivityUploadTransportResult InvalidResponse(int statusCode)
             => IsSuccessStatus(statusCode)
-                ? ActivityUploadTransportResult.NetworkFailure("RESPONSE_JSON_INVALID")
+                ? ActivityUploadTransportResult.Http(statusCode, false, "RESPONSE_JSON_INVALID")
                 : ActivityUploadTransportResult.Http(statusCode, false, "HTTP_" + statusCode.ToString(CultureInfo.InvariantCulture));
 
         private static async Task<byte[]?> ReadLimitedAsync(
@@ -957,6 +1028,14 @@ namespace AMS2LeagueClient.Runtime
                 : (DateTimeOffset?)null;
         }
 
+        private static bool HasResponseErrors(JsonElement root)
+        {
+            if (root.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null
+                && !(error.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(error.GetString()))) return true;
+            return root.TryGetProperty("errors", out var errors) && errors.ValueKind != JsonValueKind.Null
+                && !(errors.ValueKind == JsonValueKind.Array && errors.GetArrayLength() == 0);
+        }
+
         private static string NormalizeResultCode(string value)
         {
             string normalized = new string((value ?? string.Empty)
@@ -971,7 +1050,16 @@ namespace AMS2LeagueClient.Runtime
                         ? character
                         : '_')
                 .ToArray());
-            return normalized;
+            if (normalized.Length == 0) return string.Empty;
+            // Only contract codes may reach queue metadata or logs. Arbitrary
+            // response strings can be echoed credentials, even in an error field.
+            return new[] { "STORED", "DUPLICATE", "UNKNOWN", "QUARANTINED", "INVALID_PAYLOAD",
+                "VALIDATION_FAILED", "DB_UNAVAILABLE", "IDEMPOTENCY_CONFLICT", "AUTH_REQUIRED",
+                "SCOPE_FORBIDDEN", "OFFICIAL_RESULT_FORBIDDEN", "PRIVATE_DRIVER_UPLOAD_DENIED",
+                "COMPACT_PRIVATE_UPLOAD_DENIED", "COMPACT_SCHEMA_UNKNOWN", "COMPACT_VALUE_RANGE_INVALID",
+                "COMPACT_CRC_MISMATCH", "COMPACT_HASH_MISMATCH", "PAYLOAD_HASH_MISMATCH",
+                "CHUNK_ID_CONFLICT", "SESSION_IDENTITY_CONFLICT", "INSTALLATION_ALREADY_PAIRED" }
+                .Contains(normalized, StringComparer.Ordinal) ? normalized : "SERVER_ERROR_UNRECOGNIZED";
         }
 
         private void ThrowIfDisposed()

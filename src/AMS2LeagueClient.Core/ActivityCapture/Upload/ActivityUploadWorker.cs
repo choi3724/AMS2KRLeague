@@ -24,6 +24,8 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
             _retryPolicy = new ActivityUploadRetryPolicy(queue.Options, jitter);
         }
 
+        public Action<string>? DeliveryDiagnostic { get; set; }
+
         public async Task<ActivityUploadWorkerSummary> ProcessDueAsync(CancellationToken cancellationToken)
         {
             await _runGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -56,7 +58,8 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
                     }
 
                     DateTimeOffset attemptedAt = _clock.UtcNow;
-                    if (result.Duplicate || result.StatusCode == 200 || result.StatusCode == 201)
+                    DateTimeOffset? retryAt = null;
+                    if (result.Acknowledged)
                     {
                         _queue.MarkSent(item.Metadata.QueueItemId, attemptedAt, result.StatusCode, result.Duplicate);
                         summary.Sent++;
@@ -75,6 +78,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
                     {
                         int failedAttemptCount = item.State.AttemptCount + 1;
                         DateTimeOffset nextAttempt = attemptedAt + _retryPolicy.GetDelay(failedAttemptCount);
+                        retryAt = nextAttempt;
                         _queue.MarkRetryable(item.Metadata.QueueItemId, attemptedAt, result.StatusCode, ResultCode(result, "UPLOAD_RETRYABLE"), nextAttempt);
                         summary.Retryable++;
                     }
@@ -83,6 +87,9 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
                         _queue.MarkQuarantined(item.Metadata.QueueItemId, attemptedAt, result.StatusCode, ResultCode(result, "HTTP_NON_RETRYABLE"));
                         summary.Quarantined++;
                     }
+                    DeliveryDiagnostic?.Invoke("activity=" + item.Metadata.ActivityId + " queue=" + item.Metadata.QueueItemId
+                        + " http=" + result.StatusCode + " code=" + result.ResultCode
+                        + " receiverAck=" + result.Acknowledged + " retryAt=" + retryAt?.ToString("O"));
                 }
 
                 return summary;
@@ -105,6 +112,8 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
 
         private static bool IsRetryable(int? statusCode)
             => !statusCode.HasValue
+                || (statusCode >= 200 && statusCode < 300)
+                || statusCode == 401
                 || statusCode == 408
                 || statusCode == 425
                 || statusCode == 429

@@ -75,7 +75,7 @@ namespace AMS2LeagueClient.Presentation
                 if (!ReferenceEquals(_current, history.Current))
                 {
                     _current = history.Current;
-                    _scrollClock.Restart();
+                    if (_current != null) _scrollClock.Restart();
                 }
                 UpdateRendering();
                 InvalidateVisual();
@@ -97,58 +97,6 @@ namespace AMS2LeagueClient.Presentation
                     !_gaugesOnly && IsLoaded && IsVisible && _current != null);
             }
 
-            private static StreamGeometry CreateCurve(DrivingTelemetryHistory history, int channel,
-                DateTimeOffset rightEdge, double width, double height, bool absOnly = false)
-            {
-                var geometry = new StreamGeometry();
-                using (StreamGeometryContext context = geometry.Open())
-                {
-                    Point? previous = null;
-                    DateTimeOffset previousTime = default;
-                    double filtered = 0;
-                    bool drawing = false;
-                    Point curveEnd = default;
-                    foreach (DrivingTelemetrySample sample in history.Samples)
-                    {
-                        double? value = sample.Pedals[channel];
-                        if (!value.HasValue)
-                        {
-                            if (drawing && previous.HasValue) context.LineTo(previous.Value, true, false);
-                            previous = null; drawing = false;
-                            continue;
-                        }
-                        // Display-only 100 ms smoothing. Bars and recorded samples remain raw.
-                        filtered = previous.HasValue
-                            ? filtered + (value.Value - filtered) * (1 - Math.Exp(-(sample.CapturedAt - previousTime).TotalSeconds / 0.1))
-                            : value.Value;
-                        var point = new Point(width * (1 - (rightEdge - sample.CapturedAt).TotalSeconds / DrivingTelemetryHistory.DurationSeconds),
-                            4 + (1 - filtered) * height);
-                        bool include = !absOnly || sample.AbsActive;
-                        if (!previous.HasValue)
-                        {
-                            curveEnd = point;
-                            if (include) { context.BeginFigure(point, false, false); drawing = true; }
-                        }
-                        else
-                        {
-                            var end = new Point((previous.Value.X + point.X) / 2, (previous.Value.Y + point.Y) / 2);
-                            if (include)
-                            {
-                                if (!drawing) context.BeginFigure(curveEnd, false, false);
-                                context.QuadraticBezierTo(previous.Value, end, true, false);
-                            }
-                            drawing = include;
-                            curveEnd = end;
-                        }
-                        previous = point;
-                        previousTime = sample.CapturedAt;
-                    }
-                    if (drawing && previous.HasValue) context.LineTo(previous.Value, true, false);
-                }
-                geometry.Freeze();
-                return geometry;
-            }
-
             protected override void OnRender(DrawingContext dc)
             {
                 base.OnRender(dc);
@@ -160,13 +108,13 @@ namespace AMS2LeagueClient.Presentation
                 if (!_gaugesOnly)
                     for (int column = 1; column < 8; column++)
                         dc.DrawLine(gridPen, new Point(plotWidth * column / 8, 4), new Point(plotWidth * column / 8, 4 + plotHeight));
-                DrivingTelemetrySample? current = _history.Current;
+                DrivingTelemetrySample? current = _history.LastObserved;
                 if (!_gaugesOnly && current != null)
                 {
                     if (_curvesDirty || _curveSize != RenderSize)
                     {
-                        for (int i = 0; i < 4; i++) _curves[i] = CreateCurve(_history, i, current.CapturedAt, plotWidth, plotHeight);
-                        _curves[4] = CreateCurve(_history, 0, current.CapturedAt, plotWidth, plotHeight, absOnly: true);
+                        for (int i = 0; i < 4; i++) _curves[i] = PedalCurveBuilder.Create(_history, i, current.CapturedAt, plotWidth, plotHeight);
+                        _curves[4] = PedalCurveBuilder.Create(_history, 0, current.CapturedAt, plotWidth, plotHeight, absOnly: true);
                         _curvesDirty = false; _curveSize = RenderSize;
                     }
                     // Reuse observed curves until the next sample; only their screen position changes each frame.
@@ -191,7 +139,7 @@ namespace AMS2LeagueClient.Presentation
                     double barWidth = Math.Max(1, columnWidth - 10);
                     double barX = column * columnWidth + 5;
                     dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)), null, new Rect(barX, 20, barWidth, plotHeight));
-                    double? level = current?.Pedals[channel];
+                    double? level = _history.Current?.Pedals[channel];
                     if (level.HasValue)
                         dc.DrawRectangle(Colors[channel], null, new Rect(barX, 20 + plotHeight * (1 - level.Value), barWidth, plotHeight * level.Value));
                     var text = new FormattedText(level.HasValue ? (level.Value * 100).ToString("0", CultureInfo.InvariantCulture) : "—",

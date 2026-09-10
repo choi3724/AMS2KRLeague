@@ -87,6 +87,8 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         public DateTimeOffset? LastAttemptAtUtc { get; set; }
         public DateTimeOffset? NextAttemptAtUtc { get; set; }
         public string? LastError { get; set; }
+        public int? LastHttpStatus { get; set; }
+        public string? LastResultCode { get; set; }
     }
 
     public enum TelemetryChunkCommitDisposition

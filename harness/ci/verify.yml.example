@@ -1,0 +1,39 @@
+# harness/ci/verify.yml.example
+# GitHub Actions에서 로컬과 같은 게이트(harness/scripts/verify.ps1)를 돌리는 예시.
+# 기존 .github/workflows/ 와 병합할지는 사용자 결정. Codex가 01번 보고서에서 차이를 정리한다.
+# 사용하려면 .github/workflows/verify.yml 로 복사.
+
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 태그와 기준선 확인용
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json   # 01번 작업에서 만든 global.json (8.0.424)
+
+      - name: preflight
+        shell: pwsh
+        run: .\harness\scripts\preflight.ps1
+
+      - name: verify gate
+        shell: pwsh
+        run: .\harness\scripts\verify.ps1
+        # verify.ps1은 work\dotnet8 가 없으면 PATH의 dotnet을 쓴다.
+
+      - name: upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-reports
+          path: harness/reports/

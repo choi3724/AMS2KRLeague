@@ -20,7 +20,10 @@ namespace AMS2LeagueClient.Runtime
             var witnesses = new List<Completion>();
             foreach (ActivityUploadItem item in items)
             {
-                if (item.State.Status == ActivityUploadStatus.CONFLICT || item.State.Status == ActivityUploadStatus.QUARANTINED) continue;
+                if (item.State.Status == ActivityUploadStatus.CONFLICT
+                    || (item.State.Status == ActivityUploadStatus.QUARANTINED && item.State.LastHttpStatus != 401)) continue;
+                // A legacy 401 quarantine describes delivery credentials, not
+                // local evidence integrity. Do not migrate or resend that item.
                 try
                 {
                     using var document = JsonDocument.Parse(item.PayloadUtf8);
@@ -70,6 +73,11 @@ namespace AMS2LeagueClient.Runtime
                 || !witness.TryGetProperty("attemptId", out var attemptId)) return false;
             string key = TelemetryChunkSerializer.StableId(fingerprint.GetString() ?? "",
                 witnessId.GetString() ?? "", attemptId.GetString() ?? "").Substring(0, 32);
+            // Compact is authoritative. A stale mirror must neither block a valid
+            // final ACK nor override a corrupt or absent Compact final ACK.
+            if (Directory.Exists(Path.Combine(_archiveRoot, "sessions", key, "chunks", "compact")))
+                return CompactArchiveEvidence.HasDurableFinalize(_archiveRoot, sessionId,
+                    fingerprint.GetString() ?? "", witnessId.GetString() ?? "", attemptId.GetString() ?? "");
             string path = Path.Combine(_archiveRoot, "attempt-ledgers", key + ".attempt-loss.json");
             try
             {
