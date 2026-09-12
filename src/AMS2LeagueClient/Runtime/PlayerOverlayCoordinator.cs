@@ -43,7 +43,10 @@ namespace AMS2LeagueClient.Runtime
         private readonly DispatcherTimer _processTimer;
         private readonly DispatcherTimer _uiTimer;
         private int _drivingLocalIndex = -1, _drivingUpdateCount;
-        private long _nextDrivingTicks;
+        // WPF callbacks are not GPU presents. Keep this separate from data/update rates.
+        private long _lastRenderTicks, _renderGapTicks, _renderMaxGapTicks, _drivingMaxWorkTicks;
+        private int _renderIntervals, _renderOverBudget, _drivingBusy, _drivingRejected;
+        private TimeSpan _lastRenderTime = TimeSpan.MinValue;
         private DateTimeOffset _nextSpeedDiagnosticAt;
         private double _drivingRate;
         private DateTimeOffset _lastDrivingDataAt = DateTimeOffset.MinValue;
@@ -118,12 +121,23 @@ namespace AMS2LeagueClient.Runtime
         public void Start()
         {
             _status.SetWaiting();
-            _logger.Info("CLIENT_START", "mode=REAL_CLIENT readOnly=true shmRate=30Hz uiMaxRate=20Hz drivingMaxRate=60Hz animationTarget=144Hz overlayWindows=BOUNDED_MULTI_HWND diagnostic=" + _diagnostic);
-            CompositionTarget.Rendering += DrivingFrame;
+            _logger.Info("CLIENT_START", "mode=REAL_CLIENT readOnly=true shmRate=30Hz uiMaxRate=20Hz drivingReadCadence=EACH_RENDER_FRAME recordingReadRate=30Hz overlayWindows=BOUNDED_MULTI_HWND diagnostic=" + _diagnostic);
+            _overlay.DrivingTelemetryDemandChanged += UpdateDrivingSubscription;
+            UpdateDrivingSubscription(this, EventArgs.Empty);
             _processTimer.Start();
             _uiTimer.Start();
             _telemetryTimer = new System.Threading.Timer(ReadTelemetry, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(33.333));
             ProcessTick(this, EventArgs.Empty);
+        }
+
+        private bool _drivingSubscribed;
+        private void UpdateDrivingSubscription(object? sender, EventArgs args)
+        {
+            bool active = !_disposed && _overlay.WantsDrivingTelemetry && Volatile.Read(ref _processId) > 0;
+            if (active == _drivingSubscribed) return;
+            _drivingSubscribed = active;
+            if (active) CompositionTarget.Rendering += DrivingFrame;
+            else { CompositionTarget.Rendering -= DrivingFrame; _lastRenderTicks = 0; _lastRenderTime = TimeSpan.MinValue; }
         }
 
         private void ProcessTick(object? sender, EventArgs eventArgs)
@@ -294,18 +308,37 @@ namespace AMS2LeagueClient.Runtime
         private void DrivingFrame(object? sender, EventArgs eventArgs)
         {
             long ticks = Stopwatch.GetTimestamp();
-            if (ticks < _nextDrivingTicks) return;
-            long interval = Stopwatch.Frequency / 60;
-            if (_nextDrivingTicks == 0) _nextDrivingTicks = ticks;
-            do { _nextDrivingTicks += interval; } while (_nextDrivingTicks <= ticks);
-            if (_disposed || Volatile.Read(ref _processId) < 0 || !_overlay.WantsDrivingTelemetry) return;
+            if (_disposed || Volatile.Read(ref _processId) < 0 || !_overlay.WantsDrivingTelemetry)
+            {
+                _lastRenderTicks = 0;
+                _lastRenderTime = TimeSpan.MinValue;
+                return;
+            }
+            TimeSpan renderingTime = ((RenderingEventArgs)eventArgs).RenderingTime;
+            if (renderingTime == _lastRenderTime) return;
+            _lastRenderTime = renderingTime;
+            if (_lastRenderTicks != 0)
+            {
+                long gap = ticks - _lastRenderTicks;
+                _renderIntervals++; _renderGapTicks += gap;
+                _renderMaxGapTicks = Math.Max(_renderMaxGapTicks, gap);
+                if (gap > Stopwatch.Frequency / 60.0) _renderOverBudget++;
+            }
+            _lastRenderTicks = ticks;
+            // Local HUD reads follow distinct render frames; only ReadTelemetry feeds capture.
+            // Do not apply recorder cadence to the display path.
             TelemetrySnapshot? snapshot = Volatile.Read(ref _latest);
             DrivingTelemetrySample? sample = null;
             if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CapturedAt < TimeSpan.FromMilliseconds(500)
-                && Monitor.TryEnter(_readerGate))
+                )
             {
-                try { sample = _reader.TryReadDriving(_drivingLocalIndex, _sessionTracker.Generation, snapshot.GameStateRaw, snapshot.SessionStateRaw); }
-                finally { Monitor.Exit(_readerGate); }
+                if (Monitor.TryEnter(_readerGate))
+                {
+                    try { sample = _reader.TryReadDriving(_drivingLocalIndex, _sessionTracker.Generation, snapshot.GameStateRaw, snapshot.SessionStateRaw); }
+                    finally { Monitor.Exit(_readerGate); }
+                    if (sample == null) _drivingRejected++;
+                }
+                else _drivingBusy++;
             }
             if (sample != null)
             {
@@ -315,6 +348,7 @@ namespace AMS2LeagueClient.Runtime
             }
             else if (DateTimeOffset.UtcNow - _lastDrivingDataAt > TimeSpan.FromMilliseconds(150))
                 _overlay.UpdateDrivingSample(null);
+            _drivingMaxWorkTicks = Math.Max(_drivingMaxWorkTicks, Stopwatch.GetTimestamp() - ticks);
         }
 
         private void UiTick(object? sender, EventArgs eventArgs)
@@ -391,6 +425,7 @@ namespace AMS2LeagueClient.Runtime
                 _overlay.HideOverlay();
                 _logger.Error("UI_TICK_EXCEPTION", exception);
             }
+            finally { UpdateDrivingSubscription(this, EventArgs.Empty); }
         }
 
         private void ApplyVisibility(
@@ -518,6 +553,13 @@ namespace AMS2LeagueClient.Runtime
                 _logger.Info("RELATIVE_CHANGE", "aheadIndex=" + (league.Ahead?.Source.Index.ToString(CultureInfo.InvariantCulture) ?? "none") + " behindIndex=" + (league.Behind?.Source.Index.ToString(CultureInfo.InvariantCulture) ?? "none") + " rawCount=" + league.RawParticipantCount + " leagueCount=" + league.LeagueParticipantCount + " safetyCarsExcluded=" + league.SafetyCarsExcluded);
             }
 
+            if (!_overlay.HasPresentationDemand)
+            {
+                // Keep event/session analysis above; skip only unused display projection.
+                _lastPresentationKey = string.Empty;
+                _overlay.ShowAt(window);
+                return;
+            }
             int rankingRowCapacity = _overlay.GetTimingTowerRowCapacity(window);
             string presentationKey = BuildPresentationKey(
                 snapshot,
@@ -661,7 +703,16 @@ namespace AMS2LeagueClient.Runtime
                     + " uiHz=" + _uiRate.ToString("0.0", CultureInfo.InvariantCulture)
                     + " drivingHz=" + _drivingRate.ToString("0.0", CultureInfo.InvariantCulture)
                     + " queue=" + _eventEngine.Queue.WaitingCount
-                    + " animationWindows=" + animationWindows);
+                    + " animationWindows=" + animationWindows
+                    + " renderCallbackHz=" + (_renderGapTicks == 0 ? 0 : _renderIntervals * (double)Stopwatch.Frequency / _renderGapTicks).ToString("0.0", CultureInfo.InvariantCulture)
+                    + " renderGapMaxMs=" + (_renderMaxGapTicks * 1000.0 / Stopwatch.Frequency).ToString("0.0", CultureInfo.InvariantCulture)
+                    + " renderGapsOver16ms=" + _renderOverBudget
+                    + " renderIntervals=" + _renderIntervals
+                    + " drivingWorkMaxMs=" + (_drivingMaxWorkTicks * 1000.0 / Stopwatch.Frequency).ToString("0.0", CultureInfo.InvariantCulture)
+                    + " drivingReadBusy=" + _drivingBusy + " drivingReadRejected=" + _drivingRejected
+                    + " wpfRenderTier=" + (RenderCapability.Tier >> 16));
+                _lastRenderTicks = _renderGapTicks = _renderMaxGapTicks = _drivingMaxWorkTicks = 0;
+                _renderIntervals = _renderOverBudget = _drivingBusy = _drivingRejected = 0;
                 _lastCpuTime = cpu;
                 _lastPerformanceAt = now;
             }
@@ -760,7 +811,8 @@ namespace AMS2LeagueClient.Runtime
         {
             if (_shutdownTask != null) return new ValueTask(_shutdownTask);
             _disposed = true;
-            CompositionTarget.Rendering -= DrivingFrame;
+            _overlay.DrivingTelemetryDemandChanged -= UpdateDrivingSubscription;
+            UpdateDrivingSubscription(this, EventArgs.Empty);
             _processTimer.Stop(); _uiTimer.Stop();
             _overlay.HideOverlay();
             System.Threading.Timer? telemetryTimer = _telemetryTimer;

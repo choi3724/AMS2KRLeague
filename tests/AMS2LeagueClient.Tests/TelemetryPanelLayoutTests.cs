@@ -35,10 +35,13 @@ namespace AMS2LeagueClient.Tests
                 var drawings = Drawings(VisualTreeHelper.GetDrawing(graph)).ToArray();
                 AssertEqual(0, drawings.OfType<GlyphRunDrawing>().Count());
                 AssertFalse(drawings.OfType<GeometryDrawing>().Any(item => item.Geometry is RectangleGeometry));
-                var curves = drawings.OfType<GeometryDrawing>().Where(item => item.Geometry is StreamGeometry).ToArray();
-                AssertEqual(legacy ? 4 : 5, curves.Length);
+                var curves = drawings.OfType<GeometryDrawing>().Where(item => item.Geometry is PathGeometry).ToArray();
+                AssertTrue(curves.Length >= (legacy ? 4 : 5));
                 AssertTrue(curves.All(item => item.Pen.Thickness == 3));
-                AssertTrue(Math.Abs(curves[0].Geometry.Bounds.Right - graph.ActualWidth) < .01);
+                var curve = drawings.OfType<DrawingGroup>().First(group=>group.Children.OfType<GeometryDrawing>().Any(item=>item.Geometry is PathGeometry));
+                Rect curveBounds = Rect.Empty;
+                foreach (var chunk in curve.Children.OfType<GeometryDrawing>()) curveBounds.Union(chunk.Geometry.Bounds);
+                AssertTrue(Math.Abs(curve.Transform.TransformBounds(curveBounds).Right - graph.ActualWidth) < .01);
                 AssertTrue(curves.All(item => item.Geometry.Bounds.Top >= 3.99 && item.Geometry.Bounds.Bottom <= graph.ActualHeight - 3.99));
                 if (legacy) AssertTrue(Math.Abs(graph.ActualWidth - view.ActualWidth + 20) < .01);
                 else AssertTrue(curves.Any(item => item.Pen.Brush == Brushes.Gold));
@@ -92,8 +95,27 @@ namespace AMS2LeagueClient.Tests
                 var gaugeView = FindDescendant<PedalTelemetryView>(gaugePanel)!;
                 gaugeView.SetHistory(history); PumpDispatcher();
                 var gauge = Descendants<FrameworkElement>(gaugeView).Single(item => item.GetType().Name == "PedalGraph");
-                var gaugeDrawings = Drawings(VisualTreeHelper.GetDrawing(gauge)).ToArray();
-                AssertEqual(8, gaugeDrawings.OfType<GlyphRunDrawing>().Count());
+                var gaugeDrawings = Drawings(VisualTreeHelper.GetDrawing(gauge))
+                    .Concat(Enumerable.Range(0,VisualTreeHelper.GetChildrenCount(gauge))
+                        .SelectMany(i=>Drawings(VisualTreeHelper.GetDrawing((Visual)VisualTreeHelper.GetChild(gauge,i))))).ToArray();
+                // Labels are retained outlines: preserve all eight labels, their exact
+                // font geometry and bar count without reopening font streams per frame.
+                var labels = gaugeDrawings.OfType<GeometryDrawing>().Where(item => !(item.Geometry is RectangleGeometry)).ToArray();
+                AssertEqual(8, labels.Length);
+                var face = new Typeface(new FontFamily(new Uri("pack://application:,,,/AMS2LeagueClient;component/"), "./Assets/Fonts/#Pretendard"),
+                    FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
+                for (int channel = 0; channel < 4; channel++)
+                {
+                    string number = (history.Current!.Pedals[channel]!.Value * 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+                    foreach (var pair in new[] { (Text: number, Index: channel * 2), (Text: "BACH"[channel].ToString(), Index: channel * 2 + 1) })
+                    {
+                        var expected = new FormattedText(pair.Text, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                            face, 12, Brushes.White, VisualTreeHelper.GetDpi(gauge).PixelsPerDip).BuildGeometry(new Point());
+                        AssertTrue(labels[pair.Index].Geometry.IsFrozen);
+                        AssertEqual(expected.Bounds, labels[pair.Index].Geometry.Bounds);
+                        AssertTrue(Math.Abs(expected.GetArea() - labels[pair.Index].Geometry.GetArea()) < .001);
+                    }
+                }
                 AssertEqual(8, gaugeDrawings.OfType<GeometryDrawing>().Count(item => item.Geometry is RectangleGeometry));
                 CaptureLayout((FrameworkElement)gaugePanel.Content, "telemetry-independent-gauges", 1);
                 var wheel = new SteeringWheelView { Width = 84, Height = 148, RotationRange = 1440 };

@@ -87,7 +87,8 @@ namespace AMS2LeagueClient.Runtime
                         if (!_canInstall())
                             _status("업데이트: 다운로드 완료 · 경기 기록 저장이 끝나면 자동 설치합니다");
                         while (!_canInstall()) await Task.Delay(TimeSpan.FromSeconds(5), token).ConfigureAwait(false);
-                        _status("업데이트: 다운로드 검증 완료 · 오버레이를 저장하고 자동 설치합니다");
+                        _status("업데이트: " + update.Version + " 다운로드 완료 · 10초 후 설치를 위해 종료하며, 설치 후 자동으로 다시 실행됩니다.");
+                        await Task.Delay(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
 
                         // The helper must be alive and holding the update lock before we release telemetry and exit.
                         if (await PrepareInstallerAsync(update, installer, attempt, token).ConfigureAwait(false))

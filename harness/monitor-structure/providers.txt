@@ -1,0 +1,2 @@
+Microsoft-Windows-Dwm-Core 0x2000b 5
+Microsoft-Windows-DXGI 0xffffffffffffffff 5

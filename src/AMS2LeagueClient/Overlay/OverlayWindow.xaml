@@ -14,9 +14,7 @@
         MinWidth="120" MinHeight="80"
         SizeToContent="Manual">
     <Grid>
-        <Viewbox Stretch="Uniform" VerticalAlignment="Top">
-            <presentation:OverlayHudView x:Name="TimingHud" />
-        </Viewbox>
+        <Viewbox x:Name="TimingHost" Stretch="Uniform" VerticalAlignment="Top" />
         <Grid x:Name="EditChrome" Visibility="Collapsed">
             <Border BorderBrush="#FF4DE3B1" BorderThickness="2" CornerRadius="6" Background="#180B1520"
                     Cursor="SizeAll" ToolTip="순위 타워 · 드래그로 이동 / 오른쪽 아래 모서리로 크기 조절"

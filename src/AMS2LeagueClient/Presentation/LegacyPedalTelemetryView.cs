@@ -44,35 +44,38 @@ namespace AMS2LeagueClient.Presentation
             private readonly Stopwatch _scrollClock = new Stopwatch();
             private readonly TranslateTransform _scroll = new TranslateTransform();
             private int _renderCount;
-            private readonly StreamGeometry?[] _curves = new StreamGeometry?[4];
-            private bool _curvesDirty = true;
-            private Size _curveSize;
+            private readonly PedalCurveCache _cache = new PedalCurveCache();
+            private readonly Pen?[] _pens = new Pen?[5];
+            private readonly HudHistoryScroll _motion;
+            private static readonly Pen GridPen = FrozenPen(new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)), 1);
+            private static readonly Brush BarBackground = new SolidColorBrush(Color.FromArgb(65, 255, 255, 255));
+            private static Pen FrozenPen(Brush brush, double width)
+            { var pen = new Pen(brush, width) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }; pen.Freeze(); return pen; }
+            private Pen Stroke(int channel)
+            { Brush color = channel == 4 ? Brushes.Gold : Colors[channel]; if (_pens[channel]?.Brush != color) _pens[channel] = FrozenPen(color, 3); return _pens[channel]!; }
             public void SetHistory(DrivingTelemetryHistory history)
             {
+                bool changed = !ReferenceEquals(_current, history.Current) || !ReferenceEquals(_history, history);
                 _history = history;
-                if (!ReferenceEquals(_current, history.Current))
-                {
-                    _current = history.Current;
-                    _curvesDirty = true;
-                    if (_current != null) _scrollClock.Restart();
-                }
+                if (changed) { _current = history.Current; if (_current != null) _scrollClock.Restart(); }
+                _cache.Update(history, Math.Max(1, ActualWidth), Math.Max(1, ActualHeight - 8));
                 UpdateRendering();
-                InvalidateVisual();
+
             }
             public Brush[] Colors { get; } = { Brushes.Red, Brushes.Lime, Brushes.DodgerBlue, Brushes.MediumPurple };
             public PedalGraph()
             {
+                _motion = new HudHistoryScroll(_scroll, _scrollClock, this);
                 ClipToBounds = true;
                 SizeChanged += (s, e) => { UpdateRendering(); InvalidateVisual(); };
                 IsVisibleChanged += (s, e) => UpdateRendering();
                 Loaded += (s, e) => UpdateRendering();
-                Unloaded += (s, e) => _scroll.BeginAnimation(TranslateTransform.XProperty, null);
+                Unloaded += (s, e) => { _motion.Stop(); _cache.Clear(); };
             }
 
             private void UpdateRendering()
             {
-                HudMotion.ScrollHistory(_scroll, Math.Max(1, ActualWidth), _scrollClock.Elapsed.TotalSeconds,
-                    IsLoaded && IsVisible && _current != null);
+                _motion.Update(Math.Max(1, ActualWidth), IsLoaded && IsVisible && _current != null);
             }
 
             protected override void OnRender(DrawingContext dc)
@@ -80,24 +83,16 @@ namespace AMS2LeagueClient.Presentation
                 base.OnRender(dc);
                 _renderCount++;
                 double plotWidth = Math.Max(1, ActualWidth), plotHeight = Math.Max(1, ActualHeight - 8);
-                var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)), 1);
+                var gridPen = GridPen;
                 for (int row = 0; row < 3; row++)
                     dc.DrawLine(gridPen, new Point(0, row * plotHeight / 2 + 4), new Point(plotWidth, row * plotHeight / 2 + 4));
                 DrivingTelemetrySample? current = _history.LastObserved;
-                if (current != null && (_curvesDirty || _curveSize != RenderSize))
-                {
-                    for (int i = 0; i < 4; i++) _curves[i] = PedalCurveBuilder.Create(_history, i, current.CapturedAt, plotWidth, plotHeight);
-                    _curvesDirty = false; _curveSize = RenderSize;
-                }
+                _cache.Update(_history, plotWidth, plotHeight);
                 for (int channel = 0; channel < 4; channel++)
                 {
-                    if (current != null)
                     {
-                        StreamGeometry? geometry = _curves[channel];
                         dc.PushTransform(_scroll);
-                        dc.DrawGeometry(null, new Pen(Colors[channel], 3) {
-                            StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round
-                        }, geometry);
+                        dc.DrawDrawing(_cache.Drawing(channel, Stroke(channel)));
                         dc.Pop();
                     }
                 }

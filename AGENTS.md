@@ -1,81 +1,135 @@
-# AGENTS.md — AMS2KRLeague Overlay Client 작업 지침
+# AGENTS.md
 
-이 파일은 이 저장소에서 작업하는 모든 AI 에이전트(Codex, Claude Code 등)를 위한 공통 지침이다. 상세 인수인계는 `docs/CODEX_HANDOFF_2026-09-05_KO.md`를 먼저 읽는다.
+이 저장소에서 작업하는 Codex의 상설 규칙이다.  
+`AGENTS.md`의 안전·승인 규칙은 항상 우선하고, 프로젝트 사실은 `PROJECT.md`, 이번 작업 범위는 `docs/TASK.md`를 따른다.
 
-## 1. 저장소 범위
+## 읽기 순서
 
-- 사용자용 AMS2 Player Overlay Client(WPF, .NET 8, x64)만 포함한다. 웹서비스/PHP Server/DB migration/Host 자격은 `../AMS2League/server/cafe24_telemetry014/`에 있으며 Git 밖이다.
-- AMS2 Shared Memory v14를 읽기 전용으로만 사용한다. DLL injection, DirectX hook, 입력 가로채기, 게임 파일/레지스트리 변경, 전역 단축키를 추가하지 않는다.
+1. `AGENTS.md`
+2. `PROJECT.md`
+3. `docs/TASK.md`
+4. 대상 코드와 최근 완료 보고서
 
-## 2. 절대 규칙 (사용자 고정 정책)
+파일이 없거나 사실이 서로 다르면 추측하지 말고 작업을 멈춰 한 번에 질문한다.
 
-1. commit, tag, push, GitHub Release는 사용자가 명시적으로 요청할 때만 한다. 요청 없이 작업 트리에 남긴다.
-2. 모든 GitHub Release는 beta 접미사가 있어도 항상 `Latest`(`isPrerelease=false`)다. `scripts/publish-github-release.ps1`이 이를 강제한다.
-3. GitHub에는 Overlay Client만 게시한다. Server 코드, 운영 설정, 자격증명은 포함하지 않는다.
-4. Cafe24는 SSH를 쓰지 않는다. FileZilla 수동 FTP 업로드만 쓰고, migration 전 backup과 dry-run을 하며, 운영 데이터 삭제·DB 초기화는 금지다.
-5. 비밀번호, FTP/DB 비밀번호, token을 문서·Git·로그에 기록하지 않는다.
-6. 실게임 멀티플레이가 진행 중이면 게임을 조작하지 않는다. AMS2 실행이 필요한 테스트는 사용자가 요청할 때만 한다.
-7. Safety Car는 League Classification 순위와 분모에서 제외한다. 앞차/뒷차는 순위가 아니라 실제 트랙 진행거리 기준이다.
-8. 임의 official time/final gap/penalty reason을 추정하지 않는다. `—`나 `--`로 남긴다.
-9. 상대 갭 색상: RED = 사용자에게 불리, BLUE = 유리.
-10. Timing Tower 행 전체 opacity를 애니메이션하지 않는다. `IsActive=false`, `RET`, `DNF`, `DSQ`만 dim 처리한다.
-11. Compact 원본은 compact 형태로 저장하고 JSON으로 풀어 장기 보존하지 않는다. GENERAL/LEAGUE classification과 session result ingestion을 결합하지 않는다.
+## 역할과 범위
 
-## 3. 작업 방식 (이렇게 일한다)
+- Codex는 구현자이지 제품 기획자가 아니다.
+- 변경은 `docs/TASK.md`의 `REQ-*` 항목에 직접 필요한 것만 만든다.
+- ID 없는 기능, 버튼, 입력란, 문구, 메뉴, 워크플로, 디자인 변경을 추가하지 않는다.
+- 더 나은 아이디어가 보여도 구현하지 않는다. `발견했지만 고치지 않은 문제`에 제안만 남긴다.
+- 요구가 두 가지로 해석되면 임의 선택하지 않는다. 선택지와 영향만 제시하고 사용자 결정을 기다린다.
+- `개선`, `정리`, `현대화`, `일관성`, `운영상 필요`를 범위 확대의 근거로 사용하지 않는다.
 
-- 바꾸기 전에 관련 코드와 문서를 끝까지 읽는다. 추측으로 답하지 않고, 수치가 필요한 주장은 도구를 만들어 측정한다(예: `work/replay-cadence-audit`, `work/replay-cadence-cost`).
-- 변경마다 Release 빌드와 두 테스트 스위트를 모두 돌리고 결과를 숫자로 보고한다. 통과하지 못한 항목은 PASS로 쓰지 않고 FAIL 또는 NOT RUN으로 쓴다.
-- 동작 변경에는 테스트를 추가한다. WPF 애니메이션은 값이 아니라 `HasAnimatedProperties`/base value로 검증한다(TimeManager 틱 전에는 값이 갱신되지 않는다).
-- 정책에 영향을 주는 변경(업로드량, 프로토콜, gate)은 먼저 측정 결과와 옵션을 보고하고 사용자 결정을 받는다. 결정 없이 기본값을 바꾸지 않는다.
-- 같은 작업 트리를 다른 에이전트가 동시에 편집할 수 있다. 편집 전 `git status --short`와 파일 mtime을 확인하고, 다른 에이전트의 변경은 되돌리지 말고 보고서에 사실대로 적는다.
-- 작업 종료 시 후임이 읽을 보고서를 `docs/`에 남긴다: 무엇을 했는지, 어떻게 검증했는지, 무엇을 하지 않았는지, 다음 단계.
-- 문서와 답변은 한국어로 쓴다. 파일·함수명은 필요한 곳에서만 쓴다.
+## 기준선과 최소 변경
 
-## 4. 빌드·테스트·릴리스
+- 작업 전 `./scripts/verify.sh`를 실행하고 결과를 기록한다.
+- 현재 운영 릴리스, Git HEAD, working tree, 관련 화면과 정상 동작을 기준선으로 남긴다.
+- 수정 전에 보호할 정상 기능과 변경 예정 파일을 목록으로 고정한다.
+- 요구에 필요하지 않은 파일은 수정하지 않는다.
+- 전역 CSS, 공통 레이아웃, 공통 데이터 모델, 인증, Compact Protocol을 수정하려면 해당 `REQ-*`에 명시되어 있어야 한다.
+- 문제 하나를 고치기 위한 대규모 리팩터링, 파일 이동, 이름 변경은 금지한다.
+- 마지막 정상 동작이 존재하면 새로 만들기 전에 회귀가 시작된 커밋·릴리스를 찾는다.
 
-```powershell
-cd <repo>
-.\work\dotnet8\dotnet.exe restore .\AMS2KRLeague.sln
-.\work\dotnet8\dotnet.exe build .\AMS2KRLeague.sln -c Release --no-restore
-.\work\dotnet8\dotnet.exe run --project .\tests\AMS2LeagueClient.Tests\AMS2LeagueClient.Tests.csproj -c Release --no-build
-.\work\dotnet8\dotnet.exe run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.csproj -c Release --no-build
+## 사용자 화면
+
+- 사용자가 지정한 요소와 문구만 표시한다. 요청하지 않은 도움말, 상세 패널, 사유 입력, 교정 기능을 추가하지 않는다.
+- 폰트 크기, 간격, 색상, 카드 크기, 정보 배치는 명시된 요구가 없으면 바꾸지 않는다.
+- 한 화면을 고치면서 다른 화면의 전역 타이포그래피를 변경하지 않는다.
+- Raw enum, 내부 ID, 기술 로그를 일반 사용자 화면의 기본 정보로 노출하지 않는다.
+- 이미지가 없으면 fallback을 표시한다. 다른 엔터티의 이미지를 대신 표시하지 않는다.
+- 이미지 전체가 보여야 하는 화면에서는 `cover` 방식으로 자르지 않는다.
+- 동적 기능은 버튼 존재나 DOM 값 변화가 아니라 실제 화면 동작으로 판정한다.
+
+## 데이터와 의미
+
+- Raw Evidence와 Compact 원본은 불변이다. 화면을 맞추기 위해 덮어쓰거나 삭제하지 않는다.
+- 공식 결과는 기존 승인·분류 계층이 권위다. Telemetry 재구성이 공식 결과를 덮어쓰지 않는다.
+- 없는 값, 누락 구간, 사고 원인, 과실, 사용자 신원을 추측하지 않는다.
+- `null`, `unknown`, `partial`, `stale`, `terminal`을 서로 다른 상태로 유지한다.
+- 여러 Witness가 같은 실제 세션을 관측하면 원본은 보존하고 사용자 화면은 Canonical 세션 1개로 취합한다.
+- Client 또는 Protocol 변경은 현재 저장 데이터만으로 요구를 충족할 수 없다는 재현 증거와 예상 용량 증가가 있을 때만 제안한다. 별도 승인 없이 구현하지 않는다.
+
+## 테스트와 실제 사용성
+
+- 동작을 바꾸면 해당 동작을 재현하는 테스트를 추가한다.
+- 실패 중인 기존 테스트를 삭제, skip, 완화해 통과시키지 않는다.
+- 자동 테스트 수는 사용성의 증거가 아니다.
+- 실제 운영 또는 Closed Beta 데이터가 있으면 synthetic fixture만으로 완료 판정하지 않는다.
+- Web/UI 작업은 실제 브라우저에서 지정 viewport를 확인하고 Console 오류·경고를 기록한다.
+- 정적 UI는 변경 전·후 스크린샷을 남긴다.
+- Replay·Animation·Seek 같은 동적 UI는 스크린샷만으로 완료하지 않는다. 실제 화면 녹화 또는 프레임 계측 증거를 남긴다.
+- 처음 보는 사용자가 설명 없이 목적을 달성하지 못하면 해당 기능은 FAIL이다.
+
+## 검증 게이트
+
+- `scripts/verify.sh`가 실제 변경 스택을 검사하지 않으면 GREEN을 보고하지 않는다.
+- 이 저장소의 관련 스택이 PHP, JavaScript, CSS, .NET/C#이라면 해당 lint/build/test가 모두 게이트에 포함되어야 한다.
+- `verify.sh`가 미지원이면 별도 명령 결과를 보고하고 게이트 누락을 `PARTIAL`로 표시한다.
+- 시크릿, 디버그 잔여물, 빈 catch, 테스트 전용 분기, 하드코딩된 사용자·토큰을 남기지 않는다.
+
+## 운영 변경과 승인
+
+다음은 사용자 승인 전 실행하지 않는다.
+
+- DB migration 적용 또는 운영 데이터 backfill
+- `current-release.php` 전환
+- 운영 파일 삭제·덮어쓰기
+- 운영 설정·시크릿·인증 변경
+- Client/Server 공개 Release, tag, push
+- 임시 maintenance route, upgrade route, 우회 endpoint 생성
+
+운영 절차는 다음을 따른다.
+
+1. 비활성 후보 릴리스 1개를 준비한다.
+2. 로컬·비활성 환경에서 요구사항을 모두 검증한다.
+3. 예상되는 업로드, migration, 전환, 삭제 승인을 한 번에 묶어 요청한다.
+4. 승인 후 한 번만 활성화한다.
+5. 운영 QA 실패 시 즉시 이전 릴리스로 되돌린다.
+
+이미 검증된 전송 방식이 한 번 실패했다고 사용할 수 없다고 단정하지 않는다. 연결, 대기열, 로그를 확인하고 같은 방법을 최대 3회 재시도한 뒤 실제 실패 근거와 함께 보고한다. 위험한 우회 파일을 만들지 않는다.
+
+## 완료 정의
+
+아래를 모두 충족해야 완료다.
+
+1. 작업 전 기준선 대비 새 회귀가 없다.
+2. `docs/TASK.md`의 모든 `REQ-*`에 실제 수용 결과가 있다.
+3. `./scripts/verify.sh`와 관련 스택 게이트가 통과한다.
+4. 실제 사용자 화면과 실제 데이터 수용조건이 통과한다.
+5. 요청하지 않은 UI·기능·필드·워크플로 추가가 0건이다.
+6. 승인 필요 작업을 승인 없이 실행하지 않았다.
+
+핵심 기능 하나라도 사용 불가능하면 자동 테스트가 전부 통과해도 GREEN이 아니다.
+
+## 보고 형식
+
+```text
+## 기준선
+- 운영 릴리스 / HEAD / working tree
+- 작업 전 verify 결과
+- 보호 대상 기능
+
+## 요구사항
+REQ-XXX-01 [DONE|PARTIAL|DEFERRED]
+  변경: <파일>
+  수용: <재현 절차와 실제 값>
+  증거: <스크린샷·영상·로그 경로>
+
+## 요청하지 않은 변경
+- 0건 / <있다면 항목과 이유>
+
+## 승인 대기
+- <실행할 운영 변경을 한 번에 정리>
+
+## 발견했지만 고치지 않은 문제
+- <범위 밖 문제>
+
+## 최종 게이트
+- verify.sh
+- 관련 스택 테스트
+- 실제 브라우저 QA
+- 최종 판정과 남은 제한
 ```
 
-릴리스(사용자 요청 시에만):
-
-```powershell
-# 1. 버전 갱신: Directory.Build.props, installer/AMS2LeagueOverlay.iss, scripts/build-release.ps1 기본값,
-#    README.md, VERSIONING.md, CHANGELOG.md, release/RELEASE_NOTES_KO.md, ClientStatusViewModel 기본 문자열
-# 2. 패키지
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -DotnetExecutable .\work\dotnet8\dotnet.exe -Version <ver> -DisplayVersion <ver>
-# 3. commit → tag v<ver> → git push origin main v<ver>
-# 4. 게시 (clean worktree, HEAD tag 필요)
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-github-release.ps1 -Version <ver>
-```
-
-`.ps1` 실행이 차단되면 process 범위 `Bypass`만 쓴다. 로컬 dotnet은 `work\dotnet8\dotnet.exe`(8.0.424)다.
-
-## 5. 핵심 코드 위치
-
-| 역할 | 파일 |
-|---|---|
-| SHM v14 layout/read/parse | `src/AMS2LeagueClient.Core/Telemetry/` |
-| 세션/로컬 참가자/분류 | `src/AMS2LeagueClient.Core/Session/` |
-| Timing Tower ViewModel, 전이 추적 | `src/AMS2LeagueClient.Core/Presentation/OverlayViewModel.cs`, `TimingTowerTransitionTracker.cs` |
-| Timing Tower WPF + 애니메이션 | `src/AMS2LeagueClient/Presentation/OverlayHudView.xaml(.cs)`, `HudMotion.cs` |
-| 전후방/세션/랩타임/이벤트/Race Control 뷰 | `src/AMS2LeagueClient/Presentation/*View.xaml(.cs)` |
-| 독립 창, 배치 저장, 토글 | `src/AMS2LeagueClient/Overlay/OverlayWindow.xaml.cs`, `Core/Presentation/OverlayLayoutProfile.cs` |
-| 상태창(토글 UI) | `src/AMS2LeagueClient/Presentation/ClientStatusWindow.xaml(.cs)` |
-| 오케스트레이션 | `src/AMS2LeagueClient/Runtime/PlayerOverlayCoordinator.cs` |
-| Compact telemetry codec/schema | `src/AMS2LeagueClient.Core/CompactTelemetry/` |
-| durable archive, 리플레이 downsampling, cadence 옵션 | `src/AMS2LeagueClient.Core/FutureTelemetry/CompactTelemetryChunkStore.cs`, `TelemetryArchiveOptions.cs` |
-| 업로드 | `src/AMS2LeagueClient/Runtime/ActivityCaptureRuntime.cs`, `Cafe24ActivityUploadTransport.cs` |
-| 테스트 | `tests/AMS2LeagueClient.Tests/Program.cs`(UI/SHM/transport), `tests/AMS2LeagueActivity.Tests/`(archive/compact) |
-
-## 6. 문서 읽는 순서
-
-1. `docs/CODEX_HANDOFF_2026-09-05_KO.md` — 현재 상태와 남은 작업
-2. `docs/CLAUDE_CODE_HANDOFF_2026-09-05_KO.md` — 릴리스/운영/UI 상태와 사용자 정책
-3. `docs/F1_BROADCAST_OVERLAY_AND_TOGGLES_2026-09-05_KO.md` — 애니메이션/토글 설계
-4. `docs/REPLAY_TRANSMISSION_SUFFICIENCY_2026-09-05_KO.md` — 리플레이 밀도와 cadence별 전송량 실측
-5. `docs/P024_RELEASE_GATE_REPORT.md`, `COMPACT_PROTOCOL_V1.md`, `COMPACT_SCHEMA_REGISTRY.md` — wire 계약
+`PARTIAL`과 `DEFERRED`를 완료로 포장하지 않는다.

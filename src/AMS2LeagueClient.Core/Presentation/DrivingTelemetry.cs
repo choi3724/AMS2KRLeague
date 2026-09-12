@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -8,6 +8,7 @@ namespace AMS2LeagueClient.Core.Presentation
 {
     public sealed class DrivingHudSettings
     {
+        public Dictionary<string, AvanteRpmCalibration> AvanteVehicles { get; set; } = new Dictionary<string, AvanteRpmCalibration>(StringComparer.Ordinal);
         public const string DefaultFontName = "Pretendard";
         public string BrakeColor { get; set; } = "#FF3030";
         public double SteeringRangeDegrees { get; set; } = 900;
@@ -23,6 +24,9 @@ namespace AMS2LeagueClient.Core.Presentation
 
         public DrivingHudSettings Normalize() => new DrivingHudSettings
         {
+            AvanteVehicles = (AvanteVehicles ?? new Dictionary<string, AvanteRpmCalibration>())
+                .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && pair.Key.Length <= 256 && !pair.Key.Any(char.IsControl) && pair.Value?.IsValid == true)
+                .ToDictionary(pair => pair.Key, pair => pair.Value.Copy(), StringComparer.Ordinal),
             BrakeColor = Color(BrakeColor, "#FF3030"),
             TowerDesign = TowerDesign == "racing" ? "racing" : "legacy",
             TelemetryDesign = TelemetryDesign == "racing" ? "racing" : "legacy",
@@ -90,17 +94,20 @@ namespace AMS2LeagueClient.Core.Presentation
 
     public sealed class DrivingTelemetryHistory
     {
-        public const int MaximumSamples = 1024;
+        // Bounded local display history: keep ten seconds through 400 reads/s.
+        // This buffer is not the recorder or upload source.
+        public const int MaximumSamples = 4096;
         public const double DurationSeconds = 10;
         private readonly Queue<DrivingTelemetrySample> _samples = new Queue<DrivingTelemetrySample>();
         public IEnumerable<DrivingTelemetrySample> Samples => _samples;
         public int Count => _samples.Count;
+        public long Revision { get; private set; }
         public DrivingTelemetrySample? Current { get; private set; }
 
         public DrivingTelemetrySample? LastObserved { get; private set; }
         public bool IsStale => Current == null && LastObserved != null;
         public void MarkStale() { Current = null; }
-        public void Clear() { _samples.Clear(); Current = null; LastObserved = null; }
+        public void Clear() { _samples.Clear(); Current = null; LastObserved = null; Revision++; }
 
         public void Add(DrivingTelemetrySample? sample)
         {
@@ -112,7 +119,7 @@ namespace AMS2LeagueClient.Core.Presentation
                     || interval < 0) Clear();
                 else if (interval == 0) return;
             }
-            Current = LastObserved = sample;
+            Current = LastObserved = sample; Revision++;
             _samples.Enqueue(sample);
             while (_samples.Count > MaximumSamples
                 || (sample.CapturedAt - _samples.Peek().CapturedAt).TotalSeconds > DurationSeconds)

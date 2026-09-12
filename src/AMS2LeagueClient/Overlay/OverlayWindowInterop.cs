@@ -81,6 +81,10 @@ namespace AMS2LeagueClient.Overlay
             SetWindowLongPtr(handle, ExtendedStyleIndex, new IntPtr(styles));
 
             HwndSource? source = HwndSource.FromHwnd(handle);
+            // Renderer matrix: Default hardware + independent Monitor motion reduced CPU and delivery gaps.
+            // WPF retains its device-loss/software fallback; VR-only surfaces select SoftwareOnly below.
+            if (source?.CompositionTarget != null)
+                source.CompositionTarget.RenderMode = RenderMode.Default;
             source?.AddHook(WindowProcedure);
         }
 

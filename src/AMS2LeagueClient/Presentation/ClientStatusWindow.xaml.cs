@@ -86,7 +86,9 @@ namespace AMS2LeagueClient.Presentation
                 PedalGaugeCheck,
                 SpeedCheck,
                 GearCheck,
-                DrivingDashboardCheck
+                DrivingDashboardCheck,
+                AvanteClusterCheck,
+                AvanteClusterExpandedCheck
             };
 
         private void LayoutEditButton_Click(object sender, RoutedEventArgs eventArgs)

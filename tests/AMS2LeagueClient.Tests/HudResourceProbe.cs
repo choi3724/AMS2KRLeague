@@ -18,13 +18,13 @@ namespace AMS2LeagueClient.Tests
         // Opt-in synthetic desktop rendering only; no game read or network.
         private static void HudResourceProbe()
         {
-            foreach (string mode in new[] { "idle", "graph", "original-panels", "all-panels" })
+            foreach (string mode in new[] { "idle", "graph", "original-panels", "all-panels", "avante-panels" })
             {
                 var history = new DrivingTelemetryHistory();
                 var now = DateTimeOffset.UtcNow;
                 DrivingTelemetrySample Sample(double seconds) => new DrivingTelemetrySample(now.AddSeconds(seconds), 1, 3,
                     .5 + .5 * Math.Sin(seconds * 2), .5 + .5 * Math.Cos(seconds * 2), 0, 0, 128 / 3.6, 3,
-                    Math.Sin(seconds * 2) > .8, Math.Sin(seconds), 5941, 8000);
+                    Math.Sin(seconds * 2) > .8, Math.Sin(seconds), 4000 + 2500 * (.5 + .5 * Math.Sin(seconds*2)), 8000);
                 for (int i = -600; i <= 0; i++) history.Add(Sample(i / 60.0));
                 var graph = new PedalTelemetryView { Width = 540, Height = 120 };
                 graph.SetHistory(history);
@@ -34,11 +34,12 @@ namespace AMS2LeagueClient.Tests
                 {
                     overlay = new OverlayWindow(false, System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ams2-probe-" + Guid.NewGuid().ToString("N") + ".json"));
                     overlay.SetComponentEnabled(OverlayComponentKeys.Speed, true); overlay.SetComponentEnabled(OverlayComponentKeys.Gear, true);
-                    if (mode == "all-panels")
+                    if (mode == "all-panels" || mode == "avante-panels")
                     {
                         overlay.SetComponentEnabled(OverlayComponentKeys.PedalGauge, true); overlay.SetComponentEnabled(OverlayComponentKeys.DrivingDashboard, true);
                         overlay.SaveDrivingHudSettings(new DrivingHudSettings { TowerDesign = "racing", TelemetryDesign = "racing" });
                     }
+                    if (mode == "avante-panels") overlay.SetComponentEnabled(OverlayComponentKeys.AvanteCluster, true);
                     overlay.SetViewModel(DemoSnapshotFactory.CreateShell(false), false);
                     overlay.ShowDemoAt(40, 40, 96);
                     window = overlay;

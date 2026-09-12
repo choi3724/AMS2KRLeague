@@ -72,6 +72,8 @@
             <StackPanel>
                 <TextBlock Text="AMS2 리그 오버레이" Foreground="#8CDCC4" FontSize="12" FontWeight="SemiBold" />
                 <TextBlock Text="오버레이 선택" FontSize="27" FontWeight="Bold" Margin="0,4,0,4" />
+                <TextBlock x:Name="UpdateNotice" Text="{Binding UpdateText}" Foreground="#82E3C3" FontSize="13"
+                           TextWrapping="Wrap" Margin="0,4,0,8" />
                 <TextBlock Text="예시를 보고 필요한 화면을 켜세요. 위치와 크기는 자유롭게 조절할 수 있습니다."
                            FontSize="12" Foreground="#9BACBB" TextWrapping="Wrap" />
             </StackPanel>
@@ -96,14 +98,13 @@
                     <Button x:Name="HideAllButton" Content="모두 끄기" Click="HideAllButton_Click" Margin="0" Padding="10,5" />
                 </StackPanel>
             </Grid>
-            <Expander x:Name="ConnectionDetails" Grid.Row="1" Header="연결·업데이트 상태" Foreground="#A8BBCB" FontSize="12" Margin="0,10,0,0">
+            <Expander x:Name="ConnectionDetails" Grid.Row="1" Header="연결 상태" Foreground="#A8BBCB" FontSize="12" Margin="0,10,0,0">
                 <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto" Margin="20,8,0,0">
                     <StackPanel>
                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="#E0EAF2" />
                         <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Margin="0,4" />
                         <TextBlock Text="{Binding ProcessText}" /><TextBlock Text="{Binding SharedMemoryText}" />
                         <TextBlock Text="{Binding WindowText}" TextWrapping="Wrap" /><TextBlock Text="{Binding ServerText}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding UpdateText}" TextWrapping="Wrap" Foreground="#82E3C3" />
                         <TextBlock Text="{Binding VrText}" TextWrapping="Wrap" /><TextBlock Text="{Binding AccountText}" TextWrapping="Wrap" />
                         <TextBlock x:Name="SessionPlayModeLabel" Text="{Binding SessionPlayModeText}" TextWrapping="Wrap" Margin="0,4,0,0" />
                     </StackPanel>
@@ -120,6 +121,10 @@
                 <CheckBox x:Name="PedalGaugeCheck" Tag="{x:Static core:OverlayComponentKeys.PedalGauge}" Content="페달 게이지" IsChecked="True"
                           Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" />
                 <CheckBox x:Name="DrivingDashboardCheck" Tag="{x:Static core:OverlayComponentKeys.DrivingDashboard}" Content="레이싱 계기판" IsChecked="True"
+                          Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" />
+                <CheckBox x:Name="AvanteClusterCheck" Tag="{x:Static core:OverlayComponentKeys.AvanteCluster}" Content="아반떼 N 계기판 · 일반형" IsChecked="False"
+                          Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" />
+                <CheckBox x:Name="AvanteClusterExpandedCheck" Tag="{x:Static core:OverlayComponentKeys.AvanteClusterExpanded}" Content="아반떼 N 계기판 · 확장형" IsChecked="False"
                           Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" />
                 <CheckBox x:Name="RelativeDriversCheck" Tag="{x:Static core:OverlayComponentKeys.RelativeDrivers}" Content="전후방 거리" IsChecked="True"
                           Checked="LayoutComponentCheck_Changed" Unchecked="LayoutComponentCheck_Changed" Foreground="White" />

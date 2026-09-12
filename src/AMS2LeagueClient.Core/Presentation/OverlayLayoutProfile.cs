@@ -17,6 +17,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public const string Speed = "speed";
         public const string Gear = "gear";
         public const string DrivingDashboard = "drivingDashboard";
+        public const string AvanteCluster = "avanteCluster";
+        public const string AvanteClusterExpanded = "avanteClusterExpanded";
         public static readonly string[] All =
         {
             TimingTower,
@@ -30,7 +32,9 @@ namespace AMS2LeagueClient.Core.Presentation
             PedalGauge,
             Speed,
             Gear,
-            DrivingDashboard
+            DrivingDashboard,
+            AvanteCluster,
+            AvanteClusterExpanded
         };
     }
 
@@ -59,6 +63,19 @@ namespace AMS2LeagueClient.Core.Presentation
             EnabledComponents ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             EnabledComponents.TryAdd(OverlayComponentKeys.DrivingDashboard, false);
             EnabledComponents.TryAdd(OverlayComponentKeys.PedalGauge, false);
+            EnabledComponents.TryAdd(OverlayComponentKeys.AvanteCluster, false);
+            EnabledComponents.TryAdd(OverlayComponentKeys.AvanteClusterExpanded, false);
+        }
+
+        public Dictionary<string, double> ComponentOpacities { get; set; } = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        public double GetOpacity(string component)
+            => ComponentOpacities != null && ComponentOpacities.TryGetValue(component, out double value) && double.IsFinite(value)
+                ? Math.Clamp(value, 0, 1) : 1;
+        public void SetOpacity(string component, double value)
+        {
+            if (Array.IndexOf(OverlayComponentKeys.All, component) < 0 || !double.IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(component));
+            ComponentOpacities ??= new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            ComponentOpacities[component] = Math.Clamp(value, 0, 1);
         }
 
         public bool IsEnabled(string component)

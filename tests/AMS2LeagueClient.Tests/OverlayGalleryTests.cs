@@ -51,13 +51,13 @@ namespace AMS2LeagueClient.Tests
                 }
                 var pairs = Named<Grid>(root, "OverlayPairGrid");
                 AssertEqual(2, pairs.ColumnDefinitions.Count);
-                AssertEqual(5, pairs.RowDefinitions.Count);
-                AssertEqual(10, pairs.Children.Count);
+                AssertEqual(6, pairs.RowDefinitions.Count);
+                AssertEqual(12, pairs.Children.Count);
                 RadioButton Choice(string key, string design) => choices.Single(choice =>
                     ((string Component, string Design))choice.Tag == (key, design));
                 AssertTrue(Choice(OverlayComponentKeys.TimingTower, "racing").IsChecked == true);
                 var previews = Descendants<Image>(root).ToArray();
-                AssertEqual(14, previews.Length);
+                AssertEqual(16, previews.Length);
                 foreach (var image in previews)
                 {
                     var bitmap = (BitmapSource)image.Source;
@@ -67,6 +67,7 @@ namespace AMS2LeagueClient.Tests
                     int bright = 0;
                     for (int i = 0; i < pixels.Length; i += 4)
                         if (pixels[i + 3] > 100 && Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2])) > 100) bright++;
+                    if (bright <= 100) Console.WriteLine("EMPTY PREVIEW " + System.Windows.Automation.AutomationProperties.GetName(image) + " bright=" + bright);
                     AssertTrue(bright > 100); // Every entry contains rendered content, not an empty placeholder.
                 }
                 var sources = previews.Select(image => image.Source).ToArray();
@@ -88,6 +89,21 @@ namespace AMS2LeagueClient.Tests
                 foreach (var size in new[] { new Size(1120, 900), new Size(860, 660) })
                 {
                     status.Width = size.Width; status.Height = size.Height; scroll.ScrollToTop(); PumpDispatcher();
+                    var notice = Named<TextBlock>(root, "UpdateNotice");
+                    AssertFalse(Named<Expander>(root, "ConnectionDetails").IsExpanded);
+                    foreach (string message in new[] { "업데이트: 최신 버전 확인 중",
+                        "업데이트: 다운로드 중 · 50%",
+                        "업데이트: 다운로드 완료 · 경기 기록 저장이 끝나면 자동 설치합니다",
+                        "업데이트: 0.7.2 다운로드 완료 · 10초 후 설치를 위해 종료하며, 설치 후 자동으로 다시 실행됩니다." })
+                    {
+                        ((ClientStatusViewModel)status.DataContext).UpdateText = message;
+                        PumpDispatcher();
+                        AssertEqual(message, notice.Text);
+                        AssertTrue(notice.IsVisible && notice.ActualHeight > 0);
+                        Rect noticeBounds = notice.TransformToAncestor(root).TransformBounds(new Rect(notice.RenderSize));
+                        AssertTrue(noticeBounds.Top >= 0 && noticeBounds.Bottom <= root.ActualHeight);
+                        AssertTrue(noticeBounds.Left >= 0 && noticeBounds.Right <= root.ActualWidth);
+                    }
                     AssertTrue(scroll.ViewportHeight > 100);
                     AssertEqual(0.0, scroll.ScrollableWidth);
                     for (int i = 0; i < pairs.Children.Count; i += 2)
@@ -132,7 +148,7 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual("legacy", overlay.GetDrivingHudSettings().TowerDesign);
                 AssertEqual("racing", overlay.GetDrivingHudSettings().TelemetryDesign);
                 AssertTrue(overlay.IsComponentEnabled(OverlayComponentKeys.PedalGauge));
-                Console.WriteLine("PROOF 12 entries / 14 nonempty frozen previews; direct design choices persist independently of display toggles and colours; narrow window scrolling and footer remain accessible");
+                Console.WriteLine("PROOF 14 entries / 16 nonempty frozen previews; direct design choices persist independently of display toggles and colours; narrow window scrolling and footer remain accessible");
             }
             finally { status.Close(); overlay.Close(); if (File.Exists(path)) File.Delete(path); }
         }

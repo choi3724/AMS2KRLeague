@@ -22,19 +22,6 @@ namespace AMS2LeagueClient.Presentation
                 typeof(DoubleAnimationUsingKeyFrames), new PropertyMetadata((int?)AnimationFrameRate));
         }
 
-        // Retained drawing transform: the render thread scrolls cached curves between samples.
-        public static void ScrollHistory(TranslateTransform transform, double plotWidth, double elapsedSeconds, bool visible)
-        {
-            transform.BeginAnimation(TranslateTransform.XProperty, null);
-            double elapsed = Math.Clamp(elapsedSeconds, 0, 1);
-            double destination = -plotWidth / AMS2LeagueClient.Core.Presentation.DrivingTelemetryHistory.DurationSeconds;
-            transform.X = destination * elapsed;
-            if (!visible || elapsed >= 1) return;
-            transform.X = destination;
-            transform.BeginAnimation(TranslateTransform.XProperty,
-                new DoubleAnimation(destination * elapsed, destination, TimeSpan.FromSeconds(1 - elapsed)) { FillBehavior = FillBehavior.Stop });
-        }
-
         public static void SlideIn(UIElement element, double fromX, double fromY, int durationMs)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));

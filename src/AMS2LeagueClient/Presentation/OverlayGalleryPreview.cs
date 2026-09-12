@@ -44,6 +44,12 @@ namespace AMS2LeagueClient.Presentation
                     var dashboard = new DrivingDashboardView(); dashboard.ApplySettings(settings);
                     dashboard.SetSample(history.Current, "P12"); dashboard.SetSession(27, "14:03");
                     view = dashboard; width = OverlayUiMetrics.DashboardWidth; height = OverlayUiMetrics.DashboardHeight; break;
+                case OverlayComponentKeys.AvanteCluster:
+                case OverlayComponentKeys.AvanteClusterExpanded:
+                    bool expanded = component == OverlayComponentKeys.AvanteClusterExpanded;
+                    var avante = new AvanteClusterView(expanded);
+                    avante.SetSample(new DrivingTelemetrySample(DateTimeOffset.UtcNow, 1, 0, 0, .5, 0, 0, 200 / 3.6, 4, rpm: 5500, maxRpm: 8000), true);
+                    view = avante; width = expanded ? 820 : 454; height = expanded ? 300 : 375; break;
                 case OverlayComponentKeys.Speed:
                 case OverlayComponentKeys.Gear:
                     bool gear = component == OverlayComponentKeys.Gear;

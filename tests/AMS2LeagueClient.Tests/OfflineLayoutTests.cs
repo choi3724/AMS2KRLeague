@@ -86,6 +86,8 @@ namespace AMS2LeagueClient.Tests
                 overlay.SetComponentEnabled(OverlayComponentKeys.Speed, false);
                 AssertFalse(speed.IsVisible);
                 overlay.SetComponentEnabled(OverlayComponentKeys.Speed, true);
+                panels = Application.Current.Windows.Cast<Window>().Where(w => !before.Contains(w)).ToArray();
+                speed = panels.Single(w => w.Title == "AMS2 속도계");
                 AssertTrue(speed.IsVisible);
                 overlay.EndLayoutEdit(true);
 

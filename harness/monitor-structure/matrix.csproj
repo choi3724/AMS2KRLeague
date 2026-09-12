@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><EnableDefaultPageItems>false</EnableDefaultPageItems><EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition><ClientBin Condition="'$(ClientBin)' == ''">../../src/AMS2LeagueClient/bin/Release/net8.0-windows</ClientBin><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><AllowUnsafeBlocks>true</AllowUnsafeBlocks><Nullable>enable</Nullable><ImplicitUsings>disable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="**/*.cs" />
+    <Compile Include="Program.cs;GpuSurface.cs;NativePlot.cs;PlotRunner.cs" />
+    <Reference Include="AMS2LeagueClient"><HintPath>$(ClientBin)/AMS2LeagueClient.dll</HintPath></Reference>
+    <Reference Include="AMS2LeagueClient.Core"><HintPath>$(ClientBin)/AMS2LeagueClient.Core.dll</HintPath></Reference>
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
+    <PackageReference Include="Vortice.DirectComposition" Version="3.8.3" />
+  </ItemGroup>
+</Project>

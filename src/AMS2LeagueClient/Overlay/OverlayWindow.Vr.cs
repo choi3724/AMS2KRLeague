@@ -32,18 +32,27 @@ namespace AMS2LeagueClient.Overlay
             if (_vr != null) return;
             _vr = new VrOverlayController(new SteamVrOverlayRuntime(), CaptureVrFrame, report);
             _vr.Configure(GetVrHudSettings());
-            _vrTimer.Tick += (_, __) => _vr?.Tick(DateTimeOffset.UtcNow,
-                _lastGameWindow != null && (_layoutPreview || _vrSceneActive),
-                _layoutPreview ? 0 : _vrExpectedProcessId);
-            _vrTimer.Start();
+            _vrTimer.Tick += VrTick;
+            UpdateVrTimer();
             ApplyOutputVisibility();
+        }
+
+        private void VrTick(object? sender, EventArgs args) => _vr?.Tick(DateTimeOffset.UtcNow,
+            _lastGameWindow != null && (_layoutPreview || _vrSceneActive), _layoutPreview ? 0 : _vrExpectedProcessId);
+        private void UpdateVrTimer()
+        {
+            if (_vr != null && GetVrHudSettings().Output != OverlayOutputMode.Monitor) _vrTimer.Start();
+            else { _vrTimer.Stop(); _vrBitmap = null; _vrPixels = null; }
         }
 
         public void StopVr()
         {
             _vrTimer.Stop();
+            _vrTimer.Tick -= VrTick;
             _vr?.Dispose();
             _vr = null;
+            _vrBitmap = null;
+            _vrPixels = null;
         }
 
         public void SaveVrHudSettings(VrHudSettings settings)
@@ -53,6 +62,7 @@ namespace AMS2LeagueClient.Overlay
             try { _layoutStore.Save(_layoutProfile); }
             catch { _layoutProfile.VrHud = previous; throw; }
             _vr?.Configure(GetVrHudSettings());
+            UpdateVrTimer();
             ApplyOutputVisibility();
         }
         public void RecenterVr() => _vr?.Recenter();
@@ -81,9 +91,9 @@ namespace AMS2LeagueClient.Overlay
         private IEnumerable<Window> HudWindows()
         {
             yield return this;
-            yield return _relativeWindow; yield return _lapTimingWindow; yield return _sessionWindow;
-            yield return _eventWindow; yield return _raceControlWindow; yield return _waitingWindow;
-            foreach (var panel in _drivingWindows) yield return panel;
+            if (_relativeWindow != null) yield return _relativeWindow; if (_lapTimingWindow != null) yield return _lapTimingWindow; if (_sessionWindow != null) yield return _sessionWindow;
+            if (_eventWindow != null) yield return _eventWindow; if (_raceControlWindow != null) yield return _raceControlWindow; if (_waitingWindow != null) yield return _waitingWindow;
+            foreach (var panel in _drivingWindows) if (panel != null) yield return panel;
         }
 
         private void ApplyOutputVisibility()
@@ -91,7 +101,11 @@ namespace AMS2LeagueClient.Overlay
             bool monitor = _layoutEditing || (GetVrHudSettings().Output != OverlayOutputMode.Vr && _desktopForeground);
             // Keep WPF surfaces arranged for VR rendering; transparent native windows stay click-through.
             foreach (Window window in HudWindows())
+            {
                 window.Opacity = monitor ? 1 : 0;
+                if (System.Windows.PresentationSource.FromVisual(window) is System.Windows.Interop.HwndSource source)
+                    source.CompositionTarget.RenderMode = monitor ? System.Windows.Interop.RenderMode.Default : System.Windows.Interop.RenderMode.SoftwareOnly;
+            }
         }
 
         public VrFrame? CaptureVrFrame()
@@ -112,7 +126,7 @@ namespace AMS2LeagueClient.Overlay
                     if (!window.IsVisible || !(window.Content is Grid root) || root.Children.Count == 0) continue;
                     // The first child is the HUD, the second is desktop edit chrome.
                     var content = (FrameworkElement)root.Children[0];
-                    if (content.ActualWidth <= 0 || content.ActualHeight <= 0 || window.ActualWidth <= 0) continue;
+                    if (content.Opacity <= 0 || !content.IsVisible || content.ActualWidth <= 0 || content.ActualHeight <= 0 || window.ActualWidth <= 0) continue;
                     OverlayBounds bounds = OverlayWindowInterop.ReadPhysicalBounds(new WindowInteropHelper(window).Handle);
                     Point offset = content.TranslatePoint(new Point(), root);
                     double xScale = bounds.Width / window.ActualWidth;

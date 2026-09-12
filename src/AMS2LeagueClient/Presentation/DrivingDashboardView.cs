@@ -14,8 +14,14 @@ namespace AMS2LeagueClient.Presentation
         private DrivingTelemetrySample? _sample;
         private readonly DrawingVisual _inputVisual = new DrawingVisual();
         private readonly MatrixTransform _layoutTransform = new MatrixTransform();
-        private static readonly BitmapImage Housing = LoadHousing();
-        private static readonly Brush Body = Frozen(new ImageBrush(Housing) { Viewbox = new Rect(.38, .40, .35, .22), ViewboxUnits = BrushMappingMode.RelativeToBoundingBox, Stretch = Stretch.Fill });
+        private static readonly WeakReference<Brush> SharedBody = new WeakReference<Brush>(null!);
+        private readonly Brush Body = GetBody();
+        private readonly HudTargetMotion _inputMotion;
+        private string? _displayKey;
+        private static Brush GetBody()
+        { if (SharedBody.TryGetTarget(out var brush)) return brush;
+          brush = Frozen(new ImageBrush(LoadHousing()) { Viewbox = new Rect(.38,.40,.35,.22), ViewboxUnits = BrushMappingMode.RelativeToBoundingBox, Stretch = Stretch.Fill });
+          SharedBody.SetTarget(brush); return brush; }
         private static readonly Brush Dial = Frozen(new SolidColorBrush(Color.FromRgb(40, 43, 43)));
         private readonly Brush _glow = CreateGlow();
         private readonly ScaleTransform _gearMotion = new ScaleTransform(1, 1, 55, 59);
@@ -44,6 +50,7 @@ namespace AMS2LeagueClient.Presentation
 
         public DrivingDashboardView()
         {
+            _inputMotion = new HudTargetMotion(90, value => SetValue(InputLevelProperty, value), this);
             AddVisualChild(_inputVisual); _inputVisual.Transform = _layoutTransform;
             IsVisibleChanged += (_, __) => { if (!IsVisible) ResetMotion(); };
             Unloaded += (_, __) => ResetMotion();
@@ -99,10 +106,7 @@ namespace AMS2LeagueClient.Presentation
             else if (Math.Abs(input - _inputTarget) > .005)
             {
                 _inputTarget = input;
-                double start = InputLevel;
-                SetValue(InputLevelProperty, input);
-                BeginAnimation(InputLevelProperty, new DoubleAnimation(start, input, TimeSpan.FromMilliseconds(90))
-                    { FillBehavior = FillBehavior.Stop });
+                _inputMotion.Set(input, true);
             }
             if (shifted && IsVisible)
             {
@@ -126,6 +130,9 @@ namespace AMS2LeagueClient.Presentation
                 glow.Completed += (_, __) => _glow.BeginAnimation(Brush.OpacityProperty, null);
                 _glow.BeginAnimation(Brush.OpacityProperty, glow);
             }
+            string displayKey = GearText + "|" + SpeedText + "|" + RpmText + "|" + PositionText + "|" + LitRpmLights;
+            if (_displayKey == displayKey) return;
+            _displayKey = displayKey;
             AutomationProperties.SetName(this, "기어 " + GearText + ", 속도 " + SpeedText + " km/h, RPM " + RpmText + ", " + PositionText);
             InvalidateVisual();
         }
@@ -134,7 +141,7 @@ namespace AMS2LeagueClient.Presentation
             _gearMotion.BeginAnimation(ScaleTransform.ScaleXProperty, null);
             _gearMotion.BeginAnimation(ScaleTransform.ScaleYProperty, null);
             _glow.BeginAnimation(Brush.OpacityProperty, null);
-            BeginAnimation(InputLevelProperty, null); SetValue(InputLevelProperty, _inputTarget);
+            _inputMotion.Set(_inputTarget, false);
         }
         private static Typeface Font(string name) => new Typeface(DrivingNumberView.ResolveFont(name), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
         protected override void OnRender(DrawingContext drawing)

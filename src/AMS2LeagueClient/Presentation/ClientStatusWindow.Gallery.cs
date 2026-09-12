@@ -14,7 +14,17 @@ namespace AMS2LeagueClient.Presentation
         private readonly Dictionary<Image, (string Component, string Design)> _galleryImages = new Dictionary<Image, (string, string)>();
         private readonly List<RadioButton> _designChoices = new List<RadioButton>();
         private bool _updatingDesignChecks;
+        private bool _settingOpacities;
+        private readonly Dictionary<string, Slider> _opacitySliders = new Dictionary<string, Slider>();
+        public event Action<string, double>? ComponentOpacityChanged;
+        public void SetComponentOpacities(IReadOnlyDictionary<string, double> values)
+        {
+            _settingOpacities = true;
+            try { foreach (var item in _opacitySliders) item.Value.Value = values.TryGetValue(item.Key, out double opacity) ? (1 - opacity) * 100 : 0; }
+            finally { _settingOpacities = false; }
+        }
         private string _previewAppearance = string.Empty;
+        private DrivingHudSettings _gallerySettings = new DrivingHudSettings();
         public event EventHandler<OverlayDesignSelectionEventArgs>? OverlayDesignSelected;
 
         private void BuildGallery()
@@ -22,6 +32,8 @@ namespace AMS2LeagueClient.Presentation
             var descriptions = new Dictionary<string, string> {
                 [OverlayComponentKeys.TimingTower] = "순위 · 격차 · 랩타임 · 페널티",
                 [OverlayComponentKeys.PedalTelemetry] = "페달 입력 변화 · 핸들 회전",
+                [OverlayComponentKeys.AvanteCluster] = "RPM · 기어 · 속도 · 주행 상태",
+                [OverlayComponentKeys.AvanteClusterExpanded] = "일반형 + 온도 · 터보 · 토크 · 연료",
                 [OverlayComponentKeys.PedalGauge] = "악셀 · 브레이크 · 클러치 · 핸드브레이크",
                 [OverlayComponentKeys.DrivingDashboard] = "기어 · 속도 · RPM을 한 화면에",
                 [OverlayComponentKeys.RelativeDrivers] = "앞차와 뒷차의 간격",
@@ -61,6 +73,18 @@ namespace AMS2LeagueClient.Presentation
                 label.Children.Add(check);
                 label.Children.Add(new TextBlock { Text = descriptions[key], TextWrapping = TextWrapping.Wrap,
                     FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(145, 165, 181)), Margin = new Thickness(18, 8, 0, 0) });
+                var opacityRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(18, 8, 0, 0) };
+                var opacityText = new TextBlock { Text = "투명도 0%", FontSize = 11, Width = 64, VerticalAlignment = VerticalAlignment.Center };
+                var opacitySlider = new Slider { Minimum = 0, Maximum = 100, TickFrequency = 5, IsSnapToTickEnabled = true, Width = 64,
+                    Tag = key, ToolTip = "0%: 선명하게 표시 / 100%: 완전히 투명" };
+                AutomationProperties.SetName(opacitySlider, check.Content + " 투명도");
+                opacitySlider.ValueChanged += (_, e) =>
+                {
+                    opacityText.Text = "투명도 " + e.NewValue.ToString("0") + "%";
+                    if (!_settingOpacities) ComponentOpacityChanged?.Invoke(key, 1 - e.NewValue / 100);
+                };
+                _opacitySliders.Add(key, opacitySlider); opacityRow.Children.Add(opacityText); opacityRow.Children.Add(opacitySlider);
+                label.Children.Add(opacityRow);
                 row.Children.Add(label);
                 var examples = new Grid();
                 if (variants) Grid.SetColumn(examples, 1); else Grid.SetRow(examples, 1);
@@ -103,6 +127,9 @@ namespace AMS2LeagueClient.Presentation
                 }
             }
             LayoutVisibilityPanel.Children.Add(pairs);
+            IsVisibleChanged += (_, __) => RefreshGalleryImages();
+            StateChanged += (_, __) => RefreshGalleryImages();
+            Closed += (_, __) => { foreach (var image in _galleryImages.Keys) image.Source = null; };
             SetDesignLabels(new DrivingHudSettings());
         }
 
@@ -123,9 +150,18 @@ namespace AMS2LeagueClient.Presentation
             string appearance = string.Join("|", settings.BrakeColor, settings.ThrottleColor, settings.ClutchColor, settings.HandBrakeColor,
                 settings.SpeedFont, settings.GearFont, settings.SpeedShadowColor, settings.GearShadowColor, settings.SteeringRangeDegrees);
             if (_previewAppearance == appearance) return;
-            foreach (var item in _galleryImages)
-                item.Key.Source = OverlayGalleryPreview.Create(item.Value.Component, item.Value.Design, settings);
+            _gallerySettings = settings;
+            foreach (var image in _galleryImages.Keys) image.Source = null;
             _previewAppearance = appearance;
+            RefreshGalleryImages();
+        }
+
+        private void RefreshGalleryImages()
+        {
+            bool active = IsVisible && WindowState != WindowState.Minimized;
+            foreach (var item in _galleryImages)
+                if (!active) item.Key.Source = null;
+                else if (item.Key.Source == null) item.Key.Source = OverlayGalleryPreview.Create(item.Value.Component, item.Value.Design, _gallerySettings);
         }
 
         private void DesignChoice_Checked(object sender, RoutedEventArgs args)

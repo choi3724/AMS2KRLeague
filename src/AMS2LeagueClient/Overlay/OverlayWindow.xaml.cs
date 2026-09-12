@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -24,31 +24,34 @@ namespace AMS2LeagueClient.Overlay
         }
 
         private readonly bool _diagnostic;
-        private readonly PedalTelemetryView _pedalView = new PedalTelemetryView();
-        private readonly LegacyPedalTelemetryView _legacyPedalView = new LegacyPedalTelemetryView();
-        private readonly ContentControl _telemetryHost = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
-        private readonly PedalTelemetryView _pedalGaugeView = new PedalTelemetryView(gaugesOnly: true);
-        private readonly DrivingDashboardView _dashboardView = new DrivingDashboardView();
-        private readonly DrivingNumberView _speedView = new DrivingNumberView(false);
-        private readonly DrivingNumberView _gearView = new DrivingNumberView(true);
-        private readonly AuxiliaryOverlayWindow[] _drivingWindows;
+        private PedalTelemetryView? _pedalView;
+        private LegacyPedalTelemetryView? _legacyPedalView;
+        private ContentControl? _telemetryHost;
+        private OverlayHudView? TimingHud;
+        private PedalTelemetryView? _pedalGaugeView;
+        private DrivingDashboardView? _dashboardView;
+        private AvanteClusterView? _avanteView;
+        private AvanteClusterView? _avanteExpandedView;
+        private DrivingNumberView? _speedView;
+        private DrivingNumberView? _gearView;
+        private readonly AuxiliaryOverlayWindow?[] _drivingWindows = new AuxiliaryOverlayWindow?[7];
         private readonly DrivingTelemetryHistory _drivingHistory = new DrivingTelemetryHistory();
         private double _lastTrackTemperature = double.NaN;
         public void ResetDrivingTelemetry() { _drivingHistory.Clear(); RefreshDrivingViews(); }
-        private DrivingTelemetryHistory _drivingPreview = DemoSnapshotFactory.CreateDrivingPreview();
+        private DrivingTelemetryHistory? _drivingPreview;
         private readonly DispatcherTimer _drivingPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-        private readonly RelativeDriversView _relativeView = new RelativeDriversView();
-        private readonly LapTimingView _lapTimingView = new LapTimingView();
-        private readonly SessionInfoView _sessionView = new SessionInfoView();
-        private readonly EventCardView _eventView = new EventCardView();
-        private readonly RaceControlView _raceControlView = new RaceControlView();
-        private readonly MultiplayerWaitingOverlayView _waitingView = new MultiplayerWaitingOverlayView();
-        private readonly AuxiliaryOverlayWindow _relativeWindow;
-        private readonly AuxiliaryOverlayWindow _lapTimingWindow;
-        private readonly AuxiliaryOverlayWindow _sessionWindow;
-        private readonly AuxiliaryOverlayWindow _eventWindow;
-        private readonly AuxiliaryOverlayWindow _raceControlWindow;
-        private readonly AuxiliaryOverlayWindow _waitingWindow;
+        private RelativeDriversView? _relativeView;
+        private LapTimingView? _lapTimingView;
+        private SessionInfoView? _sessionView;
+        private EventCardView? _eventView;
+        private RaceControlView? _raceControlView;
+        private MultiplayerWaitingOverlayView? _waitingView;
+        private AuxiliaryOverlayWindow? _relativeWindow;
+        private AuxiliaryOverlayWindow? _lapTimingWindow;
+        private AuxiliaryOverlayWindow? _sessionWindow;
+        private AuxiliaryOverlayWindow? _eventWindow;
+        private AuxiliaryOverlayWindow? _raceControlWindow;
+        private AuxiliaryOverlayWindow? _waitingWindow;
         private readonly OverlayLayoutStore _layoutStore;
         private OverlayLayoutProfile _layoutProfile;
         private IntPtr _handle;
@@ -81,60 +84,105 @@ namespace AMS2LeagueClient.Overlay
             _layoutProfile = _layoutStore.Load();
             _layoutProfile.SetDrivingPanelDefaults();
 
-            _relativeWindow = new AuxiliaryOverlayWindow(
-                OverlayComponentKeys.RelativeDrivers,
-                "전후방 거리",
-                _relativeView,
-                OverlayUiMetrics.RelativeWidth,
-                OverlayUiMetrics.RelativeHeight);
-            _lapTimingWindow = new AuxiliaryOverlayWindow(
-                OverlayComponentKeys.LapTiming,
-                "현재·섹터 타임",
-                _lapTimingView,
-                OverlayUiMetrics.LapTimingWidth,
-                OverlayUiMetrics.LapTimingHeight);
-            _sessionWindow = new AuxiliaryOverlayWindow(
-                OverlayComponentKeys.SessionInfo,
-                "세션 정보",
-                _sessionView,
-                OverlayUiMetrics.SessionWidth,
-                OverlayUiMetrics.SessionHeight);
-            _eventWindow = new AuxiliaryOverlayWindow(
-                OverlayComponentKeys.EventCard,
-                "이벤트 카드",
-                _eventView,
-                OverlayUiMetrics.EventWidth,
-                OverlayUiMetrics.EventHeight);
-            _raceControlWindow = new AuxiliaryOverlayWindow(
-                OverlayComponentKeys.RaceControl,
-                "레이스 컨트롤",
-                _raceControlView,
-                OverlayUiMetrics.RaceControlExpandedWidth,
-                OverlayUiMetrics.RaceControlExpandedHeight);
-            _waitingWindow = new AuxiliaryOverlayWindow(
-                OverlayComponentKeys.Waiting,
-                "멀티 대기 화면",
-                _waitingView,
-                OverlayUiMetrics.WaitingWidth,
-                OverlayUiMetrics.WaitingHeight);
-            _drivingWindows = new[]
-            {
-                new AuxiliaryOverlayWindow(OverlayComponentKeys.PedalTelemetry, "텔레메트리", _telemetryHost, OverlayUiMetrics.PedalWidth, OverlayUiMetrics.PedalHeight),
-                new AuxiliaryOverlayWindow(OverlayComponentKeys.PedalGauge, "페달 게이지", _pedalGaugeView, OverlayUiMetrics.PedalGaugeWidth, OverlayUiMetrics.PedalHeight),
-                new AuxiliaryOverlayWindow(OverlayComponentKeys.Speed, "속도계", _speedView, OverlayUiMetrics.SpeedWidth, OverlayUiMetrics.SpeedHeight),
-                new AuxiliaryOverlayWindow(OverlayComponentKeys.Gear, "기어", _gearView, OverlayUiMetrics.GearSize, OverlayUiMetrics.GearSize),
-                new AuxiliaryOverlayWindow(OverlayComponentKeys.DrivingDashboard, "레이싱 계기판", _dashboardView, OverlayUiMetrics.DashboardWidth, OverlayUiMetrics.DashboardHeight)
-            };
-            ApplyDrivingAppearance();
-            foreach (var panel in _drivingWindows)
-                panel.IsVisibleChanged += (_, args) => { if ((bool)args.NewValue) RefreshDrivingViews(); };
+            SynchronizeSurfaces();
             _drivingPreviewTimer.Tick += (sender, args) =>
             {
-                _drivingPreview.Add(DemoSnapshotFactory.CreatePreviewSample(DateTimeOffset.UtcNow));
+                _drivingPreview?.Add(DemoSnapshotFactory.CreatePreviewSample(DateTimeOffset.UtcNow));
                 RefreshDrivingViews();
             };
         }
 
+        private void SynchronizeSurfaces()
+        {
+            _lastSessionKey = _lastEventKey = _lastRaceControlKey = _lastWaitingKey = string.Empty;
+            if (_layoutProfile.IsEnabled(OverlayComponentKeys.TimingTower))
+                TimingHost.Child = TimingHud ??= new OverlayHudView();
+            else
+            {
+                if (IsVisible) Hide();
+                TimingHost.Child = null;
+                TimingHud = null;
+            }
+            SynchronizeSurface(ref _relativeWindow, OverlayComponentKeys.RelativeDrivers,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.RelativeDrivers, "전후방 거리",
+                    _relativeView = new RelativeDriversView(), OverlayUiMetrics.RelativeWidth, OverlayUiMetrics.RelativeHeight));
+            if (_relativeWindow == null) _relativeView = null;
+            SynchronizeSurface(ref _lapTimingWindow, OverlayComponentKeys.LapTiming,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.LapTiming, "현재·섹터 타임",
+                    _lapTimingView = new LapTimingView(), OverlayUiMetrics.LapTimingWidth, OverlayUiMetrics.LapTimingHeight));
+            if (_lapTimingWindow == null) _lapTimingView = null;
+            SynchronizeSurface(ref _sessionWindow, OverlayComponentKeys.SessionInfo,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.SessionInfo, "세션 정보",
+                    _sessionView = new SessionInfoView(), OverlayUiMetrics.SessionWidth, OverlayUiMetrics.SessionHeight));
+            if (_sessionWindow == null) _sessionView = null;
+            SynchronizeSurface(ref _eventWindow, OverlayComponentKeys.EventCard,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.EventCard, "이벤트 카드",
+                    _eventView = new EventCardView(), OverlayUiMetrics.EventWidth, OverlayUiMetrics.EventHeight));
+            if (_eventWindow == null) _eventView = null;
+            SynchronizeSurface(ref _raceControlWindow, OverlayComponentKeys.RaceControl,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.RaceControl, "레이스 컨트롤",
+                    _raceControlView = new RaceControlView(), OverlayUiMetrics.RaceControlExpandedWidth, OverlayUiMetrics.RaceControlExpandedHeight));
+            if (_raceControlWindow == null) _raceControlView = null;
+            SynchronizeSurface(ref _waitingWindow, OverlayComponentKeys.Waiting,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.Waiting, "멀티 대기 화면",
+                    _waitingView = new MultiplayerWaitingOverlayView { DataContext = _lastWaitingViewModel }, OverlayUiMetrics.WaitingWidth, OverlayUiMetrics.WaitingHeight));
+            if (_waitingWindow == null) _waitingView = null;
+            SynchronizeSurface(ref _drivingWindows[0], OverlayComponentKeys.PedalTelemetry,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.PedalTelemetry, "텔레메트리",
+                    _telemetryHost = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch }, OverlayUiMetrics.PedalWidth, OverlayUiMetrics.PedalHeight));
+            if (_drivingWindows[0] == null) _telemetryHost = null;
+            SynchronizeSurface(ref _drivingWindows[1], OverlayComponentKeys.PedalGauge,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.PedalGauge, "페달 게이지",
+                    _pedalGaugeView = new PedalTelemetryView(true), OverlayUiMetrics.PedalGaugeWidth, OverlayUiMetrics.PedalHeight));
+            if (_drivingWindows[1] == null) _pedalGaugeView = null;
+            SynchronizeSurface(ref _drivingWindows[2], OverlayComponentKeys.Speed,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.Speed, "속도계",
+                    _speedView = new DrivingNumberView(false), OverlayUiMetrics.SpeedWidth, OverlayUiMetrics.SpeedHeight));
+            if (_drivingWindows[2] == null) _speedView = null;
+            SynchronizeSurface(ref _drivingWindows[3], OverlayComponentKeys.Gear,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.Gear, "기어",
+                    _gearView = new DrivingNumberView(true), OverlayUiMetrics.GearSize, OverlayUiMetrics.GearSize));
+            if (_drivingWindows[3] == null) _gearView = null;
+            SynchronizeSurface(ref _drivingWindows[4], OverlayComponentKeys.DrivingDashboard,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.DrivingDashboard, "레이싱 계기판",
+                    _dashboardView = new DrivingDashboardView(), OverlayUiMetrics.DashboardWidth, OverlayUiMetrics.DashboardHeight));
+            if (_drivingWindows[4] == null) _dashboardView = null;
+            SynchronizeSurface(ref _drivingWindows[5], OverlayComponentKeys.AvanteCluster,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.AvanteCluster, "아반떼 N 계기판 · 일반형",
+                    _avanteView = new AvanteClusterView(), 454, 375));
+            if (_drivingWindows[5] == null) _avanteView = null;
+            SynchronizeSurface(ref _drivingWindows[6], OverlayComponentKeys.AvanteClusterExpanded,
+                () => new AuxiliaryOverlayWindow(OverlayComponentKeys.AvanteClusterExpanded, "아반떼 N 계기판 · 확장형",
+                    _avanteExpandedView = new AvanteClusterView(true), 820, 300));
+            if (_drivingWindows[6] == null) _avanteExpandedView = null;
+            if (_telemetryHost == null) { _pedalView = null; _legacyPedalView = null; }
+            if (Array.TrueForAll(_drivingWindows, panel => panel == null)) _drivingHistory.Clear();
+            ApplyDrivingAppearance();
+            ApplyComponentOpacities();
+            ApplyOutputVisibility();
+        }
+
+        private void SynchronizeSurface(ref AuxiliaryOverlayWindow? window, string component, Func<AuxiliaryOverlayWindow> create)
+        {
+            if (!_layoutProfile.IsEnabled(component))
+            {
+                if (window == null) return;
+                window.HideOverlay();
+                window.Content = null;
+                window.Close();
+                window = null;
+            }
+            else if (window == null)
+            {
+                window = create();
+                window.SetEditMode(_layoutEditing);
+                window.IsVisibleChanged += (_, args) => RefreshDrivingViews();
+            }
+        }
+
+        public string AvanteVehicleName { get; private set; } = "";
+        public string AvanteProfileVehicleName { get; private set; } = "";
+        public double? AvanteEngineMaximum { get; private set; }
         public DrivingHudSettings GetDrivingHudSettings() => (_layoutProfile.DrivingHud ?? new DrivingHudSettings()).Normalize();
 
         public void SaveDrivingHudSettings(DrivingHudSettings settings)
@@ -144,32 +192,66 @@ namespace AMS2LeagueClient.Overlay
             try { _layoutStore.Save(_layoutProfile); }
             catch { _layoutProfile.DrivingHud = previous; throw; }
             ApplyDrivingAppearance();
+            ApplyComponentOpacities();
         }
 
         private void ApplyDrivingAppearance()
         {
             DrivingHudSettings settings = GetDrivingHudSettings();
-            _telemetryHost.Content = settings.TelemetryDesign == "racing" ? (object)_pedalView : _legacyPedalView;
-            TimingHud.SetRacingDesign(settings.TowerDesign == "racing");
+            if (_telemetryHost != null)
+            {
+                if (settings.TelemetryDesign == "racing")
+                {
+                    _pedalView ??= new PedalTelemetryView();
+                    _telemetryHost.Content = _pedalView;
+                    _legacyPedalView = null;
+                }
+                else
+                {
+                    _legacyPedalView ??= new LegacyPedalTelemetryView();
+                    _telemetryHost.Content = _legacyPedalView;
+                    _pedalView = null;
+                }
+            }
+            TimingHud?.SetRacingDesign(settings.TowerDesign == "racing");
             Title = settings.TowerDesign == "racing" ? "AMS2 순위 타워 (개량)" : "AMS2 순위 타워 (기본)";
-            _drivingWindows[0].Title = settings.TelemetryDesign == "racing" ? "AMS2 텔레메트리 (개량)" : "AMS2 텔레메트리 (기본)";
-            _legacyPedalView.ApplySettings(settings);
-            _pedalView.ApplySettings(settings);
-            _pedalGaugeView.ApplySettings(settings);
-            _dashboardView.ApplySettings(settings);
-            _speedView.ApplyFont(settings.SpeedFont);
-            _gearView.ApplyFont(settings.GearFont);
-            _speedView.ApplyShadow(settings.SpeedShadowColor);
-            _gearView.ApplyShadow(settings.GearShadowColor);
+            if (_drivingWindows[0] != null) _drivingWindows[0]!.Title = settings.TelemetryDesign == "racing" ? "AMS2 텔레메트리 (개량)" : "AMS2 텔레메트리 (기본)";
+            _legacyPedalView?.ApplySettings(settings);
+            _pedalView?.ApplySettings(settings);
+            _pedalGaugeView?.ApplySettings(settings);
+            _dashboardView?.ApplySettings(settings);
+            _avanteView?.ApplySettings(settings); _avanteExpandedView?.ApplySettings(settings);
+            _speedView?.ApplyFont(settings.SpeedFont);
+            _gearView?.ApplyFont(settings.GearFont);
+            _speedView?.ApplyShadow(settings.SpeedShadowColor);
+            _gearView?.ApplyShadow(settings.GearShadowColor);
             RefreshDrivingViews();
         }
 
-        public bool WantsDrivingTelemetry => !_layoutPreview && Array.Exists(_drivingWindows, panel => panel.IsVisible);
+        public event EventHandler? DrivingTelemetryDemandChanged;
+        private bool _drivingDemand;
+        private bool IsDrivingVisible(int index) => _drivingWindows[index]?.IsVisible == true &&
+            _layoutProfile.GetOpacity(_drivingWindows[index]!.ComponentKey) > 0;
+        public bool WantsDrivingTelemetry
+        { get { if (_layoutPreview) return false; for (int i=0;i<_drivingWindows.Length;i++) if (IsDrivingVisible(i)) return true; return false; } }
+        public bool HasPresentationDemand
+        { get { foreach (string key in OverlayComponentKeys.All) if (key != OverlayComponentKeys.Waiting && IsComponentActive(key)) return true; return false; } }
+        private bool IsComponentActive(string key) => _layoutProfile.IsEnabled(key) && _layoutProfile.GetOpacity(key) > 0;
+        private void NotifyDrivingDemand()
+        { bool demand = WantsDrivingTelemetry; if (demand == _drivingDemand) return; _drivingDemand = demand; DrivingTelemetryDemandChanged?.Invoke(this, EventArgs.Empty); }
 
         public void UpdateDrivingSession(TelemetrySnapshot snapshot)
         {
+            string profileVehicle = AvanteRpmScale.ProfileVehicleName(snapshot);
+            if (snapshot.RootCarName != AvanteVehicleName || profileVehicle != AvanteProfileVehicleName)
+            { AvanteVehicleName = snapshot.RootCarName; AvanteEngineMaximum = null; }
+            AvanteProfileVehicleName = profileVehicle;
+            double? maximum = snapshot.ViewedVehicleTelemetry?.MaxRpm;
+            if (AvanteRpmScale.IsValidEngineMaximum(maximum)) AvanteEngineMaximum = maximum;
             _lastTrackTemperature = snapshot.TrackTemperature;
-            if (_drivingWindows[4].IsVisible) _dashboardView.SetSession(_lastTrackTemperature, _viewModel.Timing.RemainingTimeText);
+            if (IsDrivingVisible(5)) _avanteView?.SetSession(snapshot);
+            if (IsDrivingVisible(6)) _avanteExpandedView?.SetSession(snapshot);
+            if (IsDrivingVisible(4)) _dashboardView?.SetSession(_lastTrackTemperature, _viewModel.Timing.RemainingTimeText);
         }
 
         public void UpdateDrivingTelemetry(TelemetrySnapshot snapshot, int localIndex, int generation)
@@ -189,23 +271,27 @@ namespace AMS2LeagueClient.Overlay
 
         private void RefreshDrivingViews()
         {
-            bool animatePreview = _layoutEditing && _displayMode == DisplayMode.Gameplay && _drivingHistory.Current == null;
+            bool animatePreview = _layoutEditing && _displayMode == DisplayMode.Gameplay && _drivingHistory.Current == null
+                && Array.Exists(_drivingWindows, panel => panel?.IsVisible == true);
             if (animatePreview && !_drivingPreviewTimer.IsEnabled)
             {
                 _drivingPreview = DemoSnapshotFactory.CreateDrivingPreview();
                 _drivingPreviewTimer.Start();
             }
-            else if (!animatePreview) _drivingPreviewTimer.Stop();
-            if (_drivingWindows[4].IsVisible)
-                _dashboardView.SetSession(_layoutEditing && _drivingHistory.Current == null ? 27 : _lastTrackTemperature,
+            else if (!animatePreview) { _drivingPreviewTimer.Stop(); _drivingPreview = null; }
+            if (IsDrivingVisible(4))
+                _dashboardView?.SetSession(_layoutEditing && _drivingHistory.Current == null ? 27 : _lastTrackTemperature,
                     _layoutEditing && _drivingHistory.Current == null ? "14:03" : _viewModel.Timing.RemainingTimeText);
-            DrivingTelemetryHistory shown = _layoutEditing && _drivingHistory.Current == null ? _drivingPreview : _drivingHistory;
-            if (_drivingWindows[0].IsVisible && ReferenceEquals(_telemetryHost.Content, _legacyPedalView)) _legacyPedalView.SetHistory(shown);
-            if (_drivingWindows[0].IsVisible && ReferenceEquals(_telemetryHost.Content, _pedalView)) _pedalView.SetHistory(shown);
-            if (_drivingWindows[1].IsVisible) _pedalGaugeView.SetHistory(shown);
-            if (_drivingWindows[2].IsVisible) _speedView.SetSample(shown.Current);
-            if (_drivingWindows[3].IsVisible) _gearView.SetSample(shown.Current);
-            if (_drivingWindows[4].IsVisible) _dashboardView.SetSample(shown.Current, _layoutEditing && _drivingHistory.Current == null ? "P12" : _viewModel.Timing.PositionText.Split('/')[0].Trim());
+            DrivingTelemetryHistory shown = _layoutEditing && _drivingHistory.Current == null ? _drivingPreview ?? _drivingHistory : _drivingHistory;
+            if (IsDrivingVisible(0) && ReferenceEquals(_telemetryHost?.Content, _legacyPedalView)) _legacyPedalView?.SetHistory(shown);
+            if (IsDrivingVisible(0) && ReferenceEquals(_telemetryHost?.Content, _pedalView)) _pedalView?.SetHistory(shown);
+            if (IsDrivingVisible(1)) _pedalGaugeView?.SetHistory(shown);
+            if (IsDrivingVisible(2)) _speedView?.SetSample(shown.Current);
+            if (IsDrivingVisible(3)) _gearView?.SetSample(shown.Current);
+            if (IsDrivingVisible(5)) _avanteView?.SetSample(shown.Current, animatePreview);
+            if (IsDrivingVisible(6)) _avanteExpandedView?.SetSample(shown.Current, animatePreview);
+            if (IsDrivingVisible(4)) _dashboardView?.SetSample(shown.Current, _layoutEditing && _drivingHistory.Current == null ? "P12" : _viewModel.Timing.PositionText.Split('/')[0].Trim());
+            NotifyDrivingDemand();
         }
 
         public bool IsLayoutEditing => _layoutEditing;
@@ -240,10 +326,37 @@ namespace AMS2LeagueClient.Overlay
         /// Turns one overlay surface on or off. The choice is persisted
         /// immediately so it survives restarts without entering layout edit mode.
         /// </summary>
+        public double GetComponentOpacity(string component) => _layoutProfile.GetOpacity(component);
+        public void SetComponentOpacity(string component, double opacity)
+        {
+            double previous = _layoutProfile.GetOpacity(component);
+            _layoutProfile.SetOpacity(component, opacity);
+            try { _layoutStore.Save(_layoutProfile); }
+            catch { _layoutProfile.SetOpacity(component, previous); throw; }
+            ApplyComponentOpacities();
+        }
+        private void ApplyComponentOpacities()
+        {
+            foreach (Window window in HudWindows())
+                if (window.Content is Grid root && root.Children.Count > 0)
+                {
+                    double opacity = _layoutProfile.GetOpacity(window is AuxiliaryOverlayWindow panel ? panel.ComponentKey : OverlayComponentKeys.TimingTower);
+                    root.Children[0].Opacity = opacity;
+                    root.Children[0].Visibility = opacity > 0 ? Visibility.Visible : Visibility.Hidden;
+                }
+            RefreshDrivingViews();
+        }
+
         public void SetComponentEnabled(string component, bool enabled)
         {
+            bool previous = _layoutProfile.IsEnabled(component);
+            if (_layoutEditing && !enabled) CaptureLayout();
             _layoutProfile.SetEnabled(component, enabled);
-            _layoutStore.Save(_layoutProfile);
+            try { _layoutStore.Save(_layoutProfile); }
+            catch { _layoutProfile.SetEnabled(component, previous); throw; }
+            SynchronizeSurfaces();
+            _lastSessionKey = _lastEventKey = _lastRaceControlKey = _lastWaitingKey = string.Empty;
+            ApplyViewModel(_viewModel, false);
             if (_lastGameWindow == null) return;
             InvalidateBounds();
             if (_displayMode == DisplayMode.Waiting)
@@ -253,7 +366,7 @@ namespace AMS2LeagueClient.Overlay
             }
             else
             {
-                _waitingWindow.HideOverlay();
+                _waitingWindow?.HideOverlay();
                 ShowGameplaySurfaces(_lastGameWindow, _layoutEditing);
             }
         }
@@ -277,13 +390,13 @@ namespace AMS2LeagueClient.Overlay
                 _layoutStore.Save(_layoutProfile);
             }
             OverlayWindowInterop.Forget(_handle);
-            _relativeWindow.Close();
-            _lapTimingWindow.Close();
-            _sessionWindow.Close();
-            _eventWindow.Close();
-            _raceControlWindow.Close();
-            _waitingWindow.Close();
-            foreach (AuxiliaryOverlayWindow panel in _drivingWindows) panel.Close();
+            _relativeWindow?.Close();
+            _lapTimingWindow?.Close();
+            _sessionWindow?.Close();
+            _eventWindow?.Close();
+            _raceControlWindow?.Close();
+            _waitingWindow?.Close();
+            foreach (AuxiliaryOverlayWindow? panel in _drivingWindows) panel?.Close();
             base.OnClosed(eventArgs);
         }
 
@@ -300,17 +413,20 @@ namespace AMS2LeagueClient.Overlay
         private void ApplyViewModel(OverlayShellViewModel viewModel, bool animate)
         {
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
-            ResizeTimingPreview();
-            TimingHud.SetViewModel(viewModel.Timing);
-            _relativeView.SetViewModel(viewModel.Timing);
-            _lapTimingView.SetViewModel(viewModel.Timing);
+            if (IsComponentActive(OverlayComponentKeys.TimingTower))
+            {
+                ResizeTimingPreview();
+                TimingHud?.SetViewModel(viewModel.Timing);
+            }
+            if (IsComponentActive(OverlayComponentKeys.RelativeDrivers)) _relativeView?.SetViewModel(viewModel.Timing);
+            if (IsComponentActive(OverlayComponentKeys.LapTiming)) _lapTimingView?.SetViewModel(viewModel.Timing);
 
             string sessionKey = viewModel.Session.PrimaryLabel + "\u001f" + viewModel.Session.PrimaryValue + "\u001f"
                 + viewModel.Session.PositionValue + "\u001f" + viewModel.Session.LapValue;
-            if (sessionKey != _lastSessionKey)
+            if (IsComponentActive(OverlayComponentKeys.SessionInfo) && sessionKey != _lastSessionKey)
             {
                 _lastSessionKey = sessionKey;
-                _sessionView.SetViewModel(viewModel.Session);
+                _sessionView?.SetViewModel(viewModel.Session);
             }
 
             // Presentation-only previews never enter the live event model or capture pipeline.
@@ -324,42 +440,42 @@ namespace AMS2LeagueClient.Overlay
                 : viewModel.RaceControl;
 
             string eventKey = eventCard.EventId + "\u001f" + eventCard.IsVisible + "\u001f" + eventCard.SecondaryText;
-            if (eventKey != _lastEventKey)
+            if (IsComponentActive(OverlayComponentKeys.EventCard) && eventKey != _lastEventKey)
             {
                 _lastEventKey = eventKey;
-                TimeSpan exit = _eventView.SetViewModel(eventCard, animate && !_layoutEditing);
+                TimeSpan exit = _eventView?.SetViewModel(eventCard, animate && !_layoutEditing) ?? TimeSpan.Zero;
                 _eventExitDeadline = exit > TimeSpan.Zero ? DateTime.UtcNow + exit : DateTime.MinValue;
             }
 
             string raceControlKey = raceControl.EventId + "\u001f" + raceControl.IsVisible + "\u001f"
                 + raceControl.IsExpanded + "\u001f" + raceControl.Message + "\u001f" + raceControl.StateLabel;
-            if (raceControlKey != _lastRaceControlKey)
+            if (IsComponentActive(OverlayComponentKeys.RaceControl) && raceControlKey != _lastRaceControlKey)
             {
                 _lastRaceControlKey = raceControlKey;
-                TimeSpan exit = _raceControlView.SetViewModel(raceControl, animate && !_layoutEditing);
+                TimeSpan exit = _raceControlView?.SetViewModel(raceControl, animate && !_layoutEditing) ?? TimeSpan.Zero;
                 _raceControlExitDeadline = exit > TimeSpan.Zero ? DateTime.UtcNow + exit : DateTime.MinValue;
             }
 
             if (!_layoutEditing)
             {
-                if (!viewModel.Timing.IsBottomGapPanelVisible) _relativeWindow.HideOverlay();
-                if (!IsEventCardPresentable) _eventWindow.HideOverlay();
-                if (!IsRaceControlPresentable) _raceControlWindow.HideOverlay();
+                if (!viewModel.Timing.IsBottomGapPanelVisible) _relativeWindow?.HideOverlay();
+                if (!IsEventCardPresentable) _eventWindow?.HideOverlay();
+                if (!IsRaceControlPresentable) _raceControlWindow?.HideOverlay();
             }
         }
 
         private void ResizeTimingPreview()
         {
-            if ((!_layoutEditing && _lastGameWindow != null) || ActualWidth <= 0 || ActualHeight <= 0) return;
+            if (TimingHud == null || (!_layoutEditing && _lastGameWindow != null) || ActualWidth <= 0 || ActualHeight <= 0) return;
             int capacity = LeftTowerLayoutMetrics.CalculateRankingRows(
                 (int)Math.Round(ActualWidth), (int)Math.Round(ActualHeight), _diagnostic);
             if (_viewModel.Timing.RankingRowCapacity == capacity) return;
             _viewModel.Timing.ResizeRanking(capacity);
-            TimingHud.SetViewModel(_viewModel.Timing);
+            TimingHud?.SetViewModel(_viewModel.Timing);
         }
 
         /// <summary>The event card surface is currently shown (including its exit animation).</summary>
-        public bool IsEventCardSurfaceVisible => _eventWindow.IsVisible;
+        public bool IsEventCardSurfaceVisible => _eventWindow?.IsVisible == true;
 
         // A dismissed card keeps its surface only for the length of the exit
         // animation returned by the view, so the slide-out is not cut short by
@@ -389,7 +505,7 @@ namespace AMS2LeagueClient.Overlay
                 ParticipantCountText = "리그 20 / 원본 20",
                 RemainingLabel = "남은 시간", RemainingValue = "05:00"
             } : null;
-            _waitingView.DataContext = _lastWaitingViewModel;
+            if (_waitingView != null) _waitingView.DataContext = _lastWaitingViewModel;
             ApplyViewModel(DemoSnapshotFactory.CreateShell(_diagnostic), false);
             _layoutPreview = true;
             BeginLayoutEdit();
@@ -412,7 +528,7 @@ namespace AMS2LeagueClient.Overlay
             }
             else
             {
-                _waitingWindow.HideOverlay();
+                _waitingWindow?.HideOverlay();
                 ShowGameplaySurfaces(_lastGameWindow, true);
             }
             return true;
@@ -435,7 +551,7 @@ namespace AMS2LeagueClient.Overlay
                 _liveViewModelBeforePreview = null;
                 _lastWaitingViewModel = null;
                 _lastWaitingKey = string.Empty;
-                _waitingView.DataContext = null;
+                if (_waitingView != null) _waitingView.DataContext = null;
             }
             SetEditMode(false);
             if (wasPreview)
@@ -457,9 +573,11 @@ namespace AMS2LeagueClient.Overlay
 
         public void ResetLayout()
         {
-            _layoutProfile = new OverlayLayoutProfile { DrivingHud = GetDrivingHudSettings(), VrHud = GetVrHudSettings() };
+            _layoutProfile = new OverlayLayoutProfile { DrivingHud = GetDrivingHudSettings(), VrHud = GetVrHudSettings(), ComponentOpacities = _layoutProfile.ComponentOpacities };
             _layoutProfile.SetDrivingPanelDefaults();
             _layoutStore.Save(_layoutProfile);
+            SynchronizeSurfaces();
+            ApplyViewModel(_viewModel, false);
             InvalidateBounds();
             if (_lastGameWindow == null) return;
             if (_layoutEditing)
@@ -484,7 +602,7 @@ namespace AMS2LeagueClient.Overlay
             _lastGameWindow = gameWindow ?? throw new ArgumentNullException(nameof(gameWindow));
             _displayMode = DisplayMode.Gameplay;
             if (_layoutEditing) return;
-            _waitingWindow.HideOverlay();
+            _waitingWindow?.HideOverlay();
             ShowGameplaySurfaces(gameWindow, false);
         }
 
@@ -502,7 +620,7 @@ namespace AMS2LeagueClient.Overlay
             if (waitingKey != _lastWaitingKey)
             {
                 _lastWaitingKey = waitingKey;
-                _waitingView.DataContext = viewModel;
+                if (_waitingView != null) _waitingView.DataContext = viewModel;
             }
             if (_layoutEditing) return;
             HideGameplayWindows();
@@ -519,7 +637,7 @@ namespace AMS2LeagueClient.Overlay
         {
             if (_layoutEditing) return;
             HideGameplayWindows();
-            _waitingWindow.HideOverlay();
+            _waitingWindow?.HideOverlay();
             _lastGameWindow = null;
             InvalidateBounds();
         }
@@ -533,23 +651,26 @@ namespace AMS2LeagueClient.Overlay
                 _diagnostic,
                 _viewModel.RaceControl.IsExpanded);
 
-            OverlayBounds[] drivingBounds = { defaults.Pedals, defaults.PedalGauge, defaults.Speed, defaults.Gear, defaults.Dashboard };
+            OverlayBounds[] drivingBounds = { defaults.Pedals, defaults.PedalGauge, defaults.Speed, defaults.Gear, defaults.Dashboard,
+                new OverlayBounds(Math.Max(0, (gameWindow.Width - 454) / 2), Math.Max(0, gameWindow.Height - 395), 454, 375),
+                new OverlayBounds(Math.Max(0, (gameWindow.Width - 820) / 2), Math.Max(0, gameWindow.Height - 320), 820, 300) };
             for (int i = 0; i < _drivingWindows.Length; i++)
             {
-                AuxiliaryOverlayWindow panel = _drivingWindows[i];
+                AuxiliaryOverlayWindow? panel = _drivingWindows[i];
+                if (panel == null) continue;
                 if (_layoutProfile.IsEnabled(panel.ComponentKey))
                     panel.ShowAt(gameWindow, Resolve(panel.ComponentKey, drivingBounds[i], gameWindow));
-                else panel.HideOverlay();
+                else panel?.HideOverlay();
             }
 
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.TimingTower))
             {
                 OverlayBounds tower = Resolve(OverlayComponentKeys.TimingTower, defaults.Timing, gameWindow);
                 _viewModel.Timing.ResizeRanking(LeftTowerLayoutMetrics.CalculateRankingRows(tower.Width, tower.Height, _diagnostic));
-                TimingHud.SetViewModel(_viewModel.Timing);
+                TimingHud?.SetViewModel(_viewModel.Timing);
                 if (!_layoutEditing)
                 {
-                    int contentHeight = (int)Math.Ceiling(TimingHud.Height * tower.Width / LeftTowerLayoutMetrics.Width);
+                    int contentHeight = (int)Math.Ceiling(TimingHud!.Height * tower.Width / LeftTowerLayoutMetrics.Width);
                     tower = new OverlayBounds(tower.X, tower.Y, tower.Width, Math.Min(tower.Height, contentHeight));
                 }
                 ShowMainAt(gameWindow, tower);
@@ -561,37 +682,37 @@ namespace AMS2LeagueClient.Overlay
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.RelativeDrivers)
                 && (includeInactive || _viewModel.Timing.IsBottomGapPanelVisible))
             {
-                _relativeWindow.ShowAt(gameWindow, Resolve(OverlayComponentKeys.RelativeDrivers, defaults.Relative, gameWindow));
+                _relativeWindow?.ShowAt(gameWindow, Resolve(OverlayComponentKeys.RelativeDrivers, defaults.Relative, gameWindow));
             }
             else
             {
-                _relativeWindow.HideOverlay();
+                _relativeWindow?.HideOverlay();
             }
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.LapTiming))
-                _lapTimingWindow.ShowAt(gameWindow, Resolve(OverlayComponentKeys.LapTiming, defaults.LapTiming, gameWindow));
+                _lapTimingWindow?.ShowAt(gameWindow, Resolve(OverlayComponentKeys.LapTiming, defaults.LapTiming, gameWindow));
             else
-                _lapTimingWindow.HideOverlay();
+                _lapTimingWindow?.HideOverlay();
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.SessionInfo))
-                _sessionWindow.ShowAt(gameWindow, Resolve(OverlayComponentKeys.SessionInfo, defaults.Session, gameWindow));
+                _sessionWindow?.ShowAt(gameWindow, Resolve(OverlayComponentKeys.SessionInfo, defaults.Session, gameWindow));
             else
-                _sessionWindow.HideOverlay();
+                _sessionWindow?.HideOverlay();
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.EventCard)
                 && (includeInactive || IsEventCardPresentable))
             {
-                _eventWindow.ShowAt(gameWindow, Resolve(OverlayComponentKeys.EventCard, defaults.EventCard, gameWindow));
+                _eventWindow?.ShowAt(gameWindow, Resolve(OverlayComponentKeys.EventCard, defaults.EventCard, gameWindow));
             }
             else
             {
-                _eventWindow.HideOverlay();
+                _eventWindow?.HideOverlay();
             }
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.RaceControl)
                 && (includeInactive || IsRaceControlPresentable))
             {
-                _raceControlWindow.ShowAt(gameWindow, Resolve(OverlayComponentKeys.RaceControl, defaults.RaceControl, gameWindow));
+                _raceControlWindow?.ShowAt(gameWindow, Resolve(OverlayComponentKeys.RaceControl, defaults.RaceControl, gameWindow));
             }
             else
             {
-                _raceControlWindow.HideOverlay();
+                _raceControlWindow?.HideOverlay();
             }
         }
 
@@ -600,7 +721,7 @@ namespace AMS2LeagueClient.Overlay
             if (editing && _lastWaitingViewModel == null)
             {
                 _lastWaitingViewModel = new MultiplayerWaitingOverlayViewModel();
-                _waitingView.DataContext = _lastWaitingViewModel;
+                if (_waitingView != null) _waitingView.DataContext = _lastWaitingViewModel;
             }
             OverlayComponentLayout defaults = OverlayComponentLayoutCalculator.Calculate(
                 gameWindow.Width,
@@ -609,9 +730,9 @@ namespace AMS2LeagueClient.Overlay
                 _diagnostic,
                 false);
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.Waiting))
-                _waitingWindow.ShowAt(gameWindow, Resolve(OverlayComponentKeys.Waiting, defaults.Waiting, gameWindow));
+                _waitingWindow?.ShowAt(gameWindow, Resolve(OverlayComponentKeys.Waiting, defaults.Waiting, gameWindow));
             else
-                _waitingWindow.HideOverlay();
+                _waitingWindow?.HideOverlay();
         }
 
         private OverlayBounds Resolve(string component, OverlayBounds fallback, GameWindowSnapshot gameWindow)
@@ -645,26 +766,26 @@ namespace AMS2LeagueClient.Overlay
             if (_lastGameWindow == null) return;
             if (_displayMode == DisplayMode.Waiting)
             {
-                if (_layoutProfile.IsEnabled(OverlayComponentKeys.Waiting) && _waitingWindow.IsVisible)
-                    Capture(OverlayComponentKeys.Waiting, _waitingWindow.ReadPhysicalBounds(), _lastGameWindow);
+                if (_layoutProfile.IsEnabled(OverlayComponentKeys.Waiting) && _waitingWindow?.IsVisible == true)
+                    Capture(OverlayComponentKeys.Waiting, _waitingWindow!.ReadPhysicalBounds(), _lastGameWindow);
                 return;
             }
 
-            foreach (AuxiliaryOverlayWindow panel in _drivingWindows)
-                if (_layoutProfile.IsEnabled(panel.ComponentKey) && panel.IsVisible)
+            foreach (AuxiliaryOverlayWindow? panel in _drivingWindows)
+                if (panel != null && _layoutProfile.IsEnabled(panel.ComponentKey) && panel.IsVisible)
                     Capture(panel.ComponentKey, panel.ReadPhysicalBounds(), _lastGameWindow);
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.TimingTower) && IsVisible)
                 Capture(OverlayComponentKeys.TimingTower, OverlayWindowInterop.ReadPhysicalBounds(_handle), _lastGameWindow);
-            if (_layoutProfile.IsEnabled(OverlayComponentKeys.RelativeDrivers) && _relativeWindow.IsVisible)
-                Capture(OverlayComponentKeys.RelativeDrivers, _relativeWindow.ReadPhysicalBounds(), _lastGameWindow);
-            if (_layoutProfile.IsEnabled(OverlayComponentKeys.LapTiming) && _lapTimingWindow.IsVisible)
-                Capture(OverlayComponentKeys.LapTiming, _lapTimingWindow.ReadPhysicalBounds(), _lastGameWindow);
-            if (_layoutProfile.IsEnabled(OverlayComponentKeys.SessionInfo) && _sessionWindow.IsVisible)
-                Capture(OverlayComponentKeys.SessionInfo, _sessionWindow.ReadPhysicalBounds(), _lastGameWindow);
-            if (_layoutProfile.IsEnabled(OverlayComponentKeys.EventCard) && _eventWindow.IsVisible)
-                Capture(OverlayComponentKeys.EventCard, _eventWindow.ReadPhysicalBounds(), _lastGameWindow);
-            if (_layoutProfile.IsEnabled(OverlayComponentKeys.RaceControl) && _raceControlWindow.IsVisible)
-                Capture(OverlayComponentKeys.RaceControl, _raceControlWindow.ReadPhysicalBounds(), _lastGameWindow);
+            if (_layoutProfile.IsEnabled(OverlayComponentKeys.RelativeDrivers) && _relativeWindow?.IsVisible == true)
+                Capture(OverlayComponentKeys.RelativeDrivers, _relativeWindow!.ReadPhysicalBounds(), _lastGameWindow);
+            if (_layoutProfile.IsEnabled(OverlayComponentKeys.LapTiming) && _lapTimingWindow?.IsVisible == true)
+                Capture(OverlayComponentKeys.LapTiming, _lapTimingWindow!.ReadPhysicalBounds(), _lastGameWindow);
+            if (_layoutProfile.IsEnabled(OverlayComponentKeys.SessionInfo) && _sessionWindow?.IsVisible == true)
+                Capture(OverlayComponentKeys.SessionInfo, _sessionWindow!.ReadPhysicalBounds(), _lastGameWindow);
+            if (_layoutProfile.IsEnabled(OverlayComponentKeys.EventCard) && _eventWindow?.IsVisible == true)
+                Capture(OverlayComponentKeys.EventCard, _eventWindow!.ReadPhysicalBounds(), _lastGameWindow);
+            if (_layoutProfile.IsEnabled(OverlayComponentKeys.RaceControl) && _raceControlWindow?.IsVisible == true)
+                Capture(OverlayComponentKeys.RaceControl, _raceControlWindow!.ReadPhysicalBounds(), _lastGameWindow);
         }
 
         private void Capture(string component, OverlayBounds screenBounds, GameWindowSnapshot gameWindow)
@@ -689,13 +810,13 @@ namespace AMS2LeagueClient.Overlay
             ShowActivated = enabled;
             ApplyOutputVisibility();
             OverlayWindowInterop.SetEditMode(_handle, enabled);
-            _relativeWindow.SetEditMode(enabled);
-            _lapTimingWindow.SetEditMode(enabled);
-            _sessionWindow.SetEditMode(enabled);
-            _eventWindow.SetEditMode(enabled);
-            _raceControlWindow.SetEditMode(enabled);
-            _waitingWindow.SetEditMode(enabled);
-            foreach (AuxiliaryOverlayWindow panel in _drivingWindows) panel.SetEditMode(enabled);
+            _relativeWindow?.SetEditMode(enabled);
+            _lapTimingWindow?.SetEditMode(enabled);
+            _sessionWindow?.SetEditMode(enabled);
+            _eventWindow?.SetEditMode(enabled);
+            _raceControlWindow?.SetEditMode(enabled);
+            _waitingWindow?.SetEditMode(enabled);
+            foreach (AuxiliaryOverlayWindow? panel in _drivingWindows) panel?.SetEditMode(enabled);
             RefreshDrivingViews();
             _lastEventKey = _lastRaceControlKey = string.Empty;
             ApplyViewModel(_viewModel, false);
@@ -708,26 +829,26 @@ namespace AMS2LeagueClient.Overlay
 
         private void HideGameplayWindows()
         {
-            foreach (AuxiliaryOverlayWindow panel in _drivingWindows) panel.HideOverlay();
+            foreach (AuxiliaryOverlayWindow? panel in _drivingWindows) panel?.HideOverlay();
             if (_drivingHistory.Current != null) { _drivingHistory.MarkStale(); RefreshDrivingViews(); }
             if (IsVisible) Hide();
-            _relativeWindow.HideOverlay();
-            _lapTimingWindow.HideOverlay();
-            _sessionWindow.HideOverlay();
-            _eventWindow.HideOverlay();
-            _raceControlWindow.HideOverlay();
+            _relativeWindow?.HideOverlay();
+            _lapTimingWindow?.HideOverlay();
+            _sessionWindow?.HideOverlay();
+            _eventWindow?.HideOverlay();
+            _raceControlWindow?.HideOverlay();
         }
 
         private void InvalidateBounds()
         {
             _lastBoundsKey = string.Empty;
-            _relativeWindow.InvalidateBounds();
-            _lapTimingWindow.InvalidateBounds();
-            _sessionWindow.InvalidateBounds();
-            _eventWindow.InvalidateBounds();
-            _raceControlWindow.InvalidateBounds();
-            _waitingWindow.InvalidateBounds();
-            foreach (AuxiliaryOverlayWindow panel in _drivingWindows) panel.InvalidateBounds();
+            _relativeWindow?.InvalidateBounds();
+            _lapTimingWindow?.InvalidateBounds();
+            _sessionWindow?.InvalidateBounds();
+            _eventWindow?.InvalidateBounds();
+            _raceControlWindow?.InvalidateBounds();
+            _waitingWindow?.InvalidateBounds();
+            foreach (AuxiliaryOverlayWindow? panel in _drivingWindows) panel?.InvalidateBounds();
         }
 
         private static int Scale(int logicalPixels, double scale)

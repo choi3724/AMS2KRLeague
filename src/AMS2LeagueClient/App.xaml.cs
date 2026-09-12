@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -154,7 +154,7 @@ namespace AMS2LeagueClient
                     };
                     _statusWindow.DrivingHudSettingsRequested += (sender, settingsArgs) =>
                     {
-                        var dialog = new DrivingHudSettingsWindow(overlay.GetDrivingHudSettings()) { Owner = _statusWindow };
+                        var dialog = new DrivingHudSettingsWindow(overlay.GetDrivingHudSettings(), overlay.AvanteVehicleName, overlay.AvanteEngineMaximum, overlay.AvanteProfileVehicleName) { Owner = _statusWindow };
                         if (dialog.ShowDialog() != true) return;
                         try { overlay.SaveDrivingHudSettings(dialog.Settings); _statusWindow.SetDesignLabels(dialog.Settings); }
                         catch (Exception exception)
@@ -178,6 +178,8 @@ namespace AMS2LeagueClient
                             _overlay?.IsLayoutEditing == true,
                             "모든 패널을 기본 위치와 크기로 복원했습니다.");
                     };
+                    _statusWindow.SetComponentOpacities(OverlayComponentKeys.All.ToDictionary(key => key, key => _overlay.GetComponentOpacity(key)));
+                    _statusWindow.ComponentOpacityChanged += (key, opacity) => _overlay.SetComponentOpacity(key, opacity);
                     _statusWindow.LayoutComponentToggled += (sender, toggleArgs) =>
                         _overlay?.SetComponentEnabled(toggleArgs.Component, toggleArgs.Enabled);
                 }

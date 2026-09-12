@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
@@ -53,6 +53,10 @@ namespace AMS2LeagueClient.Tests
                 application.Shutdown();
                 return 0;
             }
+            if (args.Contains("--avante-preview", StringComparer.Ordinal))
+            {
+                AvanteClusterLayoutsAndMotion(); OverlayOpacityPersistsAndRenders(); MainOverlayGallery(); AuxiliaryPanelsFillResizedBounds(); application.Shutdown(); return 0;
+            }
             if (args.Contains("--hud-preview", StringComparer.Ordinal))
             {
                 DrivingAbsSteeringAndRpm();
@@ -82,6 +86,9 @@ namespace AMS2LeagueClient.Tests
             }
             var tests = new (string Name, Action Test)[]
             {
+                ("Render remediation retains graph paths and suspends inactive resources", RenderRemediationRetainsPathsAndStopsWork),
+                ("Interrupted HUD motion resumes observed target and clears stale state", InterruptedHudMotionResumesObservedTarget),
+                ("Disabled overlays release windows views and image assets", DisabledOverlaysReleaseResources),
                 ("401 credential recovery preserves identity and prevents storms", AuthenticationRecoveryPreservesIdentity),
                 ("Late mode evidence finalizes one immutable envelope", DelayedModeFinalizesOnce),
                 ("Bounded logger preserves order drains and survives IO", BoundedLoggerDrainsAndSurvivesIo),
@@ -92,6 +99,16 @@ namespace AMS2LeagueClient.Tests
                 ("Telemetry 401 recovery retains the exact upload", TelemetryAuthenticationIsRetryable),
                 ("Activity semantic ACK never accepts ambiguous success", ActivitySemanticAcknowledgements),
                 ("Telemetry ambiguous ACK retains exact bytes for retry", AmbiguousTelemetryAcknowledgements),
+                ("Overlay opacity persists and renders in desktop and VR composition", OverlayOpacityPersistsAndRenders),
+                ("Avante vehicle names use common RPM warnings and flash", AvanteReferenceWarningsRestore),
+                ("Avante redline chatter preserves visible flash phase", AvanteRedlineChatter),
+                ("Avante outer gauge completes at redline independent of scale", AvanteOuterGaugeCompletesAtRedline),
+                ("Avante common 90/97 RPM policy and vehicle lifetime", AvanteCommonRpmPolicy),
+                ("Avante recorded vehicle identity uses common RPM policy", AvanteRecordedVehicleProfile),
+                ("Avante vehicle RPM calibration and shared tick coordinates", AvanteVehicleRpmCalibration),
+                ("Avante reference effects retain digits and approved warning policy", AvanteReferenceEffects),
+                ("Avante speed center and fixed digit size with retained follower", AvanteSpeedCenterAndFollower),
+                ("Avante cluster variants and RPM motion preserve source design", AvanteClusterLayoutsAndMotion),
                 ("Main overlay gallery previews and direct selection persist", MainOverlayGallery),
                 ("Telemetry layouts separate gauges and keep wheel angle compact", TelemetryPanelLayouts),
                 ("Driving graph scrolls existing points left between samples", DrivingGraphScrollsLeft),
@@ -194,6 +211,7 @@ namespace AMS2LeagueClient.Tests
                 ,("Fastest lap status sweeps purple without dimming", FastestLapStatusSweepsPurple)
                 ,("Tower rows build in when shown", TowerRowsBuildInWhenShown)
                 ,("Component toggle persists without layout edit", ComponentToggleWithoutEditPersists)
+
                 ,("Status window toggles are always enabled", StatusWindowTogglesAlwaysEnabled)
                 ,("Relative participant change animates", RelativeParticipantChangeAnimates)
                 ,("Session lap counter rolls", SessionLapCounterRolls)
@@ -2855,10 +2873,11 @@ namespace AMS2LeagueClient.Tests
                     IsVisible = true, IsExpanded = true, Title = "레이스 컨트롤",
                     Message = "랩타임 삭제", DriverLine = "P16 플레이어", StateLabel = "! 황색기"
                 };
+                foreach (string component in OverlayComponentKeys.All) window.SetComponentEnabled(component, true);
                 window.SetViewModel(shell, false);
                 Window[] panels = Application.Current.Windows.Cast<Window>()
                     .Where(item => item != window && !existing.Contains(item)).ToArray();
-                AssertEqual(11, panels.Length);
+                AssertEqual(13, panels.Length);
                 foreach (Window panel in panels)
                 {
                     var root = (Grid)panel.Content;
@@ -2896,7 +2915,7 @@ namespace AMS2LeagueClient.Tests
                                 && text.Name != "AheadLapGapText" && text.Name != "BehindLapGapText")
                                 AssertTrue(Math.Abs(scaleX - Math.Min(x, y)) < 0.0001);
                         }
-                        AssertTrue(measuredTexts > 0 || content is DrivingDashboardView || content is PedalTelemetryView
+                        AssertTrue(measuredTexts > 0 || content is DrivingDashboardView || content is AvanteClusterView || content is PedalTelemetryView
                             || Descendants<LegacyPedalTelemetryView>(content).Any() || Descendants<PedalTelemetryView>(content).Any());
                         CaptureLayout(root, panel.Title + "-" + x + "x" + y);
                     }

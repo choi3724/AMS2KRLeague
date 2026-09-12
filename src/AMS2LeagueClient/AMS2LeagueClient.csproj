@@ -23,6 +23,8 @@
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\Hud\*.png" />
     <Resource Include="Assets\Fonts\Pretendard-Medium.otf" />
+    <Resource Include="Assets\Fonts\AvanteN-*.ttf" />
+    <None Update="Assets\Fonts\AvanteN-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="Assets\Fonts\Pretendard-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Runtime\ApplyUpdate.ps1" LogicalName="AMS2LeagueClient.ApplyUpdate.ps1" />
   </ItemGroup>

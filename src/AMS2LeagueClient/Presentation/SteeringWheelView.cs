@@ -12,14 +12,22 @@ namespace AMS2LeagueClient.Presentation
     {
         private DrivingTelemetrySample? _sample;
         private readonly RotateTransform _rotation = new RotateTransform();
-        private static readonly BitmapImage Wheel = LoadWheel();
+        private static readonly WeakReference<BitmapImage> SharedWheel = new WeakReference<BitmapImage>(null!);
+        private readonly BitmapImage Wheel = GetWheel();
+        private readonly HudTargetMotion _motion;
+        private string? _angleText;
+        private FormattedText? _text;
+        private double _textDpi;
+        private static BitmapImage GetWheel()
+        { if (SharedWheel.TryGetTarget(out var image)) return image; image = LoadWheel(); SharedWheel.SetTarget(image); return image; }
         private readonly Typeface _font = new Typeface(new FontFamily("Bahnschrift"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         public double RotationRange { get; set; } = 900;
         public SteeringWheelView()
         {
+            _motion = new HudTargetMotion(35, angle => _rotation.Angle = angle, this);
             RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.HighQuality);
-            IsVisibleChanged += (_, __) => { if (!IsVisible) _rotation.BeginAnimation(RotateTransform.AngleProperty, null); };
-            Unloaded += (_, __) => _rotation.BeginAnimation(RotateTransform.AngleProperty, null);
+            IsVisibleChanged += (_, __) => { if (!IsVisible) _motion.Stop(); };
+            Unloaded += (_, __) => _motion.Stop();
         }
         private static BitmapImage LoadWheel()
         {
@@ -30,23 +38,23 @@ namespace AMS2LeagueClient.Presentation
         }
         public void SetSample(DrivingTelemetrySample? sample)
         {
-            double from = _rotation.Angle, to = sample?.SteeringDegrees(RotationRange) ?? 0;
+            double to = sample?.SteeringDegrees(RotationRange) ?? 0;
             bool continuous = sample != null && _sample != null && sample.Generation == _sample.Generation
                 && sample.ParticipantIndex == _sample.ParticipantIndex && sample.CapturedAt >= _sample.CapturedAt
                 && (sample.CapturedAt - _sample.CapturedAt).TotalSeconds <= 1;
             _sample = sample;
-            _rotation.BeginAnimation(RotateTransform.AngleProperty, null);
-            _rotation.Angle = to;
-            if (IsVisible && continuous && Math.Abs(to - from) > .01)
-                _rotation.BeginAnimation(RotateTransform.AngleProperty,
-                    new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(35)) { FillBehavior = FillBehavior.Stop });
-            InvalidateVisual();
+            _motion.Set(to, IsVisible && continuous);
+            string text = (sample?.SteeringDegrees(RotationRange)?.ToString("0", CultureInfo.InvariantCulture) ?? "—") + "°";
+            if (text != _angleText) { _angleText = text; _text = null; InvalidateVisual(); }
         }
         protected override void OnRender(DrawingContext drawing)
         {
             double? angle = _sample?.SteeringDegrees(RotationRange);
-            var text = new FormattedText(angle.HasValue ? angle.Value.ToString("0", CultureInfo.InvariantCulture) + "°" : "—°",
-                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _font, 20, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            if (_text == null || dpi != _textDpi)
+            { _textDpi = dpi; _text = new FormattedText(angle.HasValue ? angle.Value.ToString("0", CultureInfo.InvariantCulture) + "°" : "—°",
+                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _font, 20, Brushes.White, dpi); }
+            var text = _text;
             const double gap = 2;
             double radius = Math.Max(0, Math.Min(ActualWidth - 10, ActualHeight - text.Height - gap) / 2);
             double top = Math.Max(0, (ActualHeight - radius * 2 - gap - text.Height) / 2);

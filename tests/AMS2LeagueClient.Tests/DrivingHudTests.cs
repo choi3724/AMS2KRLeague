@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -30,19 +30,18 @@ namespace AMS2LeagueClient.Tests
                 history.Add(new DrivingTelemetrySample(now.AddSeconds((i - 200) * 0.05), 1, 3,
                     Math.Max(0, 1 - Math.Abs(i - 170) / 10.0), 0.3, 0.1, 0, 30, 2));
             var view = new PedalTelemetryView { Width = 560, Height = 160 };
-            var host = new Window { Content = view, Width = 580, Height = 200, Left = -5000, Top = -5000, ShowActivated = false };
+            var host = new Window { Content = view, Width = 580, Height = 200, Left = 40, Top = 40, Topmost = true, ShowActivated = false };
             try
             {
                 host.Show(); PumpDispatcher(); view.SetHistory(history); PumpDispatcher();
                 FrameworkElement graph = Descendants<FrameworkElement>(view).Single(element => element.GetType().Name == "PedalGraph");
-                double PeakX()
+                double PeakX(DrawingGroup captured)
                 {
-                    graph.UpdateLayout();
                     var bitmap = new RenderTargetBitmap((int)graph.ActualWidth, (int)graph.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                     // Render at the graph's own origin, excluding the parent Grid row offset.
                     var visual = new DrawingVisual();
                     using (DrawingContext drawing = visual.RenderOpen())
-                        drawing.DrawDrawing(VisualTreeHelper.GetDrawing(graph));
+                        drawing.DrawDrawing(captured);
                     bitmap.Render(visual);
                     byte[] pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
                     bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
@@ -97,17 +96,46 @@ namespace AMS2LeagueClient.Tests
                 noisy.Add(new DrivingTelemetrySample(now.AddSeconds(0.1), 1, 3, 0.5, 0, 0, 0, 30, 2));
                 curve = (StreamGeometry)buildCurve.Invoke(null, new object[] { noisy, 0, now.AddSeconds(0.1), 380.0, 100.0, false })!;
                 AssertEqual(2, PathGeometry.CreateFromGeometry(curve).Figures.Count);
-                view.SetHistory(history); PumpDispatcher();
-                double before = PeakX();
                 var renderCountField = graph.GetType().GetField("_renderCount", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
-                int rendersBefore = (int)renderCountField.GetValue(graph)!;
+                int rendersBefore = 0;
+                DrawingGroup? beforeDrawing = null, afterDrawing = null;
+                TimeSpan firstRender = TimeSpan.Zero;
+                double renderElapsedMs = 0;
                 var frame = new DispatcherFrame();
-                var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
-                timer.Tick += (s, e) => { timer.Stop(); frame.Continue = false; };
-                timer.Start(); Dispatcher.PushFrame(frame);
-                double after = PeakX();
+                EventHandler captureFrames = (_, args) =>
+                {
+                    TimeSpan nowRender = ((RenderingEventArgs)args).RenderingTime;
+                    if (beforeDrawing == null)
+                    {
+                        beforeDrawing = VisualTreeHelper.GetDrawing(graph).CloneCurrentValue();
+                        firstRender = nowRender;
+                        rendersBefore = (int)renderCountField.GetValue(graph)!;
+                    }
+                    else if ((nowRender - firstRender).TotalMilliseconds >= 350)
+                    {
+                        afterDrawing = VisualTreeHelper.GetDrawing(graph).CloneCurrentValue();
+                        renderElapsedMs = (nowRender - firstRender).TotalMilliseconds;
+                        frame.Continue = false;
+                    }
+                };
+                var deadline = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+                deadline.Tick += (_, __) => { deadline.Stop(); frame.Continue = false; };
+                // Keep the compositor callback subscribed for the entire observation,
+                // matching the live coordinator; bitmap rasterization happens afterwards.
+                CompositionTarget.Rendering += captureFrames;
+                try
+                {
+                    view.SetHistory(history); graph.UpdateLayout();
+                    deadline.Start(); Dispatcher.PushFrame(frame);
+                }
+                finally { CompositionTarget.Rendering -= captureFrames; deadline.Stop(); }
+                AssertNotNull(beforeDrawing); AssertNotNull(afterDrawing);
+                Console.WriteLine("PROOF graph render observation ms=" + renderElapsedMs);
+                double before = PeakX(beforeDrawing!), after = PeakX(afterDrawing!);
+                Console.WriteLine("PROOF visible graph host loaded=" + graph.IsLoaded + " visible=" + graph.IsVisible);
                 AssertTrue((int)renderCountField.GetValue(graph)! - rendersBefore <= 1);
                 Console.WriteLine("PROOF retained graph moves without per-frame OnRender");
+                Console.WriteLine("PROOF scroll delta=" + (before - after));
                 AssertTrue(before - after > 8 && before - after < 30);
                 AssertEqual(201, history.Count);
                 Console.WriteLine("PROOF graph-left-scroll peakX=" + before.ToString("F1") + " -> " + after.ToString("F1") + " without changing input values");
@@ -157,13 +185,18 @@ namespace AMS2LeagueClient.Tests
             history.Add(new DrivingTelemetrySample(last.AddMilliseconds(100), 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(1, history.Count);
             history.Add(new DrivingTelemetrySample(last.AddSeconds(5), 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(2, history.Count);
             history.Add(new DrivingTelemetrySample(last, 2, 4, 0, 0, 0, 0, 0, 0)); AssertEqual(1, history.Count);
-            for (int i = 1; i <= 2000; i++)
+            for (int i = 1; i <= DrivingTelemetryHistory.MaximumSamples * 2; i++)
                 history.Add(new DrivingTelemetrySample(last.AddMilliseconds(i), 2, 4, 0, 0, 0, 0, 0, 0));
             AssertEqual(DrivingTelemetryHistory.MaximumSamples, history.Count);
             history.Add(null); AssertEqual(DrivingTelemetryHistory.MaximumSamples, history.Count); AssertTrue(history.Current == null);
             AssertTrue(history.IsStale); AssertTrue(history.LastObserved != null);
             history.Clear(); AssertEqual(0, history.Count); AssertFalse(history.IsStale);
-            Console.WriteLine("PROOF driving-history 10000 samples, 20Hz window=201, hardLimit=1024, elapsedMs=" + watch.ElapsedMilliseconds);
+            for (int i = 0; i <= 2400; i++)
+                history.Add(new DrivingTelemetrySample(last.AddSeconds(i / 240.0), 2, 4, 0, 0, 0, 0, 0, 0));
+            AssertEqual(2401, history.Count);
+            AssertEqual(TimeSpan.FromSeconds(10), history.Current!.CapturedAt - history.Samples.First().CapturedAt);
+            Console.WriteLine("PROOF local history at 240Hz retains 2401 observed samples over 10 seconds");
+            Console.WriteLine("PROOF driving-history 10000 samples, 20Hz window=201, hardLimit=4096, elapsedMs=" + watch.ElapsedMilliseconds);
             var bad = new DrivingHudSettings { BrakeColor = "#xyzxyz", ClutchColor = "#123abc", SpeedFont = "https://remote/font", GearFont = "", SpeedShadowColor = "invalid", GearShadowColor = "#aabbcc" }.Normalize();
             AssertEqual("#FF3030", bad.BrakeColor); AssertEqual("#123ABC", bad.ClutchColor);
             AssertEqual("Pretendard", bad.SpeedFont); AssertEqual("Pretendard", bad.GearFont);
@@ -255,11 +288,14 @@ namespace AMS2LeagueClient.Tests
                 }
                 window.SetComponentEnabled(OverlayComponentKeys.PedalTelemetry, false); AssertFalse(pedals.IsVisible); AssertTrue(gauges.IsVisible);
                 window.SetComponentEnabled(OverlayComponentKeys.PedalTelemetry, true);
+                pedals = Application.Current.Windows.Cast<Window>().Single(w => w.Title == "AMS2 텔레메트리 (개량)");
                 window.SetComponentEnabled(OverlayComponentKeys.PedalGauge, false); AssertFalse(gauges.IsVisible); AssertTrue(pedals.IsVisible);
                 window.SetComponentEnabled(OverlayComponentKeys.Speed, false);
                 window.UpdateDrivingSample(new DrivingTelemetrySample(FixedTime().AddSeconds(11), 1, 3, 0, .5, 0, 0, 50, 4));
                 AssertEqual("260 km/h", speedView.ValueText.Text);
                 window.SetComponentEnabled(OverlayComponentKeys.Speed, true); PumpDispatcher();
+                speed = Application.Current.Windows.Cast<Window>().Single(w => w.Title == "AMS2 속도계");
+                speedView = FindDescendant<DrivingNumberView>(speed)!;
                 AssertEqual("180 km/h", speedView.ValueText.Text);
                 window.SetComponentEnabled(OverlayComponentKeys.Speed, false); AssertFalse(speed.IsVisible); AssertTrue(gear.IsVisible);
                 window.UpdateDrivingTelemetry(Parse(fixture.SetViewedIndex(2), FixedTime().AddSeconds(11)), 3, 1);
@@ -290,7 +326,9 @@ namespace AMS2LeagueClient.Tests
                 dialog.ShowActivated = false; dialog.Left = -5000; dialog.Top = -5000;
                 dialog.WindowStartupLocation = WindowStartupLocation.Manual;
                 dialog.Show(); PumpDispatcher();
-                AssertEqual(2, Descendants<ComboBox>(dialog).Count());
+                // Two existing font selectors plus the user-requested RPM maximum mode.
+                AssertEqual(2, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) != "최대 눈금 결정"));
+                AssertEqual(1, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) == "최대 눈금 결정"));
                 AssertTrue(dialog.ActualHeight <= SystemParameters.WorkArea.Height);
                 AssertEqual(6, Descendants<Button>(dialog).Count(button => button.Tag is string));
                 CaptureLayout((FrameworkElement)dialog.Content, "driving-settings-menu");
@@ -298,7 +336,7 @@ namespace AMS2LeagueClient.Tests
                 var status = new ClientStatusWindow(new ClientStatusViewModel()) { Width = 860, Height = 820 };
                 status.ShowActivated = false; status.WindowStartupLocation = WindowStartupLocation.Manual;
                 status.Left = -5000; status.Top = -5000; status.Show(); PumpDispatcher();
-                AssertEqual(12, status.GetLayoutComponentStates().Count);
+                AssertEqual(14, status.GetLayoutComponentStates().Count);
                 CaptureLayout((FrameworkElement)status.Content, "driving-status-menu-minimum");
                 status.Close();
             }
