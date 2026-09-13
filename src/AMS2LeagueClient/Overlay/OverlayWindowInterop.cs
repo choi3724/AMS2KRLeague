@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
@@ -45,13 +45,73 @@ namespace AMS2LeagueClient.Overlay
         private static readonly object StateGate = new object();
         private static readonly HashSet<IntPtr> EditingHandles = new HashSet<IntPtr>();
 
+        public sealed class DisplayInfo
+        {
+            public string DeviceName { get; internal set; } = string.Empty;
+            public string DeviceId { get; internal set; } = string.Empty;
+            public OverlayBounds Bounds { get; internal set; }
+            public OverlayBounds WorkArea { get; internal set; }
+            public uint DpiX { get; internal set; }
+            public uint DpiY { get; internal set; }
+            public bool Primary { get; internal set; }
+        }
+        private static List<DisplayInfo>? _displays;
+        private static OverlayBounds[] _displayBounds = Array.Empty<OverlayBounds>(), _workAreas = Array.Empty<OverlayBounds>();
+        public static int DisplayRevision { get; private set; }
+        // UI-thread cache, invalidated by native display/settings/DPI messages, never enumerated per frame.
+        public static IReadOnlyList<DisplayInfo> Displays
+        {
+            get
+            {
+                if (_displays != null) return _displays;
+                var result = new List<DisplayInfo>();
+                EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr monitor, IntPtr dc, ref NativeRect rect, IntPtr data) =>
+                {
+                    var info = new MonitorInfoEx { Size = Marshal.SizeOf<MonitorInfoEx>(), Device = string.Empty };
+                    if (!GetMonitorInfoEx(monitor, ref info)) return true;
+                    uint dx = 96, dy = 96;
+                    if (GetDpiForMonitor(monitor, 0, out dx, out dy) != 0) dx = dy = 96;
+                    var device = new DisplayDevice { Size = Marshal.SizeOf<DisplayDevice>() };
+                    string id = EnumDisplayDevices(info.Device, 0, ref device, 1) ? device.DeviceId : string.Empty;
+                    result.Add(new DisplayInfo { DeviceName = info.Device, DeviceId = id,
+                        Bounds = Bounds(info.Monitor), WorkArea = Bounds(info.Work), DpiX = dx, DpiY = dy, Primary = (info.Flags & 1) != 0 });
+                    return true;
+                }, IntPtr.Zero);
+                _displayBounds = result.ConvertAll(d => d.Bounds).ToArray();
+                _workAreas = result.ConvertAll(d => d.WorkArea).ToArray();
+                return _displays = result;
+            }
+        }
+        public static OverlayBounds RecoverToDisplay(OverlayBounds desired)
+        {
+            _ = Displays;
+            return OverlayScreenPlacement.Recover(desired, _displayBounds, _workAreas);
+        }
+        private static OverlayBounds Bounds(NativeRect r) => new OverlayBounds(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+        private delegate bool MonitorCallback(IntPtr monitor, IntPtr dc, ref NativeRect rect, IntPtr data);
+        [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonitorCallback callback, IntPtr data);
+        [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", CharSet = CharSet.Unicode)] private static extern bool GetMonitorInfoEx(IntPtr monitor, ref MonitorInfoEx info);
+        [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint x, out uint y);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool EnumDisplayDevices(string device, uint index, ref DisplayDevice info, uint flags);
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct MonitorInfoEx
+        { public int Size; public NativeRect Monitor, Work; public uint Flags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Device; }
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct DisplayDevice
+        {
+            public int Size;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Name;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Description;
+            public uint Flags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceId;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Key;
+        }
+
         public static GameWindowSnapshot GetLayoutPreviewArea(IntPtr owner)
         {
             IntPtr monitor = MonitorFromWindow(owner, 2);
             var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
             if (!GetMonitorInfo(monitor, ref info)) throw new InvalidOperationException("편집할 모니터 정보를 읽지 못했습니다.");
             uint dpi = owner == IntPtr.Zero ? 96 : GetDpiForWindow(owner);
-            NativeRect area = info.Work;
+            NativeRect area = info.Monitor;
             return new GameWindowSnapshot(IntPtr.Zero, area.Left, area.Top,
                 area.Right - area.Left, area.Bottom - area.Top, dpi == 0 ? 96 : dpi,
                 true, false, monitor.ToInt64());
@@ -156,6 +216,8 @@ namespace AMS2LeagueClient.Overlay
 
         private static IntPtr WindowProcedure(IntPtr handle, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            if (message == 0x007e || message == 0x001a || message == 0x02e0)
+            { _displays = null; DisplayRevision++; }
             bool editing;
             lock (StateGate) editing = EditingHandles.Contains(handle);
             if (!editing && message == MessageMouseActivate)

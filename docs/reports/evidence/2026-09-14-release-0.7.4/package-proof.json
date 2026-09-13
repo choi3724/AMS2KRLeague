@@ -1,0 +1,355 @@
+{
+  "result": "PASS",
+  "originalDirtyFilesPreserved": 78,
+  "filesMatched": 470,
+  "upgrade": {
+    "gameRunningDuringInstall": false,
+    "gameProcessesPreserved": true,
+    "result": "PASS",
+    "from": "0.7.3",
+    "to": "0.7.4",
+    "helperExit": 0,
+    "portablePreserved": true,
+    "userFilePreserved": true,
+    "restartedCaptureFiles": 18,
+    "proofDirectory": "C:\\Users\\User\\Documents\\Codex\\2026-09-08\\plugin-computer-use-openai-bundled-play-2\\work\\release-0.7.4\\repo\\work\\update-install-proof-b141d5f935a74cb6875da1b6883a3d3e"
+  },
+  "assets": [
+    {
+      "filename": "AMS2-League-Overlay-0.7.4-win-x64.zip",
+      "size": 82733512,
+      "sha256": "84093a34f173adf6fee0fdb6a3cc9dbccd3c2a9779a1441998e1cee08d77d6ad"
+    },
+    {
+      "filename": "AMS2-League-Overlay-0.7.4-Setup.exe",
+      "size": 62072012,
+      "sha256": "0c94edae0730a8910f89473c83a46acbca04f9435bc1f0b36e24f6189c0c36da"
+    }
+  ],
+  "dlls": {
+    "AMS2LeagueClient.dll": "b4959df504abe35885d36c0f026273a52ddc1179ee1c5abb753609f3b1e09490",
+    "AMS2LeagueClient.Core.dll": "cd497a60193284e817a58994e6aa6abe7b4b6f07010070449844836a6fb9dfae"
+  },
+  "placementBefore": {
+    "negative": {
+      "X": 0,
+      "Y": 0,
+      "Width": 400,
+      "Height": 100,
+      "Right": 400,
+      "Bottom": 100
+    },
+    "before": {
+      "X": 120,
+      "Y": 130,
+      "Width": 600,
+      "Height": 150,
+      "Right": 720,
+      "Bottom": 280
+    },
+    "after": {
+      "X": 120,
+      "Y": 130,
+      "Width": 600,
+      "Height": 150,
+      "Right": 720,
+      "Bottom": 280
+    },
+    "errorX": -300,
+    "errorY": -150
+  },
+  "placementAfter": {
+    "negative": {
+      "X": -500,
+      "Y": -300,
+      "Width": 400,
+      "Height": 100,
+      "Right": -100,
+      "Bottom": -200
+    },
+    "before": {
+      "X": 120,
+      "Y": 130,
+      "Width": 600,
+      "Height": 150,
+      "Right": 720,
+      "Bottom": 280
+    },
+    "after": {
+      "X": 420,
+      "Y": 280,
+      "Width": 600,
+      "Height": 150,
+      "Right": 1020,
+      "Bottom": 430
+    },
+    "errorX": 0,
+    "errorY": 0
+  },
+  "physicalDisplays": [
+    {
+      "DeviceName": "\\\\.\\DISPLAY1",
+      "Bounds": {
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Right": 2560,
+        "Bottom": 1440
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 20,
+        "Y": 30,
+        "Width": 600,
+        "Height": 150,
+        "Right": 620,
+        "Bottom": 180
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY1",
+      "Bounds": {
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Right": 2560,
+        "Bottom": 1440
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 80,
+        "Y": 70,
+        "Width": 600,
+        "Height": 150,
+        "Right": 680,
+        "Bottom": 220
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY1",
+      "Bounds": {
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Right": 2560,
+        "Bottom": 1440
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 140,
+        "Y": 110,
+        "Width": 600,
+        "Height": 150,
+        "Right": 740,
+        "Bottom": 260
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY1",
+      "Bounds": {
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Right": 2560,
+        "Bottom": 1440
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 30,
+        "Y": 50,
+        "Width": 600,
+        "Height": 150,
+        "Right": 630,
+        "Bottom": 200
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY1",
+      "Bounds": {
+        "X": 0,
+        "Y": 0,
+        "Width": 2560,
+        "Height": 1440,
+        "Right": 2560,
+        "Bottom": 1440
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 20,
+        "Y": 30,
+        "Width": 600,
+        "Height": 150,
+        "Right": 620,
+        "Bottom": 180
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY2",
+      "Bounds": {
+        "X": 2560,
+        "Y": -620,
+        "Width": 1440,
+        "Height": 2560,
+        "Right": 4000,
+        "Bottom": 1940
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 2580,
+        "Y": -590,
+        "Width": 600,
+        "Height": 150,
+        "Right": 3180,
+        "Bottom": -440
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY2",
+      "Bounds": {
+        "X": 2560,
+        "Y": -620,
+        "Width": 1440,
+        "Height": 2560,
+        "Right": 4000,
+        "Bottom": 1940
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 2640,
+        "Y": -550,
+        "Width": 600,
+        "Height": 150,
+        "Right": 3240,
+        "Bottom": -400
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY2",
+      "Bounds": {
+        "X": 2560,
+        "Y": -620,
+        "Width": 1440,
+        "Height": 2560,
+        "Right": 4000,
+        "Bottom": 1940
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 2700,
+        "Y": -510,
+        "Width": 600,
+        "Height": 150,
+        "Right": 3300,
+        "Bottom": -360
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY2",
+      "Bounds": {
+        "X": 2560,
+        "Y": -620,
+        "Width": 1440,
+        "Height": 2560,
+        "Right": 4000,
+        "Bottom": 1940
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 2590,
+        "Y": -570,
+        "Width": 600,
+        "Height": 150,
+        "Right": 3190,
+        "Bottom": -420
+      },
+      "errorX": 0,
+      "errorY": 0
+    },
+    {
+      "DeviceName": "\\\\.\\DISPLAY2",
+      "Bounds": {
+        "X": 2560,
+        "Y": -620,
+        "Width": 1440,
+        "Height": 2560,
+        "Right": 4000,
+        "Bottom": 1940
+      },
+      "DpiX": 96,
+      "actual": {
+        "X": 2580,
+        "Y": -590,
+        "Width": 600,
+        "Height": 150,
+        "Right": 3180,
+        "Bottom": -440
+      },
+      "errorX": 0,
+      "errorY": 0
+    }
+  ],
+  "sessions": [
+    {
+      "restore": false,
+      "actual": {
+        "X": 323,
+        "Y": 237,
+        "Width": 650,
+        "Height": 160,
+        "Right": 973,
+        "Bottom": 397
+      },
+      "pid": 17156
+    },
+    {
+      "restore": true,
+      "actual": {
+        "X": 323,
+        "Y": 237,
+        "Width": 650,
+        "Height": 160,
+        "Right": 973,
+        "Bottom": 397
+      },
+      "pid": 7844
+    },
+    {
+      "restore": true,
+      "actual": {
+        "X": 323,
+        "Y": 237,
+        "Width": 650,
+        "Height": 160,
+        "Right": 973,
+        "Bottom": 397
+      },
+      "pid": 2064
+    }
+  ],
+  "installedDllsUnchanged": {
+    "AMS2LeagueClient.dll": "a4d36bb3413fd90679c61f01f4c9d2d865a296d45cd1287174b97bc2da7ba079",
+    "AMS2LeagueClient.Core.dll": "77f56ff536ab058578b5c3454f0d726fccdf4867fc61bd6b4d0c06dceced9d19"
+  },
+  "physicalTriple": "NOT TESTED",
+  "monitorPerformance": "RED"
+}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace AMS2LeagueClient.Core.Presentation
@@ -40,15 +40,28 @@ namespace AMS2LeagueClient.Core.Presentation
 
     public sealed class NormalizedOverlayBounds
     {
+        // Legacy schema-1 positions retain their clamp; newly edited positions may cross the game viewport.
+        public bool AllowOutsideViewport { get; set; }
         public double X { get; set; }
         public double Y { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
     }
 
+    public sealed class OverlayPreviewViewport
+    {
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public uint Dpi { get; set; } = 96;
+    }
+
     public sealed class OverlayLayoutProfile
     {
         public int Schema { get; set; } = 1;
+        // Physical game-client reference for game-free editing only; never a monitor index.
+        public OverlayPreviewViewport? PreviewViewport { get; set; }
         public VrHudSettings VrHud { get; set; } = new VrHudSettings();
         public DrivingHudSettings DrivingHud { get; set; } = new DrivingHudSettings();
         // Missing in pre-0.4.1 profiles; expand only the saved tower width once.
@@ -109,8 +122,13 @@ namespace AMS2LeagueClient.Core.Presentation
             int width = Clamp((int)Math.Round(saved.Width * viewportWidth * widthRatio), 72, viewportWidth);
             double extraHeaderHeight = widthRatio != 1 ? 22 * saved.Width * viewportWidth / 520.0 : 0;
             int height = Clamp((int)Math.Round(saved.Height * viewportHeight + extraHeaderHeight), 48, viewportHeight);
-            int x = Clamp((int)Math.Round(saved.X * viewportWidth), 0, Math.Max(0, viewportWidth - width));
-            int y = Clamp((int)Math.Round(saved.Y * viewportHeight), 0, Math.Max(0, viewportHeight - height));
+            int x = Pixel(saved.X * viewportWidth);
+            int y = Pixel(saved.Y * viewportHeight);
+            if (!saved.AllowOutsideViewport)
+            {
+                x = Clamp(x, 0, Math.Max(0, viewportWidth - width));
+                y = Clamp(y, 0, Math.Max(0, viewportHeight - height));
+            }
             return new OverlayBounds(x, y, width, height);
         }
 
@@ -121,18 +139,21 @@ namespace AMS2LeagueClient.Core.Presentation
 
             int width = Clamp(bounds.Width, 72, viewportWidth);
             int height = Clamp(bounds.Height, 48, viewportHeight);
-            int x = Clamp(bounds.X, 0, Math.Max(0, viewportWidth - width));
-            int y = Clamp(bounds.Y, 0, Math.Max(0, viewportHeight - height));
+            int x = bounds.X;
+            int y = bounds.Y;
             Components ??= new Dictionary<string, NormalizedOverlayBounds>(StringComparer.OrdinalIgnoreCase);
             if (component == OverlayComponentKeys.TimingTower) TowerDesignWidth = OverlayUiMetrics.TowerWidth;
             Components[component] = new NormalizedOverlayBounds
             {
+                AllowOutsideViewport = true,
                 X = x / (double)viewportWidth,
                 Y = y / (double)viewportHeight,
                 Width = width / (double)viewportWidth,
                 Height = height / (double)viewportHeight
             };
         }
+
+        private static int Pixel(double value) => (int)Math.Clamp(Math.Round(value), int.MinValue / 2.0, int.MaxValue / 2.0);
 
         private static void ValidateViewport(int width, int height)
         {

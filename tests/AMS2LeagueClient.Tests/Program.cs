@@ -163,6 +163,7 @@ namespace AMS2LeagueClient.Tests
                 ("Timing refresh updates rows without collection churn", TimingRefreshUpdatesRowsInPlace),
                 ("Compact anchors hold at target resolutions", CompactAnchorsHoldAtTargetResolutions),
                 ("Independent layout profile scales and clamps", IndependentLayoutProfileScalesAndClamps),
+                ("Monitor physical placement and save/restore fixtures", MonitorPlacementFixtures),
                 ("Timing rows expose class and best lap", TimingRowsExposeClassAndCurrentTime),
                 ("Class badge palette is explicit and stable", ClassBadgePaletteIsExplicitAndStable),
                 ("Class and timing typography fits tower", ClassAndTimingTypographyFitsTower),

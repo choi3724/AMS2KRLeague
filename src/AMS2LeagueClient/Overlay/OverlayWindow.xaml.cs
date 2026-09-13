@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -57,6 +58,8 @@ namespace AMS2LeagueClient.Overlay
         private IntPtr _handle;
         private OverlayShellViewModel _viewModel = new OverlayShellViewModel();
         private GameWindowSnapshot? _lastGameWindow;
+        private readonly Dictionary<string, OverlayBounds> _requestedPlacements = new Dictionary<string, OverlayBounds>();
+        private readonly Dictionary<string, OverlayBounds> _temporaryPlacements = new Dictionary<string, OverlayBounds>();
         private MultiplayerWaitingOverlayViewModel? _lastWaitingViewModel;
         private DisplayMode _displayMode = DisplayMode.Gameplay;
         private string _lastBoundsKey = string.Empty;
@@ -387,6 +390,8 @@ namespace AMS2LeagueClient.Overlay
             if (_layoutEditing)
             {
                 CaptureLayout();
+                if (_lastGameWindow is { } viewport)
+                    _layoutProfile.PreviewViewport = new OverlayPreviewViewport { X = viewport.Left, Y = viewport.Top, Width = viewport.Width, Height = viewport.Height, Dpi = viewport.Dpi };
                 _layoutStore.Save(_layoutProfile);
             }
             OverlayWindowInterop.Forget(_handle);
@@ -492,6 +497,8 @@ namespace AMS2LeagueClient.Overlay
         /// <summary>Presentation-only editing; synthetic values never reach the recorder.</summary>
         public void BeginLayoutPreview(bool waiting, GameWindowSnapshot? desktop = null)
         {
+            if (_layoutProfile.PreviewViewport is { } reference && reference.Width > 0 && reference.Height > 0)
+                desktop = new GameWindowSnapshot(IntPtr.Zero, reference.X, reference.Y, reference.Width, reference.Height, reference.Dpi, true, false, 0);
             desktop ??= OverlayWindowInterop.GetLayoutPreviewArea(_handle);
             if (!desktop.HasValidClientRect) throw new ArgumentException("Invalid preview area.", nameof(desktop));
             if (_layoutEditing) EndLayoutEdit(true);
@@ -540,6 +547,8 @@ namespace AMS2LeagueClient.Overlay
             if (save)
             {
                 CaptureLayout();
+                if (_lastGameWindow is { } viewport)
+                    _layoutProfile.PreviewViewport = new OverlayPreviewViewport { X = viewport.Left, Y = viewport.Top, Width = viewport.Width, Height = viewport.Height, Dpi = viewport.Dpi };
                 _layoutStore.Save(_layoutProfile);
             }
             _layoutEditing = false;
@@ -736,7 +745,15 @@ namespace AMS2LeagueClient.Overlay
         }
 
         private OverlayBounds Resolve(string component, OverlayBounds fallback, GameWindowSnapshot gameWindow)
-            => _layoutProfile.Resolve(component, fallback, gameWindow.Width, gameWindow.Height);
+        {
+            var desired = _layoutProfile.Resolve(component, fallback, gameWindow.Width, gameWindow.Height);
+            var screen = new OverlayBounds(gameWindow.Left + desired.X, gameWindow.Top + desired.Y, desired.Width, desired.Height);
+            _requestedPlacements[component] = screen;
+            var placed = OverlayWindowInterop.RecoverToDisplay(screen);
+            if (!placed.Equals(screen)) _temporaryPlacements[component] = placed;
+            else _temporaryPlacements.Remove(component);
+            return new OverlayBounds(placed.X - gameWindow.Left, placed.Y - gameWindow.Top, placed.Width, placed.Height);
+        }
 
         private void ShowMainAt(GameWindowSnapshot gameWindow, OverlayBounds bounds)
         {
@@ -747,7 +764,7 @@ namespace AMS2LeagueClient.Overlay
                 _handle = new WindowInteropHelper(this).Handle;
                 OverlayWindowInterop.SetEditMode(_handle, _layoutEditing);
             }
-            string boundsKey = bounds.X + "," + bounds.Y + "," + bounds.Width + "x" + bounds.Height;
+            string boundsKey = gameWindow.RectKey + "/dpi=" + gameWindow.Dpi + "/display=" + OverlayWindowInterop.DisplayRevision + "/" + bounds.X + "," + bounds.Y + "," + bounds.Width + "x" + bounds.Height;
             if (boundsKey != _lastBoundsKey)
             {
                 _lastBoundsKey = boundsKey;
@@ -791,6 +808,9 @@ namespace AMS2LeagueClient.Overlay
         private void Capture(string component, OverlayBounds screenBounds, GameWindowSnapshot gameWindow)
         {
             if (screenBounds.Width <= 0 || screenBounds.Height <= 0) return;
+            // Saving unrelated settings must not replace a disconnected display position.
+            if (_temporaryPlacements.TryGetValue(component, out var temporary) && temporary.Equals(screenBounds)) return;
+            _temporaryPlacements.Remove(component);
             _layoutProfile.Capture(
                 component,
                 new OverlayBounds(
@@ -929,7 +949,7 @@ namespace AMS2LeagueClient.Overlay
                 _handle = new WindowInteropHelper(this).Handle;
                 OverlayWindowInterop.SetEditMode(_handle, _editing);
             }
-            string boundsKey = bounds.X + "," + bounds.Y + "," + bounds.Width + "x" + bounds.Height;
+            string boundsKey = gameWindow.RectKey + "/dpi=" + gameWindow.Dpi + "/display=" + OverlayWindowInterop.DisplayRevision + "/" + bounds.X + "," + bounds.Y + "," + bounds.Width + "x" + bounds.Height;
             if (boundsKey != _lastBoundsKey)
             {
                 _lastBoundsKey = boundsKey;

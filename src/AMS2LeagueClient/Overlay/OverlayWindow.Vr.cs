@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -128,6 +128,9 @@ namespace AMS2LeagueClient.Overlay
                     var content = (FrameworkElement)root.Children[0];
                     if (content.Opacity <= 0 || !content.IsVisible || content.ActualWidth <= 0 || content.ActualHeight <= 0 || window.ActualWidth <= 0) continue;
                     OverlayBounds bounds = OverlayWindowInterop.ReadPhysicalBounds(new WindowInteropHelper(window).Handle);
+                    // Desktop recovery must not move the source rectangle of the separate VR compositor.
+                    string component = window is AuxiliaryOverlayWindow panel ? panel.ComponentKey : OverlayComponentKeys.TimingTower;
+                    if (!_layoutEditing && _temporaryPlacements.ContainsKey(component) && _requestedPlacements.TryGetValue(component, out var requested)) bounds = requested;
                     Point offset = content.TranslatePoint(new Point(), root);
                     double xScale = bounds.Width / window.ActualWidth;
                     double yScale = bounds.Height / window.ActualHeight;
