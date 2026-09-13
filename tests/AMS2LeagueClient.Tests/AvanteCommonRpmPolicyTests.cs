@@ -12,8 +12,8 @@ namespace AMS2LeagueClient.Tests
     {
         private static void AvanteCommonRpmPolicy()
         {
-            var cases=new (double Engine,double Yellow,double Red,double Maximum)[]{(7600.0,6840.0,7372.0,8000.0),
-                (10000.0,9000.0,9700.0,10000.0),(11500.0,10350.0,11155.0,12000.0),(16000.0,14400.0,15520.0,16000.0)};
+            var cases=new (double Engine,double Yellow,double Red,double Maximum)[]{(7600.0,6840.0,7372.0,9000.0),
+                (10000.0,9000.0,9700.0,11000.0),(11500.0,10350.0,11155.0,13000.0),(16000.0,14400.0,15520.0,17000.0)};
             DrivingTelemetrySample Sample(double rpm,double? maximum,int generation=1,DateTimeOffset? at=null)
                 => new DrivingTelemetrySample(at??DateTimeOffset.UtcNow,generation,0,0,0,0,0,100/3.6,3,rpm:rpm,maxRpm:maximum??double.NaN);
             TelemetrySnapshot Session(string root,string name,double? maximum=null)
@@ -97,7 +97,7 @@ namespace AMS2LeagueClient.Tests
                 LogicalDescendants<System.Windows.Controls.CheckBox>(dialog).Single().IsChecked=false;
                 var boxes=LogicalDescendants<System.Windows.Controls.TextBox>(dialog).ToArray();
                 string Value(string name)=>boxes.Single(box=>System.Windows.Automation.AutomationProperties.GetName(box)==name).Text;
-                AssertEqual("12000",Value("최대 표시 눈금 (RPM)"));AssertEqual("10350",Value("노랑 시작 (RPM)"));AssertEqual("11155",Value("빨강 시작 (RPM)"));
+                AssertEqual("13000",Value("최대 표시 눈금 (RPM)"));AssertEqual("10350",Value("노랑 시작 (RPM)"));AssertEqual("11155",Value("빨강 시작 (RPM)"));
             }
             finally{dialog.Close();}
             Console.WriteLine("PROOF transient invalid maxima retain basis; root/participant vehicle switch clears basis; fresh snapshot/fast sample handoff; manual clear and both layouts PASS");

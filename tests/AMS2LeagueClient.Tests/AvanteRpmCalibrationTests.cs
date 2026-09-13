@@ -64,7 +64,7 @@ namespace AMS2LeagueClient.Tests
             void Session(string car) => view.SetSession(new TelemetrySnapshot(now,14,3398,0,2,1,2,0,2,0,0,0,0,0,
                 new[]{new ParticipantSnapshot(0,true,"",1,0,1,1,2,0,0,0,vehicleName:car)},rootCarName:"current-root"));
             void Layout(){view.Measure(new Size(908,750));view.Arrange(new Rect(0,0,908,750));view.UpdateLayout();}
-            foreach(var item in new[]{(AvanteRpmScale.LolaSuperspeedway,14800.0,15000.0,14356.0),(AvanteRpmScale.IvecoStralis,3800.0,4000.0,3686.0), (AvanteRpmScale.ArcCamaro,11500.0,12000.0,11155.0)})
+            foreach(var item in new[]{(AvanteRpmScale.LolaSuperspeedway,14800.0,16000.0,14356.0),(AvanteRpmScale.IvecoStralis,3800.0,5000.0,3686.0), (AvanteRpmScale.ArcCamaro,11500.0,13000.0,11155.0)})
             {
                 view=new AvanteClusterView {Width=908,Height=750};
                 Session(item.Item1);view.SetSample(Sample(0,item.Item2));Layout();
@@ -155,10 +155,10 @@ namespace AMS2LeagueClient.Tests
             Session(AvanteRpmScale.ArcCamaro);Layout();PumpDispatcher();AssertEqual(15000.0,view.RpmScale.RedStart);
             view.ApplySettings(new DrivingHudSettings());Session(AvanteRpmScale.ArcCamaro);
             view.SetSample(null);view.SetSample(Sample(9870,11500));Layout();PumpDispatcher();
-            AssertEqual(11155.0,view.RpmScale.RedStart);AssertEqual(12000.0,view.RpmScale.Maximum);
+            AssertEqual(11155.0,view.RpmScale.RedStart);AssertEqual(13000.0,view.RpmScale.Maximum);
             AssertTrue(Math.Abs(view.RpmScale.YellowStart-10350)<.00001);
             AssertEqual(view.RpmScale.Angle(9870),view.NeedleAngle);
-            AssertEqual(13,((System.Windows.Media.DrawingVisual)System.Windows.Media.VisualTreeHelper.GetChild(view,5)).Children.Count);
+            AssertEqual(14,((System.Windows.Media.DrawingVisual)System.Windows.Media.VisualTreeHelper.GetChild(view,5)).Children.Count);
             CaptureLayout(view,"arc-camaro-switched-9870",1);
             view.ApplySettings(new DrivingHudSettings());Session("unconfirmed-other");Layout();PumpDispatcher();AssertFalse(view.RpmScale.HasWarningThresholds);
             Session(AvanteRpmScale.LolaSuperspeedway);view.SetSample(Sample(13371,14800));Layout();PumpDispatcher();AssertEqual(14356.0,view.RpmScale.RedStart);
@@ -181,36 +181,48 @@ namespace AMS2LeagueClient.Tests
             var session = Session(car);
             AssertEqual(car,AvanteRpmScale.ProfileVehicleName(session));
             AssertEqual("unconfirmed",AvanteRpmScale.ProfileVehicleName(Session("unconfirmed")));
-            foreach (var item in new[] { (7400.0,8000.0), (8400.0,9000.0), (10500.0,11000.0), (8000.0,9000.0) })
+            foreach (var item in new[] { (6800.0,8000.0), (6999.99,8000.0), (7000.0,8000.0), (7000.01,9000.0), (7400.0,9000.0), (8400.0,10000.0), (10500.0,12000.0), (8000.0,9000.0), (14800.0,16000.0) })
             {
-                var automatic = new AvanteRpmCalibration {AutomaticMaximum=true,Maximum=12000,YellowStart=6000,RedStart=item.Item1};
+                var automatic = new AvanteRpmCalibration {AutomaticMaximum=true,Maximum=item.Item1 >= 12000 ? 20000 : 12000,YellowStart=6000,RedStart=item.Item1};
                 AssertTrue(automatic.IsValid);
                 var resolved=AvanteRpmScale.Resolve(7200,automatic);
                 AssertEqual(item.Item2,resolved.Maximum); AssertEqual(6000.0,resolved.YellowStart);AssertEqual(item.Item1,resolved.RedStart);
                 AssertTrue(resolved.Angle(resolved.RedStart)<390); AssertTrue(resolved.AutomaticMaximum);
-                var rangeView = new AvanteClusterView {Width=454,Height=375};
-                var rangeSettings = new DrivingHudSettings(); rangeSettings.AvanteVehicles["root-alias"]=automatic;
-                rangeView.ApplySettings(rangeSettings);rangeView.SetSession(session);rangeView.SetSample(Sample(item.Item1));
-                rangeView.Measure(new Size(454,375));rangeView.Arrange(new Rect(0,0,454,375));rangeView.UpdateLayout();
-                CaptureLayout(rangeView,"rpm-auto-red-"+item.Item1+"-max-"+item.Item2,1);
+                AssertTrue(resolved.Maximum - resolved.RedStart >= 1000);
+                AssertTrue(resolved.Maximum - 1000 < resolved.RedStart + 1000);
+                foreach (bool expanded in new[] { false, true })
+                {
+                    var rangeView = new AvanteClusterView(expanded) {Width=expanded ? 1024 : 454,Height=375};
+                    var rangeSettings = new DrivingHudSettings(); rangeSettings.AvanteVehicles["root-alias"]=automatic;
+                    rangeView.ApplySettings(rangeSettings);rangeView.SetSession(session);rangeView.SetSample(Sample(item.Item1));
+                    rangeView.Measure(new Size(rangeView.Width,375));rangeView.Arrange(new Rect(0,0,rangeView.Width,375));rangeView.UpdateLayout();
+                    AssertEqual(resolved.Angle(item.Item1),rangeView.NeedleAngle);
+                    AssertEqual(5,rangeView.RpmScale.LitPairs(item.Item1));
+                    int staticBuilds=rangeView.StaticFaceBuilds;
+                    foreach(double rpm in new[]{item.Item1-1,item.Item1,item.Item1+1})
+                    {rangeView.SetSample(Sample(rpm));AssertEqual(staticBuilds,rangeView.StaticFaceBuilds);}
+                    rangeView.SetSample(Sample(item.Item1));
+                    CaptureLayout(rangeView,"rpm-auto-red-"+item.Item1+"-max-"+item.Item2+(expanded?"-expanded":"-normal"),1);
+                }
                 automatic.AutomaticMaximum=false;
-                AssertEqual(12000.0,AvanteRpmScale.Resolve(7200,automatic).Maximum);
-                Console.WriteLine("PROOF autoRed="+item.Item1+" max="+resolved.Maximum+" unchangedYellow=6000 manualMax=12000");
+                AssertTrue(automatic.IsValid);
+                AssertEqual(automatic.Maximum,AvanteRpmScale.Resolve(7200,automatic).Maximum);
+                Console.WriteLine("PROOF autoRed="+item.Item1+" max="+resolved.Maximum+" unchangedYellow=6000 manualMax="+automatic.Maximum);
             }
             var legacy=JsonSerializer.Deserialize<AvanteRpmCalibration>("{\"Maximum\":12000,\"YellowStart\":6850,\"RedStart\":7400}")!;
             AssertFalse(legacy.AutomaticMaximum); AssertEqual(12000.0,AvanteRpmScale.Resolve(7200,legacy).Maximum);
             AssertFalse(new AvanteRpmCalibration {Maximum=8000,YellowStart=6500,RedStart=8000}.IsValid);
             AssertFalse(new AvanteRpmCalibration {AutomaticMaximum=true,RedStart=double.NaN}.IsValid);
             // Every name uses the approved common policy when engine maximum is valid.
-            var fallback=AvanteRpmScale.Resolve(7200);AssertEqual(7000.0,fallback.Maximum);AssertTrue(fallback.HasWarningThresholds); AssertEqual(2,fallback.Band(7200));
+            var fallback=AvanteRpmScale.Resolve(7200);AssertEqual(8000.0,fallback.Maximum);AssertTrue(fallback.HasWarningThresholds); AssertEqual(2,fallback.Band(7200));
             AssertTrue(fallback.AutomaticMaximum);AssertFalse(fallback.VehicleProfile);
             var expected = AvanteRpmScale.Resolve(7200,null,car);
             AssertFalse(expected.VehicleProfile); AssertFalse(expected.Calibrated);
-            AssertEqual(7000.0,expected.Maximum); AssertEqual(6984.0,expected.RedStart);
+            AssertEqual(8000.0,expected.Maximum); AssertEqual(6984.0,expected.RedStart);
             AssertEqual(6480.0,expected.YellowStart);
             AssertTrue(expected.SourceDescription.Contains("게임이 직접 제공한 경계값이 아닙니다"));
-            AssertEqual(150+6984.0/7000*240,expected.Angle(expected.RedStart));
-            AssertTrue(Math.Abs((150+1821.0/7000*240)-expected.Angle(1821)) < 1e-10);
+            AssertEqual(150+6984.0/8000*240,expected.Angle(expected.RedStart));
+            AssertTrue(Math.Abs((150+1821.0/8000*240)-expected.Angle(1821)) < 1e-10);
             var view = new AvanteClusterView {Width=454,Height=375};
             view.SetSession(session); view.SetSample(Sample(1821));
             void Layout() { view.Measure(new Size(view.Width,view.Height)); view.Arrange(new Rect(0,0,view.Width,view.Height)); view.UpdateLayout(); }
@@ -228,14 +240,14 @@ namespace AMS2LeagueClient.Tests
             view.ApplySettings(settings); AssertTrue(view.RpmScale.Calibrated); AssertEqual(10000.0,view.RpmScale.Maximum);
             view.ApplySettings(new DrivingHudSettings()); AssertEqual(expected,view.RpmScale);
             view.SetSession(Session("unconfirmed")); view.SetSample(Sample(1821));
-            AssertFalse(view.RpmScale.VehicleProfile); AssertEqual(7000.0,view.RpmScale.Maximum);
+            AssertFalse(view.RpmScale.VehicleProfile); AssertEqual(8000.0,view.RpmScale.Maximum);
             view.SetSession(session); AssertFalse(view.RpmScale.HasWarningThresholds); view.SetSample(Sample(1821)); AssertEqual(expected,view.RpmScale);
             view.SetSession(null); view.SetSample(Sample(1821,0,2)); AssertFalse(view.RpmScale.VehicleProfile);
             var dialog = new DrivingHudSettingsWindow(new DrivingHudSettings(),"root-alias",7200,car);
             try
             {
                 var maximumBox = LogicalDescendants<System.Windows.Controls.TextBox>(dialog).Single(box => System.Windows.Automation.AutomationProperties.GetName(box)=="최대 표시 눈금 (RPM)");
-                AssertEqual("7000",maximumBox.Text); AssertFalse(maximumBox.IsEnabled);
+                AssertEqual("8000",maximumBox.Text); AssertFalse(maximumBox.IsEnabled);
                 AssertTrue(LogicalDescendants<System.Windows.Controls.TextBlock>(dialog).Any(text=>text.Text.Contains("게임이 직접 제공한 경계값이 아닙니다")));
             }
             finally { dialog.Close(); }
@@ -273,7 +285,7 @@ namespace AMS2LeagueClient.Tests
             for(int i=0;i<100000;i++) expected=AvanteRpmScale.Resolve(7200,null,car);
             allocated = GC.GetAllocatedBytesForCurrentThread()-allocated;
             AssertEqual(0L,allocated);
-            Console.WriteLine("PROOF common vehicle policy: max=7000 red=6984 yellow="+expected.YellowStart+" rpm=1821 needle=212.4342857deg redAngle=389.4514286deg staticRebuildsOnRpmChange=0 resolve100000Allocation="+allocated+" liveGame=NOT_TESTED");
+            Console.WriteLine("PROOF common vehicle policy: max=8000 red=6984 yellow="+expected.YellowStart+" rpm=1821 needle=204.63deg redAngle=359.52deg staticRebuildsOnRpmChange=0 resolve100000Allocation="+allocated+" liveGame=NOT_TESTED");
         }
 
         private static void AvanteVehicleRpmCalibration()
@@ -330,9 +342,9 @@ namespace AMS2LeagueClient.Tests
             switched.SetSession(Session("other"));switched.SetSample(Sample(7400,7200));
             AssertEqual(10000.0,switched.RpmScale.Maximum);AssertEqual(9350.0,switched.RpmScale.RedStart);
             switched.SetSession(Session("unconfigured"));switched.SetSample(Sample(7400,7200));
-            AssertFalse(switched.RpmScale.Calibrated);AssertEqual(7000.0,switched.RpmScale.Maximum);
-            switched.SetSample(Sample(2000,0)); AssertEqual(7000.0,switched.RpmScale.Maximum);
-            switched.SetSession(null); switched.SetSample(Sample(2000,12000,2)); AssertEqual(12000.0,switched.RpmScale.Maximum);
+            AssertFalse(switched.RpmScale.Calibrated);AssertEqual(8000.0,switched.RpmScale.Maximum);
+            switched.SetSample(Sample(2000,0)); AssertEqual(8000.0,switched.RpmScale.Maximum);
+            switched.SetSession(null); switched.SetSample(Sample(2000,12000,2)); AssertEqual(13000.0,switched.RpmScale.Maximum);
             switched.SetSample(Sample(2000,0,3)); AssertEqual(8000.0,switched.RpmScale.Maximum);
             AssertTrue(AvanteClusterView.TickOuterRadius < 351);
             AssertTrue(AvanteClusterView.MajorTickInnerRadius < AvanteClusterView.MinorTickInnerRadius);

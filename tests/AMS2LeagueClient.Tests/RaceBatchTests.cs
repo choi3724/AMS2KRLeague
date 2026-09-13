@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -71,6 +71,18 @@ namespace AMS2LeagueClient.Tests
                     foreach (var runtime in runtimes) runtime.Observe(Parse(fixture, start.AddSeconds(80)));
                     foreach (var runtime in runtimes) AssertNull(runtime.CurrentTelemetryIdentity);
                     AssertTrue(SpinWait.SpinUntil(() => transports.All(value => value.TelemetryCalls > 0), TimeSpan.FromSeconds(12)));
+                    // Delivery was observed above. Stop its writers before the following
+                    // integrity checks deliberately rewrite the same archive files.
+                    foreach (var runtime in runtimes)
+                    {
+                        ((CancellationTokenSource)typeof(ActivityCaptureRuntime).GetField("_uploadCancellation", flags)!.GetValue(runtime)!).Cancel();
+                        var upload = (System.Threading.Tasks.Task)typeof(ActivityCaptureRuntime).GetField("_uploadTask", flags)!.GetValue(runtime)!;
+                        var mode = (System.Threading.Tasks.Task)typeof(ActivityCaptureRuntime).GetField("_modeTask", flags)!.GetValue(runtime)!;
+                        AssertTrue(SpinWait.SpinUntil(() => upload.IsCompleted && mode.IsCompleted, TimeSpan.FromSeconds(12)));
+                        try { System.Threading.Tasks.Task.WhenAll(upload, mode).GetAwaiter().GetResult(); }
+                        catch (OperationCanceledException) { }
+                    }
+                    Console.WriteLine("PROOF real upload observed; delivery writers drained before archive integrity mutations");
                     AssertEqual(TelemetryUploadStatus.PENDING, ReadTelemetryStatus(unfinished));
                     for (int index = 0; index < 2; index++)
                     {

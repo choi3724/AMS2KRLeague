@@ -26,7 +26,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public bool VehicleProfile { get; }
         public bool AutomaticMaximum { get; }
         public bool HasWarningThresholds => double.IsFinite(RedStart);
-        public static double MaximumAboveRed(double redStart) => (Math.Floor(redStart / 1000) + 1) * 1000;
+        // Reserve at least 1000 RPM above red, then round the display ceiling up.
+        public static double MaximumAboveRed(double redStart) => Math.Ceiling((redStart + 1000) / 1000) * 1000;
         // Exact participant identity from the 2026-09-12 local capture; no family-wide matching.
         public const string AstonMartinLowDownforce = "Aston Martin Vantage GT3 Evo - Low Downforce";
         public const string LolaSuperspeedway = "Lola B2K00 Ford-Cosworth - Superspeedway";
