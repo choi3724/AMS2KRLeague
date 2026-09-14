@@ -1,4 +1,8 @@
-﻿# 0.7.4 릴리즈 — 트리플 모니터 UI 배치 개선
+﻿# 0.7.5 릴리즈 — HUD 저장 크기 유지
+
+편집 기준 영역과 게임 client 폭 차이로 저장한 HUD가 확대되는 문제를 HUD별 크기 기준으로 수정한다. [검증 보고서](docs/reports/2026-09-15-release-0.7.5.md). 기본 WPF와 N RPM/디자인, 수집·기록·전송 계약 유지. Monitor RED 및 물리 트리플·혼합 DPI·실게임·VR NOT TESTED. 아래는 이전 이력이다.
+
+# 0.7.4 릴리즈 — 트리플 모니터 UI 배치 개선
 
 게임 client 원점·화면 physical pixels·기존 normalized 저장 기준을 구분하고 음수 좌표와 접근 불가 위치의 일시적 복구를 반영한다. 현재 공개 후보0.7.4; 검증·게시 결과는 [릴리즈 보고서](docs/reports/2026-09-14-release-0.7.4.md). Monitor RED 및 물리 트리플/mixed-DPI/실게임/VR NOT TESTED 유지. 아래는 이전 이력이다.
 

@@ -163,6 +163,9 @@ namespace AMS2LeagueClient.Tests
                 ("Timing refresh updates rows without collection churn", TimingRefreshUpdatesRowsInPlace),
                 ("Compact anchors hold at target resolutions", CompactAnchorsHoldAtTargetResolutions),
                 ("Independent layout profile scales and clamps", IndependentLayoutProfileScalesAndClamps),
+                ("Saved HUD size survives viewport changes", SavedHudSizeSurvivesViewportChanges),
+                ("Saved HUD legacy reference and backup", SavedHudLegacyReferenceAndBackup),
+                ("Saved HUD tower scale through edit and live", SavedHudTowerScaleThroughEditAndLive),
                 ("Monitor physical placement and save/restore fixtures", MonitorPlacementFixtures),
                 ("Timing rows expose class and best lap", TimingRowsExposeClassAndCurrentTime),
                 ("Class badge palette is explicit and stable", ClassBadgePaletteIsExplicitAndStable),
@@ -1205,8 +1208,8 @@ namespace AMS2LeagueClient.Tests
                 2160);
             AssertEqual(384, scaled.X);
             AssertEqual(216, scaled.Y);
-            AssertEqual(920, scaled.Width);
-            AssertEqual(192, scaled.Height);
+            AssertEqual(460, scaled.Width);
+            AssertEqual(96, scaled.Height);
 
             profile.Components[OverlayComponentKeys.LapTiming] = new NormalizedOverlayBounds
             {

@@ -46,6 +46,10 @@ namespace AMS2LeagueClient.Core.Presentation
         public double Y { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
+        // Physical viewport used when Width/Height were captured. Position stays
+        // normalized to the current game client; size is not multiplied by its span.
+        public int ReferenceWidth { get; set; }
+        public int ReferenceHeight { get; set; }
     }
 
     public sealed class OverlayPreviewViewport
@@ -119,9 +123,13 @@ namespace AMS2LeagueClient.Core.Presentation
             }
 
             double widthRatio = component == OverlayComponentKeys.TimingTower && TowerDesignWidth == 520 ? OverlayUiMetrics.TowerWidth / 520.0 : 1.0;
-            int width = Clamp((int)Math.Round(saved.Width * viewportWidth * widthRatio), 72, viewportWidth);
-            double extraHeaderHeight = widthRatio != 1 ? 22 * saved.Width * viewportWidth / 520.0 : 0;
-            int height = Clamp((int)Math.Round(saved.Height * viewportHeight + extraHeaderHeight), 48, viewportHeight);
+            bool hasReference = saved.ReferenceWidth > 0 && saved.ReferenceHeight > 0;
+            bool hasPreview = PreviewViewport?.Width > 0 && PreviewViewport.Height > 0;
+            int sizeWidth = hasReference ? saved.ReferenceWidth : hasPreview ? PreviewViewport!.Width : viewportWidth;
+            int sizeHeight = hasReference ? saved.ReferenceHeight : hasPreview ? PreviewViewport!.Height : viewportHeight;
+            int width = Clamp((int)Math.Round(saved.Width * sizeWidth * widthRatio), 72, viewportWidth);
+            double extraHeaderHeight = widthRatio != 1 ? 22 * saved.Width * sizeWidth / 520.0 : 0;
+            int height = Clamp((int)Math.Round(saved.Height * sizeHeight + extraHeaderHeight), 48, viewportHeight);
             int x = Pixel(saved.X * viewportWidth);
             int y = Pixel(saved.Y * viewportHeight);
             if (!saved.AllowOutsideViewport)
@@ -137,6 +145,7 @@ namespace AMS2LeagueClient.Core.Presentation
             if (string.IsNullOrWhiteSpace(component)) throw new ArgumentException("Component key is required.", nameof(component));
             ValidateViewport(viewportWidth, viewportHeight);
 
+            PreserveSizeReferences();
             int width = Clamp(bounds.Width, 72, viewportWidth);
             int height = Clamp(bounds.Height, 48, viewportHeight);
             int x = bounds.X;
@@ -149,8 +158,23 @@ namespace AMS2LeagueClient.Core.Presentation
                 X = x / (double)viewportWidth,
                 Y = y / (double)viewportHeight,
                 Width = width / (double)viewportWidth,
-                Height = height / (double)viewportHeight
+                Height = height / (double)viewportHeight,
+                ReferenceWidth = viewportWidth,
+                ReferenceHeight = viewportHeight
             };
+        }
+
+        // Pin every legacy component before another editing session can replace
+        // PreviewViewport, including hidden/disabled HUDs that were not recaptured.
+        public void PreserveSizeReferences()
+        {
+            if (PreviewViewport == null || PreviewViewport.Width <= 0 || PreviewViewport.Height <= 0 || Components == null) return;
+            foreach (var saved in Components.Values)
+            {
+                if (saved == null || (saved.ReferenceWidth > 0 && saved.ReferenceHeight > 0)) continue;
+                saved.ReferenceWidth = PreviewViewport.Width;
+                saved.ReferenceHeight = PreviewViewport.Height;
+            }
         }
 
         private static int Pixel(double value) => (int)Math.Clamp(Math.Round(value), int.MinValue / 2.0, int.MaxValue / 2.0);
