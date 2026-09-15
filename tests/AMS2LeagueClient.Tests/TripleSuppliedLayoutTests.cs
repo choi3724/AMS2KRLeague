@@ -51,6 +51,8 @@ namespace AMS2LeagueClient.Tests
             OverlayWindow? w=new OverlayWindow(false,path);
             try
             {
+                foreach(var display in OverlayWindowInterop.Displays)
+                    Console.WriteLine($"WPF DISPLAY bounds={display.Bounds} work={display.WorkArea} dpi={display.DpiX},{display.DpiY}");
                 w.BeginLayoutPreview(false);PumpDispatcher();w.UpdateLayout();PumpDispatcher();
                 var edit=OverlayWindowInterop.ReadPhysicalBounds(new WindowInteropHelper(w).Handle);
                 Console.WriteLine($"WPF EDIT {edit.X},{edit.Y},{edit.Width},{edit.Height}");
@@ -80,13 +82,24 @@ namespace AMS2LeagueClient.Tests
                         {
                             if (!(value is Window panel) || !panel.IsVisible) continue;
                             string key=(string)panel.GetType().GetProperty("ComponentKey")!.GetValue(panel)!;
-                            int expectedX=key==OverlayComponentKeys.PedalTelemetry?1220:1188;
+                            var saved=key==OverlayComponentKeys.PedalTelemetry
+                                ?new OverlayBounds(1220,983,365,105):new OverlayBounds(1188,985,90,102);
+                            var desired=new OverlayBounds(saved.X+origin.Item1,saved.Y+origin.Item2,saved.Width,saved.Height);
+                            var requested=(System.Collections.Generic.Dictionary<string,OverlayBounds>)typeof(OverlayWindow)
+                                .GetField("_requestedPlacements",BindingFlags.NonPublic|BindingFlags.Instance)!.GetValue(w)!;
+                            // Check the exact game-relative mapping even when the CI desktop is too small.
+                            AssertEqual(desired,requested[key]);
+                            // The real HWND also follows the existing disconnected-screen recovery policy.
+                            var expected=OverlayWindowInterop.RecoverToDisplay(desired);
                             var rect=OverlayWindowInterop.ReadPhysicalBounds(new WindowInteropHelper(panel).Handle);
-                            Console.WriteLine($"WPF {key} actual={rect.X},{rect.Y},{rect.Width},{rect.Height}");
-                            AssertEqual(expectedX+origin.Item1,rect.X);
+                            Console.WriteLine($"WPF {key} actual={rect.X},{rect.Y},{rect.Width},{rect.Height} desired={desired} expected={expected}");
+                            AssertEqual(expected,rect);
                         }
                     }
                     w.BeginLayoutEdit();PumpDispatcher();w.EndLayoutEdit(true);w.Close();w=null;
+                    var restored=JsonSerializer.Deserialize<OverlayLayoutProfile>(File.ReadAllText(path),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
+                    AssertEqual(new OverlayBounds(1220,983,365,105),restored.Resolve(OverlayComponentKeys.PedalTelemetry,default,7680,1440));
+                    AssertEqual(new OverlayBounds(1188,985,90,102),restored.Resolve(OverlayComponentKeys.PedalGauge,default,7680,1440));
                 }
             }
             finally{w?.Close();File.Delete(path);File.Delete(path+".before-fixed-size.bak");}
