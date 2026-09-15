@@ -46,8 +46,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public double Y { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
-        // Physical viewport used when Width/Height were captured. Position stays
-        // normalized to the current game client; size is not multiplied by its span.
+        // Physical viewport used to encode all four coordinates. Restore the
+        // saved pixel offsets and size, then the caller adds the game-client origin.
         public int ReferenceWidth { get; set; }
         public int ReferenceHeight { get; set; }
     }
@@ -130,8 +130,8 @@ namespace AMS2LeagueClient.Core.Presentation
             int width = Clamp((int)Math.Round(saved.Width * sizeWidth * widthRatio), 72, viewportWidth);
             double extraHeaderHeight = widthRatio != 1 ? 22 * saved.Width * sizeWidth / 520.0 : 0;
             int height = Clamp((int)Math.Round(saved.Height * sizeHeight + extraHeaderHeight), 48, viewportHeight);
-            int x = Pixel(saved.X * viewportWidth);
-            int y = Pixel(saved.Y * viewportHeight);
+            int x = Pixel(saved.X * sizeWidth);
+            int y = Pixel(saved.Y * sizeHeight);
             if (!saved.AllowOutsideViewport)
             {
                 x = Clamp(x, 0, Math.Max(0, viewportWidth - width));

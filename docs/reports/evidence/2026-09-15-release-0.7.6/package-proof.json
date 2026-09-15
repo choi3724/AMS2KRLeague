@@ -1,0 +1,78 @@
+{
+  "result": "PASS",
+  "preservedFileCounts": {
+    "hud-size-followup/repo": 497,
+    "monitor-short-cause/repo": 562,
+    "installed": 2
+  },
+  "installedCopyReplaced": false,
+  "filesMatched": 470,
+  "upgrade": {
+    "gameRunningDuringInstall": false,
+    "gameProcessesPreserved": true,
+    "result": "PASS",
+    "from": "0.7.5",
+    "to": "0.7.6",
+    "helperExit": 0,
+    "portablePreserved": true,
+    "userFilePreserved": true,
+    "restartedCaptureFiles": 18
+  },
+  "assets": [
+    {
+      "filename": "AMS2-League-Overlay-0.7.6-win-x64.zip",
+      "size": 82733957,
+      "sha256": "35e9ecd095373d205e58029c705ddd299bd9b83e6bc652e55328a92c0a64a67f"
+    },
+    {
+      "filename": "AMS2-League-Overlay-0.7.6-Setup.exe",
+      "size": 62086090,
+      "sha256": "71c92b858754dbeb7474f1e298dd92a64a00be87d2585fc2fd99da69387599b0"
+    }
+  ],
+  "dlls": {
+    "AMS2LeagueClient.dll": "70fba08d1b5ba8d8d4cb5f82c13c8523d96f90b3de4afc1f78cbf2e7213261ee",
+    "AMS2LeagueClient.Core.dll": "646192210a8544f361b7ecccc80b32b8c1e5dfd02d99c57f5bf2eb11251cb9b9"
+  },
+  "baselineClient": 162,
+  "client": 165,
+  "activity": 111,
+  "packageWpfChecks": 2,
+  "wpfProof": [
+    "WPF EDIT 590,4,648,608",
+    "WPF LIVE repeat=0 origin=(0, 0) actual=590,4,648,114",
+    "WPF _sessionWindow actual=915,5,250,140",
+    "WPF _lapTimingWindow actual=915,149,380,112",
+    "WPF pedalTelemetry actual=1220,983,365,105",
+    "WPF pedalGauge actual=1188,985,90,102",
+    "WPF LIVE repeat=0 origin=(100, 50) actual=690,54,648,114",
+    "WPF _sessionWindow actual=1015,55,250,140",
+    "WPF _lapTimingWindow actual=1015,199,380,112",
+    "WPF pedalTelemetry actual=1320,1033,365,105",
+    "WPF pedalGauge actual=1288,1035,90,102",
+    "WPF LIVE repeat=0 origin=(0, 0) actual=590,4,648,114",
+    "WPF _sessionWindow actual=915,5,250,140",
+    "WPF _lapTimingWindow actual=915,149,380,112",
+    "WPF pedalTelemetry actual=1220,983,365,105",
+    "WPF pedalGauge actual=1188,985,90,102",
+    "WPF LIVE repeat=1 origin=(0, 0) actual=590,4,648,114",
+    "WPF _sessionWindow actual=915,5,250,140",
+    "WPF _lapTimingWindow actual=915,149,380,112",
+    "WPF pedalTelemetry actual=1220,983,365,105",
+    "WPF pedalGauge actual=1188,985,90,102",
+    "WPF LIVE repeat=1 origin=(100, 50) actual=690,54,648,114",
+    "WPF _sessionWindow actual=1015,55,250,140",
+    "WPF _lapTimingWindow actual=1015,199,380,112",
+    "WPF pedalTelemetry actual=1320,1033,365,105",
+    "WPF pedalGauge actual=1288,1035,90,102",
+    "WPF LIVE repeat=1 origin=(0, 0) actual=590,4,648,114",
+    "WPF _sessionWindow actual=915,5,250,140",
+    "WPF _lapTimingWindow actual=915,149,380,112",
+    "WPF pedalTelemetry actual=1220,983,365,105",
+    "WPF pedalGauge actual=1188,985,90,102"
+  ],
+  "physicalTriple": "NOT TESTED",
+  "mixedDpi": "NOT TESTED",
+  "liveGame": "NOT TESTED",
+  "monitorPerformance": "RED"
+}

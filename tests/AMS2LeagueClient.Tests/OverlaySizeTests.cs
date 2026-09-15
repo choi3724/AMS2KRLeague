@@ -28,8 +28,8 @@ namespace AMS2LeagueClient.Tests
                     profile=JsonSerializer.Deserialize<OverlayLayoutProfile>(JsonSerializer.Serialize(profile))!;
                     var actual=profile.Resolve(key,default,target.Item1,target.Item2);
                     AssertEqual(600,actual.Width);AssertEqual(320,actual.Height);
-                    AssertEqual((int)Math.Round(100.0*target.Item1/viewport.Item1),actual.X);
-                    AssertEqual((int)Math.Round(80.0*target.Item2/viewport.Item2),actual.Y);
+                    AssertEqual(100,actual.X);
+                    AssertEqual(80,actual.Y);
                 }
             }
         }

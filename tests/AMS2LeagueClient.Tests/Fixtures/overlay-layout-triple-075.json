@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "previewViewport": {
+    "x": 0,
+    "y": 0,
+    "width": 2560,
+    "height": 1440,
+    "dpi": 96
+  },
+  "vrHud": {
+    "output": 0,
+    "widthMetres": 2,
+    "distanceMetres": 2,
+    "horizontalMetres": 0,
+    "verticalMetres": 0,
+    "yawDegrees": 0,
+    "pitchDegrees": 0,
+    "followHead": true
+  },
+  "drivingHud": {
+    "avanteVehicles": {},
+    "brakeColor": "#FF3030",
+    "steeringRangeDegrees": 900,
+    "towerDesign": "racing",
+    "telemetryDesign": "racing",
+    "throttleColor": "#20E050",
+    "clutchColor": "#3399FF",
+    "handBrakeColor": "#BE60FF",
+    "speedFont": "Pretendard",
+    "gearFont": "Pretendard",
+    "speedShadowColor": "#000000",
+    "gearShadowColor": "#000000"
+  },
+  "towerDesignWidth": 648,
+  "components": {
+    "pedalTelemetry": {
+      "allowOutsideViewport": true,
+      "x": 0.4765625,
+      "y": 0.6826388888888889,
+      "width": 0.142578125,
+      "height": 0.07291666666666667,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    },
+    "pedalGauge": {
+      "allowOutsideViewport": true,
+      "x": 0.4640625,
+      "y": 0.6840277777777778,
+      "width": 0.03515625,
+      "height": 0.07083333333333333,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    },
+    "drivingDashboard": {
+      "allowOutsideViewport": true,
+      "x": 0.468359375,
+      "y": 0.6881944444444444,
+      "width": 0.17890625,
+      "height": 0.1326388888888889,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    },
+    "timingTower": {
+      "allowOutsideViewport": true,
+      "x": 0.23046875,
+      "y": 0.002777777777777778,
+      "width": 0.253125,
+      "height": 0.4222222222222222,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    },
+    "relativeDrivers": {
+      "allowOutsideViewport": true,
+      "x": 0.00390625,
+      "y": 0.4375,
+      "width": 0.203125,
+      "height": 0.07222222222222222,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    },
+    "lapTiming": {
+      "allowOutsideViewport": true,
+      "x": 0.357421875,
+      "y": 0.10347222222222222,
+      "width": 0.1484375,
+      "height": 0.07777777777777778,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    },
+    "sessionInfo": {
+      "allowOutsideViewport": true,
+      "x": 0.357421875,
+      "y": 0.003472222222222222,
+      "width": 0.09765625,
+      "height": 0.09722222222222222,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    },
+    "eventCard": {
+      "allowOutsideViewport": true,
+      "x": 0.3984375,
+      "y": 0.8513888888888889,
+      "width": 0.203125,
+      "height": 0.058333333333333334,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    },
+    "raceControl": {
+      "allowOutsideViewport": true,
+      "x": 0.35703125,
+      "y": 0.18333333333333332,
+      "width": 0.1125,
+      "height": 0.04583333333333333,
+      "referenceWidth": 2560,
+      "referenceHeight": 1440
+    }
+  },
+  "enabledComponents": {
+    "drivingDashboard": false,
+    "pedalGauge": true,
+    "avanteCluster": false,
+    "avanteClusterExpanded": false,
+    "timingTower": true,
+    "relativeDrivers": true,
+    "lapTiming": true,
+    "sessionInfo": true,
+    "eventCard": true,
+    "raceControl": true,
+    "waiting": true,
+    "pedalTelemetry": true,
+    "speed": false,
+    "gear": false
+  },
+  "componentOpacities": {
+    "timingTower": 1,
+    "avanteClusterExpanded": 0.9
+  }
+}

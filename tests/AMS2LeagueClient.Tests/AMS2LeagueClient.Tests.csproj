@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -10,4 +10,5 @@
     <ProjectReference Include="..\..\src\AMS2LeagueClient.Core\AMS2LeagueClient.Core.csproj" />
     <ProjectReference Include="..\..\src\AMS2LeagueClient\AMS2LeagueClient.csproj" />
   </ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Fixtures/overlay-layout-triple-075.json" /></ItemGroup>
 </Project>

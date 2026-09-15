@@ -1,4 +1,8 @@
-﻿# 0.7.5 릴리즈 — HUD 저장 크기 유지
+﻿# 0.7.6 릴리즈 — 저장 HUD 위치 유지
+
+0.7.5에 남은 위치 비례 환산을 수정하여 저장한 HUD 간격을 게임 화면에서도 유지한다. [검증 보고서](docs/reports/2026-09-15-release-0.7.6.md). 기존 크기 복원·원점 추종·설정 호환·기본 WPF·N RPM/디자인·수집 계약 유지. Monitor RED, 물리 트리플/mixed-DPI/실게임/VR NOT TESTED. 아래는 이전 이력이다.
+
+# 0.7.5 릴리즈 — HUD 저장 크기 유지
 
 편집 기준 영역과 게임 client 폭 차이로 저장한 HUD가 확대되는 문제를 HUD별 크기 기준으로 수정한다. [검증 보고서](docs/reports/2026-09-15-release-0.7.5.md). 기본 WPF와 N RPM/디자인, 수집·기록·전송 계약 유지. Monitor RED 및 물리 트리플·혼합 DPI·실게임·VR NOT TESTED. 아래는 이전 이력이다.
 

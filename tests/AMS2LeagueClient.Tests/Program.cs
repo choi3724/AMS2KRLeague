@@ -164,6 +164,9 @@ namespace AMS2LeagueClient.Tests
                 ("Compact anchors hold at target resolutions", CompactAnchorsHoldAtTargetResolutions),
                 ("Independent layout profile scales and clamps", IndependentLayoutProfileScalesAndClamps),
                 ("Saved HUD size survives viewport changes", SavedHudSizeSurvivesViewportChanges),
+                ("HUD edited aspect probe", HudEditedAspectProbe),
+                ("Triple supplied layout positions", TripleSuppliedLayoutPositions),
+                ("Triple supplied layout WPF restore", TripleSuppliedLayoutWpfRestore),
                 ("Saved HUD legacy reference and backup", SavedHudLegacyReferenceAndBackup),
                 ("Saved HUD tower scale through edit and live", SavedHudTowerScaleThroughEditAndLive),
                 ("Monitor physical placement and save/restore fixtures", MonitorPlacementFixtures),
@@ -1206,8 +1209,8 @@ namespace AMS2LeagueClient.Tests
                 new OverlayBounds(0, 0, 1, 1),
                 3840,
                 2160);
-            AssertEqual(384, scaled.X);
-            AssertEqual(216, scaled.Y);
+            AssertEqual(192, scaled.X);
+            AssertEqual(108, scaled.Y);
             AssertEqual(460, scaled.Width);
             AssertEqual(96, scaled.Height);
 
