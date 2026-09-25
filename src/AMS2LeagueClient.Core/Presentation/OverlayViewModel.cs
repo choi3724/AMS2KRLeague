@@ -435,7 +435,7 @@ namespace AMS2LeagueClient.Core.Presentation
                         ClassForeground = dimmed ? "#AAB4BE" : classBadge.Foreground,
                         TimeForeground = dimmed ? OverlayUiPalette.InactiveTime
                             : visibleFastestIndex == item.Source.Index ? "#E765F4" : OverlayUiPalette.ActiveTime,
-                        PenaltyText = StateText.Penalty(item.Source),
+                        PenaltyText = StateText.Penalty(item.Source, snapshot),
                         Status = terminal.Length > 0 ? terminal : StatusOf(item.Source.Index, broadcastStates, visibleFastestIndex),
                         StatusColor = terminal.Length > 0 ? (dimmed ? "#FF7777" : "#91A5B8")
                             : StatusColorOf(item.Source.Index, broadcastStates, visibleFastestIndex)

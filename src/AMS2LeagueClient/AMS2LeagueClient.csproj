@@ -16,10 +16,14 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\AMS2LeagueClient.Core\AMS2LeagueClient.Core.csproj" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
+    <PackageReference Include="Vortice.DirectComposition" Version="3.8.3" />
   </ItemGroup>
   <ItemGroup>
     <None Update="ThirdParty\OpenVR\openvr_api.dll" Link="openvr_api.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="ThirdParty\OpenVR\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="ThirdParty\Vortice\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\Hud\*.png" />
     <Resource Include="Assets\Fonts\Pretendard-Medium.otf" />

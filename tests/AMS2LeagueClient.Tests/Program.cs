@@ -36,8 +36,15 @@ namespace AMS2LeagueClient.Tests
         [STAThread]
         private static int Main(string[] args)
         {
+            if (args.Contains("--generated-avante-scales", StringComparer.Ordinal))
+                AppContext.SetSwitch("AMS2KRLeague.Avante.UseGeneratedScales", true);
             var application = new AMS2LeagueClient.App(startRuntime: false);
             application.InitializeComponent();
+            int exportScaleArgument = Array.IndexOf(args, "--export-avante-scales");
+            if (exportScaleArgument >= 0)
+            {
+                ExportAvanteScales(args[exportScaleArgument + 1]); application.Shutdown(); return 0;
+            }
             int captureArgument = Array.IndexOf(args, "--capture-layout");
             if (captureArgument >= 0 && captureArgument + 1 < args.Length)
                 _layoutCaptureDirectory = Path.GetFullPath(args[captureArgument + 1]);
@@ -86,6 +93,8 @@ namespace AMS2LeagueClient.Tests
             }
             var tests = new (string Name, Action Test)[]
             {
+                ("Optional glass HUDs retain click-through and release windows", GlassHudLifecycle),
+                ("Retained N host activates and releases both HUDs", RetainedNHudLifecycle),
                 ("Render remediation retains graph paths and suspends inactive resources", RenderRemediationRetainsPathsAndStopsWork),
                 ("Interrupted HUD motion resumes observed target and clears stale state", InterruptedHudMotionResumesObservedTarget),
                 ("Disabled overlays release windows views and image assets", DisabledOverlaysReleaseResources),
@@ -93,6 +102,9 @@ namespace AMS2LeagueClient.Tests
                 ("Late mode evidence finalizes one immutable envelope", DelayedModeFinalizesOnce),
                 ("Bounded logger preserves order drains and survives IO", BoundedLoggerDrainsAndSurvivesIo),
                 ("History preserves stale gaps and resets identity", HistoryGapAndGenerationStayDistinct),
+                ("Current display retains latest state without graph backlog", CurrentDisplayDoesNotRetainGraphBacklog),
+                ("HUD history follows visible graph only", HudHistoryFollowsVisibleGraphOnly),
+                ("Recording progresses without display Dispatcher", RecordingProgressesWithoutDisplayDispatcher),
                 ("Anomalous speed diagnostics preserve SHM values", SpeedDiagnosticsPreserveSource),
                 ("UiTick fault boundary remains conservative", UiTickFaultBoundaryIsConservative),
                 ("Shutdown drains callbacks without blocking Dispatcher", CoordinatorShutdownDoesNotBlockDispatcher),
@@ -109,6 +121,11 @@ namespace AMS2LeagueClient.Tests
                 ("Avante reference effects retain digits and approved warning policy", AvanteReferenceEffects),
                 ("Avante speed center and fixed digit size with retained follower", AvanteSpeedCenterAndFollower),
                 ("Avante cluster variants and RPM motion preserve source design", AvanteClusterLayoutsAndMotion),
+                ("Avante high RPM settings restore and static resources", AvanteHighRpmRestore),
+                ("Avante high RPM actual window save and reload", AvanteHighRpmWindowReload),
+                ("Avante packaged scales preserve warning coordinates and reuse resources", AvantePackagedScales),
+                ("Avante text cache preserves recent readouts under capacity pressure", AvanteTextCachePreservesRecentReadouts),
+                ("Avante status retains rounded values and continuous fuel", AvanteStatusPreservesDisplayedValues),
                 ("Main overlay gallery previews and direct selection persist", MainOverlayGallery),
                 ("Telemetry layouts separate gauges and keep wheel angle compact", TelemetryPanelLayouts),
                 ("Driving graph scrolls existing points left between samples", DrivingGraphScrollsLeft),
@@ -124,6 +141,7 @@ namespace AMS2LeagueClient.Tests
                 ("Single and unknown queues cannot starve multiplayer uploads", AutomaticModeTests.UploadFiltering),
                 ("Result and replay race mode fields agree", AutomaticModeTests.ModeFields),
                 ("Korean labels and dedicated penalty column", KoreanLabelsAndPenaltyColumn),
+                ("Viewed root penalty reaches both tower designs", ViewedPenaltyReachesTower),
                 ("Tower shrinks and restores with participant count", TowerShrinksAndRestoresWithParticipants),
                 ("Empty panels remain editable with preview", EmptyPanelsRemainEditableWithPreview),
                 ("Offline layout preview lifecycle", OfflineLayoutPreviewLifecycle),

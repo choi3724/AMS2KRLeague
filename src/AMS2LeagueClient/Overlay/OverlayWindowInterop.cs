@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Windows.Media;
 using System.Windows.Interop;
 using AMS2LeagueClient.Core.Presentation;
 using AMS2LeagueClient.Core.Process;
@@ -44,6 +45,15 @@ namespace AMS2LeagueClient.Overlay
         private static readonly IntPtr TopMost = new IntPtr(-1);
         private static readonly object StateGate = new object();
         private static readonly HashSet<IntPtr> EditingHandles = new HashSet<IntPtr>();
+        private static readonly HashSet<IntPtr> GlassHandles = new HashSet<IntPtr>();
+        [StructLayout(LayoutKind.Sequential)]
+        private struct GlassMargins { public int Left, Right, Top, Bottom; }
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmExtendFrameIntoClientArea(IntPtr handle, ref GlassMargins margins);
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmIsCompositionEnabled([MarshalAs(UnmanagedType.Bool)] out bool enabled);
+        public static bool IsGlassAvailable()
+            => DwmIsCompositionEnabled(out bool enabled) == 0 && enabled;
 
         public sealed class DisplayInfo
         {
@@ -134,18 +144,35 @@ namespace AMS2LeagueClient.Overlay
             public uint Flags;
         }
 
-        public static void Configure(IntPtr handle)
+        public static void Configure(IntPtr handle, bool useGlass = false)
         {
             long styles = GetWindowLongPtr(handle, ExtendedStyleIndex).ToInt64();
-            styles |= ExtendedTransparent | ExtendedToolWindow | ExtendedLayered | ExtendedNoActivate;
+            styles |= ExtendedTransparent | ExtendedToolWindow | ExtendedNoActivate;
+            if (useGlass) styles &= ~ExtendedLayered;
+            else styles |= ExtendedLayered;
             SetWindowLongPtr(handle, ExtendedStyleIndex, new IntPtr(styles));
 
             HwndSource? source = HwndSource.FromHwnd(handle);
             // Renderer matrix: Default hardware + independent Monitor motion reduced CPU and delivery gaps.
             // WPF retains its device-loss/software fallback; VR-only surfaces select SoftwareOnly below.
             if (source?.CompositionTarget != null)
+            {
                 source.CompositionTarget.RenderMode = RenderMode.Default;
+                if (useGlass)
+                {
+                    source.CompositionTarget.BackgroundColor = Colors.Transparent;
+                    ExtendGlass(handle);
+                    lock (StateGate) GlassHandles.Add(handle);
+                }
+            }
             source?.AddHook(WindowProcedure);
+        }
+
+        private static void ExtendGlass(IntPtr handle)
+        {
+            var margins = new GlassMargins { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+            int result = DwmExtendFrameIntoClientArea(handle, ref margins);
+            if (result < 0) Marshal.ThrowExceptionForHR(result);
         }
 
         public static void SetEditMode(IntPtr handle, bool enabled)
@@ -189,7 +216,11 @@ namespace AMS2LeagueClient.Overlay
 
         public static void Forget(IntPtr handle)
         {
-            lock (StateGate) EditingHandles.Remove(handle);
+            lock (StateGate)
+            {
+                EditingHandles.Remove(handle);
+                GlassHandles.Remove(handle);
+            }
         }
 
         public static OverlayStyleState ReadStyleState(IntPtr handle)
@@ -218,6 +249,18 @@ namespace AMS2LeagueClient.Overlay
         {
             if (message == 0x007e || message == 0x001a || message == 0x02e0)
             { _displays = null; DisplayRevision++; }
+            if (message == 0x031E)
+            {
+                bool glass;
+                lock (StateGate) glass = GlassHandles.Contains(handle);
+                // Re-extend after a DWM composition change without throwing from the
+                // message hook; a failed HRESULT leaves the window as-is until the next change.
+                if (glass && IsGlassAvailable())
+                {
+                    var margins = new GlassMargins { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+                    DwmExtendFrameIntoClientArea(handle, ref margins);
+                }
+            }
             bool editing;
             lock (StateGate) editing = EditingHandles.Contains(handle);
             if (!editing && message == MessageMouseActivate)

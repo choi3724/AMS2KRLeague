@@ -30,6 +30,20 @@ namespace AMS2LeagueClient.Presentation
                 return images;
             }
         }
+        internal static byte[][] PrepareNativeImages()
+        {
+            var images = GetImages();
+            var result = new byte[images.Length][];
+            for (int i = 0; i < images.Length; i++)
+            {
+                using var stream = new System.IO.MemoryStream();
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(images[i]));
+                encoder.Save(stream);
+                result[i] = stream.ToArray();
+            }
+            return result;
+        }
         private static readonly Geometry[] LightClips = CreateLightClips();
         private static Geometry[] CreateLightClips()
         {
@@ -126,11 +140,20 @@ namespace AMS2LeagueClient.Presentation
         private static readonly Pen GearPen = FrozenPen(GearRim, 1.1), DigitPen = FrozenPen(NumberRim, 1.1);
         private static Pen FrozenPen(Brush brush, double thickness) { var pen = new Pen(brush, thickness); pen.Freeze(); return pen; }
         private int _faceRasterizations;
+        private BitmapSource? _faceBitmap;
+        private Size _faceSize;
+        private double _faceDpiX, _faceDpiY;
+        private AvanteRpmScale _faceScale;
+        private AvanteScaleImages? _scaleImages;
+        public int PreRenderedMaximum => _scaleImages?.Maximum ?? 0;
         private readonly Dictionary<(string, double, bool, bool, bool), (Geometry Shape, Rect Bounds, Geometry? Shadow, Geometry? Rim)> _glyphs = new Dictionary<(string, double, bool, bool, bool), (Geometry, Rect, Geometry?, Geometry?)>();
+        private readonly Queue<(string, double, bool, bool, bool)> _glyphOrder = new Queue<(string, double, bool, bool, bool)>();
         private readonly Dictionary<(char, double, bool, bool), (Geometry Shape, double Advance, Rect Bounds)> _characters = new Dictionary<(char, double, bool, bool), (Geometry, double, Rect)>();
         private readonly Dictionary<(string, bool), double> _textWidths = new Dictionary<(string, bool), double>();
         private string? _valuesKey, _gearKey, _speedKey;
         private readonly DrawingVisual _gearValues = new DrawingVisual(), _speedValues = new DrawingVisual();
+        private readonly DrawingVisual _fuelGauge = new DrawingVisual();
+        private readonly RectangleGeometry _fuelLevel = new RectangleGeometry();
         private int _gearRebuilds, _speedRebuilds, _statusRebuilds;
         private (int Band, int Pairs, bool HasRpm)? _motionKey;
         private readonly HudTargetMotion _rpmMotion;
@@ -236,13 +259,20 @@ namespace AMS2LeagueClient.Presentation
             AddVisualChild(_follower); _follower.Transform = _transform;
             using (var drawing = _follower.RenderOpen()) { drawing.PushClip(MotionClip); drawing.DrawGeometry(_followerBrush, null, _followerPath); drawing.Pop(); }
             foreach (var visual in new[] { _motion, _scale, _values, _rpmNumbers, _needle, _gearValues, _speedValues }) { AddVisualChild(visual); visual.Transform = _transform; }
+            AddVisualChild(_fuelGauge); _fuelGauge.Transform = _transform;
+            if (Expanded)
+            {
+                using var drawing = _fuelGauge.RenderOpen();
+                Gauge(drawing, 170, 615, null);
+                drawing.DrawGeometry(Gradient("#E4FFFF", "#3BADD1"), null, _fuelLevel);
+            }
 
             Loaded += (_, __) => UpdateFlash();
             IsVisibleChanged += (_, __) => { if (!IsVisible) StopMotion(); else { UpdateFlash(); DrawMotion(); } };
             Unloaded += (_, __) => StopMotion();
         }
-        protected override int VisualChildrenCount => 9;
-        protected override Visual GetVisualChild(int index) => index == 0 ? _redZone : index == 1 ? _follower : index == 2 ? _motion : index == 3 ? _scale : index == 4 ? _values : index == 5 ? _rpmNumbers : index == 6 ? _needle : index == 7 ? _gearValues : index == 8 ? _speedValues : throw new ArgumentOutOfRangeException(nameof(index));
+        protected override int VisualChildrenCount => 10;
+        protected override Visual GetVisualChild(int index) => index == 0 ? _redZone : index == 1 ? _follower : index == 2 ? _motion : index == 3 ? _scale : index == 4 ? _values : index == 5 ? _rpmNumbers : index == 6 ? _needle : index == 7 ? _gearValues : index == 8 ? _speedValues : index == 9 ? _fuelGauge : throw new ArgumentOutOfRangeException(nameof(index));
         private static BitmapImage LoadImage(string name = "avante-background.png")
         {
             using var stream = Application.GetResourceStream(new Uri("pack://application:,,,/AMS2LeagueClient;component/Assets/Hud/" + name)).Stream;
@@ -304,8 +334,10 @@ namespace AMS2LeagueClient.Presentation
                 Geometry? shadow = styled ? RetainedGeometry.Compile(glyphShape.GetWidenedPathGeometry(ShadowPen)) : null;
                 Geometry? rim = styled ? RetainedGeometry.Compile(glyphShape.GetWidenedPathGeometry(DigitPen)) : null;
                 glyph = (glyphShape, glyphShape.Bounds, shadow, rim);
-                if (_glyphs.Count > 256) _glyphs.Clear();
+                // Keep recent outlines when a speed sweep exceeds the bounded cache.
+                if (_glyphs.Count >= 256) _glyphs.Remove(_glyphOrder.Dequeue());
                 _glyphs[key] = glyph;
+                _glyphOrder.Enqueue(key);
             }
             Geometry geometry = glyph.Shape; Rect b = glyph.Bounds;
             dc.PushTransform(new TranslateTransform(x - b.X - b.Width / 2, y - b.Y - b.Height / 2));
@@ -437,9 +469,19 @@ namespace AMS2LeagueClient.Presentation
         protected override void OnRender(DrawingContext dc)
         {
             if (ActualWidth <= 0 || ActualHeight <= 0) return;
+            var dpi = VisualTreeHelper.GetDpi(this);
+            if (_faceBitmap != null && _faceSize == RenderSize && _faceScale == _rpmScale
+                && _faceDpiX == dpi.DpiScaleX && _faceDpiY == dpi.DpiScaleY)
+            {
+                dc.DrawImage(_faceBitmap, new Rect(RenderSize));
+                return;
+            }
             var face = new DrawingVisual();
             using (var drawing = face.RenderOpen()) DrawFace(drawing);
-            dc.DrawImage(Rasterize(face), new Rect(RenderSize));
+            _faceBitmap = Rasterize(face);
+            _faceSize = RenderSize; _faceScale = _rpmScale;
+            _faceDpiX = dpi.DpiScaleX; _faceDpiY = dpi.DpiScaleY;
+            dc.DrawImage(_faceBitmap, new Rect(RenderSize));
             _faceRasterizations++;
             _redZone.Transform = _transform; _redZone.Opacity = 1;
             using (var red = _redZone.RenderOpen())
@@ -512,16 +554,19 @@ namespace AMS2LeagueClient.Presentation
         }
         private void DrawScale()
         {
+            _scaleImages = AvanteScaleImages.ForMaximum(_rpmScale.Maximum);
             _scale.Transform = _transform;
             _numberPulse.Set(0, false); _pulseNumber = -1; _previousNumberRpm = null;
             _rpmNumbers.Children.Clear(); _numberScales.Clear(); _activeNumber = -1;
             using (var dc = _scale.RenderOpen())
             {
                 dc.PushClip(MotionClip);
-                dc.DrawGeometry(Brushes.AliceBlue, null, Sector(TickOuterRadius - 1, TickOuterRadius + 1, Angle(0), Angle(_rpmScale.Maximum)));
+                if (_scaleImages == null)
+                    dc.DrawGeometry(Brushes.AliceBlue, null, Sector(TickOuterRadius - 1, TickOuterRadius + 1, Angle(0), Angle(_rpmScale.Maximum)));
                 if (_rpmScale.HasWarningThresholds)
                     dc.DrawGeometry(Brushes.Firebrick, null, Sector(TickOuterRadius - 11, TickOuterRadius - 3, Angle(_rpmScale.RedStart), Angle(_rpmScale.Maximum)));
-                for (double tick = 0; tick <= _rpmScale.Maximum; tick += 200)
+                if (_scaleImages != null) dc.DrawImage(_scaleImages.Ticks, new Rect(570, 0, 908, 623));
+                else for (double tick = 0; tick <= _rpmScale.Maximum; tick += 200)
                 {
                     bool major = tick % 1000 == 0;
                     dc.DrawLine(major ? MajorTickPen : MinorTickPen, PointAt(major ? MajorTickInnerRadius : MinorTickInnerRadius, Angle(tick)), PointAt(TickOuterRadius, Angle(tick)));
@@ -533,11 +578,16 @@ namespace AMS2LeagueClient.Presentation
                     var p = PointAt(276, Angle(i * 1000));
                     var transform = new ScaleTransform(1, 1, p.X, p.Y);
                     var numeral = new DrawingVisual { Transform = transform };
-                    using (var text = numeral.RenderOpen()) Text(text, i.ToString(), p.X, p.Y, size, true);
+                    using (var text = numeral.RenderOpen())
+                    {
+                        if (_scaleImages != null) text.DrawImage(_scaleImages.Numbers[i], new Rect(p.X - 64, p.Y - 64, 128, 128));
+                        else Text(text, i.ToString(), p.X, p.Y, size, true);
+                    }
                     _rpmNumbers.Children.Add(numeral); _numberScales.Add(transform);
                 }
                 dc.Pop();
-                Text(dc, "km/h", 1168, 589, 17); Text(dc, "x1000", 805, 591, 23); Text(dc, "rpm", 805, 613, 20);
+                if (_scaleImages == null)
+                { Text(dc, "km/h", 1168, 589, 17); Text(dc, "x1000", 805, 591, 23); Text(dc, "rpm", 805, 613, 20); }
             }
             var bitmap = Rasterize(_scale);
             _scale.Transform = Transform.Identity;
@@ -569,30 +619,44 @@ namespace AMS2LeagueClient.Presentation
             { _gearKey = gearText; using var dc = _gearValues.RenderOpen(); Text(dc,gearText,Cx,Cy,164,true,true); _gearRebuilds++; }
             if (_speedKey != speedText)
             { _speedKey = speedText; using var dc = _speedValues.RenderOpen(); Text(dc,speedText,Cx,562,108,true,tabular:true); _speedRebuilds++; }
-            string key = string.Join("|", _preview, valid,
-                Value(valid ? _session!.AmbientTemperature : (double?)null, -80, 80), _sample?.AbsActive, v?.CarFlagsRaw,
-                Expanded ? string.Join("|", v?.OilTemperatureCelsius, v?.WaterTemperatureCelsius,
-                    v?.EngineTorqueNewtonMetres, v?.FuelLevel, v?.FuelCapacityLitres, v?.OdometerKilometres) : "");
+            string ambient = Value(_preview ? 23 : valid ? _session!.AmbientTemperature : (double?)null, -80, 80) + "°C";
+            bool? abs = _sample?.AbsActive;
+            bool? tcs = v != null ? (v.CarFlagsRaw & (1u << 6)) != 0 : _preview ? false : (bool?)null;
+            bool? limiter = v != null ? (v.CarFlagsRaw & (1u << 3)) != 0 : _preview ? false : (bool?)null;
+            string oil = "", water = "", boost = "", torque = "", fuel = "", distance = "";
+            if (Expanded)
+            {
+                oil = Value(_preview ? 74 : v?.OilTemperatureCelsius, -40, 300);
+                water = Value(_preview ? 89 : v?.WaterTemperatureCelsius, -40, 200);
+                boost = Value(_preview ? 1.1 : (double?)null, 0, 9, "0.0");
+                torque = Value(_preview ? 285 : v?.EngineTorqueNewtonMetres, -4000, 4000);
+                fuel = v != null ? Value(v.FuelLevel * v.FuelCapacityLitres, 0, 2000) + " L" : _preview ? "35 L" : "— L";
+                distance = Value(_preview ? 123 : v?.OdometerKilometres, 0, 9999999) + " km";
+                // Preserve the continuous fuel level without rebuilding every rounded readout.
+                double? level = _preview ? .7 : (double?)v?.FuelLevel;
+                var rect = new Rect(170, 615, level.HasValue && double.IsFinite(level.Value) && level >= 0 && level <= 1 ? 265 * level.Value : 0, 27);
+                if (_fuelLevel.Rect != rect) _fuelLevel.Rect = rect;
+            }
+            string key = string.Join("|", ambient, abs, tcs, limiter, oil, water, boost, torque, fuel, distance);
             if (_valuesKey == key) return;
             _valuesKey = key; _statusRebuilds++;
             using (var dc = _values.RenderOpen())
             {
-                Text(dc, Value(_preview ? 23 : valid ? _session!.AmbientTemperature : (double?)null, -80, 80) + "°C", 668, 690, 42);
-                Status(dc, "ABS", _sample == null ? (bool?)null : _sample.AbsActive, 795);
-                Status(dc, "TCS", v != null ? (v.CarFlagsRaw & (1u << 6)) != 0 : _preview ? false : (bool?)null, 992);
-                Status(dc, "PIT LIMITER", v != null ? (v.CarFlagsRaw & (1u << 3)) != 0 : _preview ? false : (bool?)null, 1266);
+                Text(dc, ambient, 668, 690, 42);
+                Status(dc, "ABS", abs, 795);
+                Status(dc, "TCS", tcs, 992);
+                Status(dc, "PIT LIMITER", limiter, 1266);
                 if (Expanded)
                 {
-                    Readout(dc, Value(_preview ? 74 : v?.OilTemperatureCelsius, -40, 300), "°C", 319, 297);
-                    Readout(dc, Value(_preview ? 89 : v?.WaterTemperatureCelsius, -40, 200), "°C", 319, 510);
+                    Readout(dc, oil, "°C", 319, 297);
+                    Readout(dc, water, "°C", 319, 510);
                     // DATA_DICTIONARY marks turboBoostPressure unit/scale pending; do not label the raw float as bar.
-                    Readout(dc, Value(_preview ? 1.1 : (double?)null, 0, 9, "0.0"), "bar", 1724, 297);
-                    Readout(dc, Value(_preview ? 285 : v?.EngineTorqueNewtonMetres, -4000, 4000), "Nm", 1724, 510);
+                    Readout(dc, boost, "bar", 1724, 297);
+                    Readout(dc, torque, "Nm", 1724, 510);
                     // The source PNG has painted gauge levels. Cover them before showing real levels.
-                    Gauge(dc, 170, 615, _preview ? .7 : (double?)v?.FuelLevel);
                     Gauge(dc, 1620, 615, null); // No authoritative C/H scale: keep the numeric water temperature above.
-                    Text(dc, v != null ? Value(v.FuelLevel * v.FuelCapacityLitres, 0, 2000) + " L" : _preview ? "35 L" : "— L", 275, 700, 45);
-                    Text(dc, Value(_preview ? 123 : v?.OdometerKilometres, 0, 9999999) + " km", 1820, 710, 42);
+                    Text(dc, fuel, 275, 700, 45);
+                    Text(dc, distance, 1820, 710, 42);
                 }
             }
         }

@@ -1,4 +1,8 @@
-﻿# REQ-RELEASE-076 — HUD 위치 환산 수정 공개
+﻿# REQ-RELEASE-077 — 채택 표시 변경과 시험 표시 경로 공개
+
+사용자 9/24 지시: 성능 측정을 중단하고 현재 상태를 안정화해 v0.7.7로 커밋·릴리즈한다(0.7.4는 기존 태그와 충돌해 0.7.7로 확정). 사용자 결정에 따라 보고서가 채택한 변경만 선별하고, DComp N 후보는 `--monitor-retained-n` 뒤에 기본 꺼짐으로 포함한다. offline replay(`OfflineReplayInput`, `PlayerOverlayCoordinator` 변경)와 수동 probe는 제외한다. 안정화: 후보의 테스트용 환경변수 분기 제거, 시작 로그 연산자 우선순위 수정, glass 메시지 hook의 예외 제거, Vortice/SharpGen MIT 고지 추가. 원본/분석 트리/설치본 보존. [보고서](reports/2026-09-24-release-0.7.7.md). Monitor RED, 실게임·VR·물리 트리플·혼합 DPI·격리 업데이트 NOT TESTED.
+
+# REQ-RELEASE-076 — HUD 위치 환산 수정 공개
 
 사용자0.7.6 승인으로 공개0.7.5에서 위치 복원 수정만 추출한다. 제공 설정의 X590→1770 재현/수정, 관련 WPF·전체 회귀·패키지 감사·격리0.7.5→0.7.6 업데이트·커밋/태그/push/Latest·공개 다운로드를 검증한다. 기존 원본/두 분석 트리/설치본 보존. 게임·운영 업로드·renderer 전환 없음. Monitor RED 및 물리 트리플/실게임 NOT TESTED 유지.
 

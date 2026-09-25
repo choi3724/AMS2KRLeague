@@ -99,6 +99,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public const int MaximumSamples = 4096;
         public const double DurationSeconds = 10;
         private readonly Queue<DrivingTelemetrySample> _samples = new Queue<DrivingTelemetrySample>();
+        private bool _retainHistory = true;
         public IEnumerable<DrivingTelemetrySample> Samples => _samples;
         public int Count => _samples.Count;
         public long Revision { get; private set; }
@@ -109,8 +110,15 @@ namespace AMS2LeagueClient.Core.Presentation
         public void MarkStale() { Current = null; }
         public void Clear() { _samples.Clear(); Current = null; LastObserved = null; Revision++; }
 
-        public void Add(DrivingTelemetrySample? sample)
+        public void Add(DrivingTelemetrySample? sample, bool retainHistory = true)
         {
+            // Current-state HUDs do not need a graph backlog. A visibility change
+            // starts a fresh curve; never replay samples collected while hidden.
+            if (_retainHistory != retainHistory)
+            {
+                Clear();
+                _retainHistory = retainHistory;
+            }
             if (sample == null) { MarkStale(); return; }
             if (LastObserved != null)
             {
@@ -120,6 +128,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 else if (interval == 0) return;
             }
             Current = LastObserved = sample; Revision++;
+            if (!retainHistory) return;
             _samples.Enqueue(sample);
             while (_samples.Count > MaximumSamples
                 || (sample.CapturedAt - _samples.Peek().CapturedAt).TotalSeconds > DurationSeconds)

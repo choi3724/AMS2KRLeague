@@ -1,4 +1,8 @@
-﻿# 0.7.6 릴리즈 — 저장 HUD 위치 유지
+﻿# 0.7.7 릴리즈 — 검증된 표시 개선 통합과 시험 표시 경로
+
+0.7.6 이후 분석 트리에서 보고서가 채택한 표시 변경(078 페널티 fallback, 079 눈금 사전 생성, 080 문자 캐시, 081 표시 이력, 083 상태 유지)과 기본 꺼짐 시험 옵션 `--monitor-glass`, `--monitor-retained-n`만 추출한다. [검증 보고서](docs/reports/2026-09-24-release-0.7.7.md). offline replay·측정 probe는 제외했다. 기본 WPF·N RPM 정책·수집·기록·전송 계약 유지. Monitor RED, 실게임/VR/물리 트리플/mixed-DPI NOT TESTED. 아래는 이전 이력이다.
+
+# 0.7.6 릴리즈 — 저장 HUD 위치 유지
 
 0.7.5에 남은 위치 비례 환산을 수정하여 저장한 HUD 간격을 게임 화면에서도 유지한다. [검증 보고서](docs/reports/2026-09-15-release-0.7.6.md). 기존 크기 복원·원점 추종·설정 호환·기본 WPF·N RPM/디자인·수집 계약 유지. Monitor RED, 물리 트리플/mixed-DPI/실게임/VR NOT TESTED. 아래는 이전 이력이다.
 

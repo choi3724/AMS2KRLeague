@@ -27,6 +27,21 @@ namespace AMS2LeagueClient.Core.Presentation
             };
         }
 
+        public static string Penalty(ParticipantSnapshot driver, TelemetrySnapshot snapshot)
+        {
+            string participant = Penalty(driver);
+            // Root pit schedule belongs only to the currently viewed participant. Keep
+            // explicit per-participant penalties/DSQ and never project it onto other rows.
+            if (driver.Index != snapshot.ViewedParticipantIndex || !driver.IsActive
+                || (participant != "—" && participant != "미확인")) return participant;
+            return snapshot.KnownRootPitSchedule switch
+            {
+                PitSchedule.DriveThrough => "드라이브스루",
+                PitSchedule.StopGo => "스톱 앤 고",
+                _ => participant
+            };
+        }
+
         public static string PenaltyLabel(ParticipantPenaltyState state) => state switch
         {
             ParticipantPenaltyState.None => "없음", ParticipantPenaltyState.DriveThrough => "드라이브스루",
