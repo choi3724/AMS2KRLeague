@@ -80,7 +80,7 @@ namespace AMS2LeagueClient.Overlay
         {
             _diagnostic = diagnostic;
             InitializeComponent();
-            // Must be selected before the first HWND is created. The regular layered path remains the default.
+            // Must be selected before the first HWND is created; the startup policy selects the default.
             _useGlass = useGlass && OverlayWindowInterop.IsGlassAvailable();
             _retainedNRequested = useRetainedN && _useGlass;
             if (_useGlass) AllowsTransparency = false;

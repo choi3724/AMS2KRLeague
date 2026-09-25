@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## 0.8.0 — 2026-09-25
+
+- 모니터 HUD 기본 출력을 DWM glass 합성 경로로 변경해 기존 layered 창의 동기 readback 경로를 피함.
+- `--monitor-layered`로 즉시 기존 WPF layered 경로를 선택할 수 있으며 DWM glass 사용 불가 시 자동 fallback.
+- 0.7.7 표시·수집·기록 기능을 유지. 오프라인 고부하에서는 전달 지연이 줄었지만 여전히 60Hz 목표 미달; Monitor RED.
+
 ## 0.7.7 — 2026-09-24
 
 - 관전 대상 참가자의 드라이브스루·스톱앤고 페널티를 두 순위표 디자인에 표시.

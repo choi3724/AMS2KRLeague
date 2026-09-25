@@ -84,14 +84,13 @@ namespace AMS2LeagueClient
                     _statusWindow.Show();
                 }
 
-                bool requestRetainedN = args.Contains("--monitor-retained-n", StringComparer.OrdinalIgnoreCase);
-                bool requestGlass = requestRetainedN || args.Contains("--monitor-glass", StringComparer.OrdinalIgnoreCase);
-                _overlay = new OverlayWindow(startupPolicy.Diagnostic, useGlass: requestGlass,
-                    useRetainedN: requestRetainedN);
+                _overlay = new OverlayWindow(startupPolicy.Diagnostic, useGlass: startupPolicy.UseGlass,
+                    useRetainedN: startupPolicy.UseRetainedN);
                 _overlay.RetainedNStatus += message => _logger?.Info("RETAINED_N", message);
                 _logger.Info("MONITOR_PRESENTATION_PATH", (_overlay.UsesGlass ? "dwm-glass" : "wpf-layered")
-                    + (requestGlass && !_overlay.UsesGlass ? " glass-unavailable" : string.Empty)
-                    + (requestRetainedN ? " retained-n-requested" : string.Empty));
+                    + (startupPolicy.UseGlass && !_overlay.UsesGlass ? " glass-unavailable" : string.Empty)
+                    + (startupPolicy.LayeredRequested ? " layered-requested" : string.Empty)
+                    + (startupPolicy.UseRetainedN ? " retained-n-requested" : string.Empty));
                 _overlay.StartVr(message =>
                 {
                     status.VrText = message;

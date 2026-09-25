@@ -217,6 +217,7 @@ namespace AMS2LeagueClient.Tests
                 ,("Status window layout controls construct", StatusWindowLayoutControlsConstruct)
                 ,("Public launch shows first-run status", PublicLaunchShowsStatus)
                 ,("Background launch is explicit", BackgroundLaunchIsExplicit)
+                ,("Layered recovery overrides experimental N", LayeredRecoveryOverridesExperimentalN)
                 ,("Fresh user has no pairing identity", FreshUserHasNoPairingIdentity)
                 ,("Pairing credential is DPAPI protected", PairingCredentialIsProtected)
                 ,("Unpair clears protected credential", UnpairClearsCredential)
@@ -1875,6 +1876,9 @@ namespace AMS2LeagueClient.Tests
             AssertTrue(policy.ShowStatusWindowActivated);
             AssertFalse(policy.IsBackgroundStartup);
             AssertFalse(policy.Diagnostic);
+            AssertTrue(policy.UseGlass);
+            AssertFalse(policy.UseRetainedN);
+            AssertFalse(policy.LayeredRequested);
         }
 
         private static void BackgroundLaunchIsExplicit()
@@ -1883,6 +1887,18 @@ namespace AMS2LeagueClient.Tests
             AssertFalse(policy.ShowStatusWindow);
             AssertFalse(policy.ShowStatusWindowActivated);
             AssertTrue(policy.IsBackgroundStartup);
+        }
+
+        private static void LayeredRecoveryOverridesExperimentalN()
+        {
+            ClientStartupPolicy policy = ClientStartupPolicy.FromArguments(new[] {
+                "--monitor-glass", "--monitor-retained-n", "--MONITOR-LAYERED" });
+            AssertFalse(policy.UseGlass);
+            AssertFalse(policy.UseRetainedN);
+            AssertTrue(policy.LayeredRequested);
+            ClientStartupPolicy retained = ClientStartupPolicy.FromArguments(new[] { "--monitor-retained-n" });
+            AssertTrue(retained.UseGlass);
+            AssertTrue(retained.UseRetainedN);
         }
 
         private static void FreshUserHasNoPairingIdentity()

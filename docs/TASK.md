@@ -1,4 +1,7 @@
-﻿# REQ-RELEASE-077 — 채택 표시 변경과 시험 표시 경로 공개
+﻿# REQ-RELEASE-080 — 모니터 기본 투명 출력 개선 및 0.8.0 릴리즈
+
+기존 실게임 trace에서 WPF layered 창의 `PresentWithGDI → ReadIntoSysMemBuffer → GetRenderTargetData` 대기가 확인됐다. 보존된 동일 입력 고부하 A/B/A에서 glass의 HUD 전달 p95는 layered 약97→glass 약55→layered 약97ms로 감소했으나 60Hz 목표에는 미달했다. 이번 릴리즈는 기본 모니터 HUD를 이미 구현한 DWM glass로 선택하고 DWM 불가 또는 `--monitor-layered`에서 기존 경로를 유지한다. `--monitor-retained-n`은 계속 명시적 시험 옵션이다. 표시 외의 SHM·기록·전송·RPM·설정 계약을 보존하고 실제 Client 선택·종료, 기존 회귀, 패키지를 검증한다. 실게임 프레임 해결이라고 발표하지 않는다. [검증](reports/2026-09-25-release-0.8.0.md).
+# REQ-RELEASE-077 — 채택 표시 변경과 시험 표시 경로 공개
 
 사용자 9/24 지시: 성능 측정을 중단하고 현재 상태를 안정화해 v0.7.7로 커밋·릴리즈한다(0.7.4는 기존 태그와 충돌해 0.7.7로 확정). 사용자 결정에 따라 보고서가 채택한 변경만 선별하고, DComp N 후보는 `--monitor-retained-n` 뒤에 기본 꺼짐으로 포함한다. offline replay(`OfflineReplayInput`, `PlayerOverlayCoordinator` 변경)와 수동 probe는 제외한다. 안정화: 후보의 테스트용 환경변수 분기 제거, 시작 로그 연산자 우선순위 수정, glass 메시지 hook의 예외 제거, Vortice/SharpGen MIT 고지 추가. 원본/분석 트리/설치본 보존. [보고서](reports/2026-09-24-release-0.7.7.md). Monitor RED, 실게임·VR·물리 트리플·혼합 DPI·격리 업데이트 NOT TESTED.
 

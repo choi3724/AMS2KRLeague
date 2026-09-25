@@ -1,4 +1,7 @@
-﻿# 0.7.7 릴리즈 — 검증된 표시 개선 통합과 시험 표시 경로
+﻿# 0.8.0 릴리즈 — 모니터 기본 투명 출력 경로 개선
+
+기존 오프라인 동일 입력 A/B/A에서 layered→DWM glass→layered의 연속 HUD 전달 p95가 약97→55→97ms였다. 0.8.0은 이를 근거로 DWM glass를 기본 선택하고 `--monitor-layered` 복구 경로를 둔다. DWM을 쓸 수 없으면 기존 layered를 선택한다. 기본 N 계기판은 WPF이며 DirectComposition N은 계속 명시적 시험 옵션이다. SHM·기록·전송·RPM·배치 계약은 유지한다. 55ms도 60Hz 목표 미달이므로 Monitor RED, 실게임/VR/장시간/물리 트리플/mixed-DPI NOT TESTED. [릴리즈 보고서](docs/reports/2026-09-25-release-0.8.0.md).
+# 0.7.7 릴리즈 — 검증된 표시 개선 통합과 시험 표시 경로
 
 0.7.6 이후 분석 트리에서 보고서가 채택한 표시 변경(078 페널티 fallback, 079 눈금 사전 생성, 080 문자 캐시, 081 표시 이력, 083 상태 유지)과 기본 꺼짐 시험 옵션 `--monitor-glass`, `--monitor-retained-n`만 추출한다. [검증 보고서](docs/reports/2026-09-24-release-0.7.7.md). offline replay·측정 probe는 제외했다. 기본 WPF·N RPM 정책·수집·기록·전송 계약 유지. Monitor RED, 실게임/VR/물리 트리플/mixed-DPI NOT TESTED. 아래는 이전 이력이다.
 
