@@ -26,6 +26,7 @@
     <None Update="ThirdParty\Vortice\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\Hud\*.png" />
+    <Resource Include="Assets\Hud\hyundai-n-logo.svg" />
     <Resource Include="Assets\Fonts\Pretendard-Medium.otf" />
     <Resource Include="Assets\Fonts\AvanteN-*.ttf" />
     <None Update="Assets\Fonts\AvanteN-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

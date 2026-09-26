@@ -70,6 +70,15 @@ internal sealed class CompositionHudCanvas : IDisposable
         using var stops=Dc.CreateGradientStopCollection(new[]{new Vortice.Direct2D1.GradientStop(0,Color(first).Color),new Vortice.Direct2D1.GradientStop(1,Color(last).Color)},Gamma.StandardRgb,ExtendMode.Clamp);
         brush=Dc.CreateLinearGradientBrush(new LinearGradientBrushProperties(start,end),stops);_gradients.Add(key,brush);return brush;
     }
+    internal ID2D1LinearGradientBrush Gradient(string key, (double Offset, string Color)[] colours, Vector2 start, Vector2 end)
+    {
+        if(_gradients.TryGetValue(key,out var cached))return (ID2D1LinearGradientBrush)cached;
+        var values=new Vortice.Direct2D1.GradientStop[colours.Length];
+        for(int i=0;i<values.Length;i++)values[i]=new Vortice.Direct2D1.GradientStop((float)colours[i].Offset,Color(colours[i].Color).Color);
+        using var stops=Dc.CreateGradientStopCollection(values,Gamma.StandardRgb,ExtendMode.Clamp);
+        var brush=Dc.CreateLinearGradientBrush(new LinearGradientBrushProperties(start,end),stops);
+        _gradients.Add(key,brush);return brush;
+    }
     internal ID2D1Brush Radial(string key, Vector2 center, float radius, float[] offsets, string[] colors)
     {
         if(_gradients.TryGetValue(key,out var brush))return brush;
@@ -81,7 +90,7 @@ internal sealed class CompositionHudCanvas : IDisposable
     }
     internal (double Width,double Height) Measure(string value,double size,string font="Pretendard",bool bold=true,int weight=0)
     {
-        int actualWeight=weight==0?(bold?700:400):weight;var key=(value,size,font,actualWeight);
+        int actualWeight=weight==0?(font=="AvanteN Readout"?500:font.StartsWith("AvanteN",StringComparison.Ordinal)?600:bold?700:400):weight;var key=(value,size,font,actualWeight);
         if(_measurements.TryGetValue(key,out var result))return result;
         var family=font=="Pretendard"||font.StartsWith("AvanteN",StringComparison.Ordinal)
             ?new FontFamily(new Uri("pack://application:,,,/AMS2LeagueClient;component/"),"./Assets/Fonts/#"+font):new FontFamily(font);
@@ -117,7 +126,8 @@ internal sealed class CompositionHudCanvas : IDisposable
             var group=new GeometryGroup();double advance=0;
             foreach(char ch in value)
             {
-                var text=new FormattedText(ch.ToString(),CultureInfo.InvariantCulture,FlowDirection.LeftToRight,new Typeface(family,FontStyles.Normal,FontWeights.Normal,FontStretches.Normal),size,Brushes.White,1);
+                var text=new FormattedText(ch.ToString(),CultureInfo.InvariantCulture,FlowDirection.LeftToRight,
+                    new Typeface(family,FontStyles.Normal,readout?FontWeights.Medium:FontWeights.SemiBold,FontStretches.Normal),size,Brushes.White,1);
                 var shape=text.BuildGeometry(new Point());var b=shape.Bounds;
                 double bearing=tabular&&char.IsDigit(ch)?(text.WidthIncludingTrailingWhitespace-b.Width)/2-b.X:0;
                 var placed=new GeometryGroup{Transform=new TranslateTransform(advance+bearing,0)};placed.Children.Add(shape);group.Children.Add(placed);
@@ -193,7 +203,7 @@ internal sealed class CompositionHudCanvas : IDisposable
     internal void Text(string value, double x, double y, double size, string color = "White", string font = "Pretendard", bool bold = true, int align = 0, double maxWidth = double.PositiveInfinity, bool centerInk=false, int weight=0)
     {
         if (value.Length == 0) return;
-        int actualWeight=weight==0?(bold?700:400):weight; var key = (value, size, font, actualWeight);
+        int actualWeight=weight==0?(font=="AvanteN Readout"?500:font.StartsWith("AvanteN",StringComparison.Ordinal)?600:bold?700:400):weight; var key = (value, size, font, actualWeight);
         if (!_texts.TryGetValue(key, out var item))
         {
             var family = font == "Pretendard" || font.StartsWith("AvanteN", StringComparison.Ordinal)

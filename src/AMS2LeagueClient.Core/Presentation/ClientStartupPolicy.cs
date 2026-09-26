@@ -31,6 +31,7 @@ namespace AMS2LeagueClient.Core.Presentation
             bool showStatus = true;
             bool afterUpdate = false;
             bool layeredRequested = false;
+            bool glassRequested = false;
             bool retainedNRequested = false;
             foreach (string argument in arguments)
             {
@@ -55,6 +56,10 @@ namespace AMS2LeagueClient.Core.Presentation
                 {
                     layeredRequested = true;
                 }
+                else if (string.Equals(argument, "--monitor-glass", StringComparison.OrdinalIgnoreCase))
+                {
+                    glassRequested = true;
+                }
                 else if (string.Equals(argument, "--monitor-retained-n", StringComparison.OrdinalIgnoreCase))
                 {
                     retainedNRequested = true;
@@ -62,7 +67,8 @@ namespace AMS2LeagueClient.Core.Presentation
             }
 
             return new ClientStartupPolicy(diagnostic, showStatus || afterUpdate, afterUpdate,
-                !layeredRequested, retainedNRequested && !layeredRequested, layeredRequested);
+                (glassRequested || retainedNRequested) && !layeredRequested,
+                retainedNRequested && !layeredRequested, layeredRequested);
         }
     }
 }

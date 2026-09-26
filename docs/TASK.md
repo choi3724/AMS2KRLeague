@@ -1,4 +1,7 @@
-﻿# REQ-RELEASE-080 — 모니터 기본 투명 출력 개선 및 0.8.0 릴리즈
+﻿# REQ-AVANTE-BARS-081 — N 확장 계기판 막대 윤곽·냉각수 표시
+
+사용자 확인: 0.8.1 비공개 후보의 투명 배경은 정상. 원본 아반떼 N 이미지의 비스듬한 연료·냉각수 막대 안쪽과 실제 채움의 시작·끝을 맞추고, 비어 있던 냉각수 막대를 관측 수온에 반응하도록 한다. C/H 수치 경계는 게임에서 제공하지 않으므로 표시용 대응값을 명시하고 경고 기준으로 쓰지 않는다. 기본 WPF와 명시적 DComp N 시험 경로에서 동일한 윤곽·값을 사용한다. 기존 PNG·RPM 정책·수집·기록·전송·설치본·공개 릴리스는 보존한다. [검증](reports/2026-09-26-avante-bar-gauge-coolant.md).
+# REQ-RELEASE-080 — 모니터 기본 투명 출력 개선 및 0.8.0 릴리즈
 
 기존 실게임 trace에서 WPF layered 창의 `PresentWithGDI → ReadIntoSysMemBuffer → GetRenderTargetData` 대기가 확인됐다. 보존된 동일 입력 고부하 A/B/A에서 glass의 HUD 전달 p95는 layered 약97→glass 약55→layered 약97ms로 감소했으나 60Hz 목표에는 미달했다. 이번 릴리즈는 기본 모니터 HUD를 이미 구현한 DWM glass로 선택하고 DWM 불가 또는 `--monitor-layered`에서 기존 경로를 유지한다. `--monitor-retained-n`은 계속 명시적 시험 옵션이다. 표시 외의 SHM·기록·전송·RPM·설정 계약을 보존하고 실제 Client 선택·종료, 기존 회귀, 패키지를 검증한다. 실게임 프레임 해결이라고 발표하지 않는다. [검증](reports/2026-09-25-release-0.8.0.md).
 # REQ-RELEASE-077 — 채택 표시 변경과 시험 표시 경로 공개

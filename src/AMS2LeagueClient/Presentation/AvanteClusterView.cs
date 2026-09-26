@@ -133,6 +133,8 @@ namespace AMS2LeagueClient.Presentation
         private static readonly Typeface DisplayFont = Font("Display", "AvanteN Display");
         private static readonly Typeface UiFont = Font("UI", "AvanteN UI");
         private static readonly Typeface ReadoutFont = Font("Readout", "AvanteN Readout");
+        private static readonly Pen HeadlightPen = FrozenPen(new SolidColorBrush(Color.FromRgb(81, 255, 100)), 3);
+        private static readonly Geometry HeadlightShape = Geometry.Parse("M0,9 L15,11 L15,27 L0,29 Q5,20 0,9 Z M22,9 L42,5 M22,18 L45,18 M22,27 L42,31");
         private static readonly Brush Digits = Gradient("#FFFFFF", "#BAE6FF");
         private static readonly Brush GearRim = Gradient("#FFF5BC", "#718AAF");
         private static readonly Brush NumberRim = Gradient("#E4FAFF", "#496BBA");
@@ -153,7 +155,11 @@ namespace AMS2LeagueClient.Presentation
         private string? _valuesKey, _gearKey, _speedKey;
         private readonly DrawingVisual _gearValues = new DrawingVisual(), _speedValues = new DrawingVisual();
         private readonly DrawingVisual _fuelGauge = new DrawingVisual();
-        private readonly RectangleGeometry _fuelLevel = new RectangleGeometry();
+        private readonly PathGeometry _fuelLevel = AvanteBarGauge.MutableFill(AvanteBarGauge.Fuel);
+        private readonly PathGeometry _coolantLevel = AvanteBarGauge.MutableFill(AvanteBarGauge.Coolant);
+        private static readonly Brush GaugeBase = GaugeGradient(AvanteBarGauge.GlassStops, false);
+        private static readonly Brush GaugeFill = GaugeGradient(AvanteBarGauge.FillStops, true);
+        private static readonly Brush GaugeSheen = GaugeGradient(AvanteBarGauge.SheenStops, false);
         private int _gearRebuilds, _speedRebuilds, _statusRebuilds;
         private (int Band, int Pairs, bool HasRpm)? _motionKey;
         private readonly HudTargetMotion _rpmMotion;
@@ -177,6 +183,22 @@ namespace AMS2LeagueClient.Presentation
         private double? _previousNumberRpm;
         private double _numberPulseAmount;
         private readonly HudTargetMotion _numberPulse;
+        private readonly HudTargetMotion _ignitionMotion;
+        private readonly DrawingVisual _ignition = new DrawingVisual();
+        private readonly PathGeometry _ignitionReveal = new PathGeometry();
+        private readonly ArcSegment _ignitionRevealOuter = new ArcSegment { Size = new Size(399, 399), SweepDirection = SweepDirection.Clockwise };
+        private readonly LineSegment _ignitionRevealEnd = new LineSegment();
+        private readonly ArcSegment _ignitionRevealInner = new ArcSegment { Size = new Size(335, 335), SweepDirection = SweepDirection.Counterclockwise };
+        private readonly PathGeometry _ignitionBlue = new PathGeometry();
+        private readonly ArcSegment _ignitionBlueOuter = new ArcSegment { Size = new Size(245, 245), SweepDirection = SweepDirection.Clockwise };
+        private readonly LineSegment _ignitionBlueEnd = new LineSegment();
+        private readonly ArcSegment _ignitionBlueInner = new ArcSegment { Size = new Size(213, 213), SweepDirection = SweepDirection.Counterclockwise };
+        private readonly EllipseGeometry _ignitionHead = new EllipseGeometry(new Point(Cx, Cy), 11, 11);
+        private static readonly Brush IgnitionSpark = CreateIgnitionSpark();
+        private static readonly BitmapImage IgnitionFlame = LoadImage("avante-ignition-flame.png");
+        private static readonly Brush IgnitionBlue = CreateIgnitionBlue();
+        private bool _ignitionStarted;
+        internal double IgnitionProgress { get; private set; } = 1;
         public static double NumberEmphasis(double rpm, int numeral) => double.IsFinite(rpm) ? 1 + .2 * Math.Max(0, 1 - Math.Abs(rpm - numeral * 1000.0) / 100) : 1;
         private void ApplyNumberScale(int index)
         {
@@ -251,6 +273,30 @@ namespace AMS2LeagueClient.Presentation
             Expanded = expanded;
             _rpmMotion = new HudTargetMotion(65, rpm => SetValue(RpmPositionProperty, rpm), this);
             _numberPulse = new HudTargetMotion(100, value => { _numberPulseAmount = value; ApplyNumberScale(_pulseNumber); }, this);
+            _ignitionMotion = new HudTargetMotion(AvanteIgnitionSweep.DurationSeconds * 1000, DrawIgnition, this);
+            var revealFigure = new PathFigure { StartPoint = PointAt(399, AvanteIgnitionSweep.StartAngle), IsClosed = true, IsFilled = true };
+            revealFigure.Segments.Add(_ignitionRevealOuter);
+            revealFigure.Segments.Add(_ignitionRevealEnd);
+            revealFigure.Segments.Add(_ignitionRevealInner);
+            _ignitionRevealInner.Point = PointAt(335, AvanteIgnitionSweep.StartAngle);
+            _ignitionReveal.Figures.Add(revealFigure);
+            var blueFigure = new PathFigure { StartPoint = PointAt(245, AvanteIgnitionSweep.StartAngle), IsClosed = true, IsFilled = true };
+            blueFigure.Segments.Add(_ignitionBlueOuter);
+            blueFigure.Segments.Add(_ignitionBlueEnd);
+            blueFigure.Segments.Add(_ignitionBlueInner);
+            _ignitionBlueInner.Point = PointAt(213, AvanteIgnitionSweep.StartAngle);
+            _ignitionBlue.Figures.Add(blueFigure);
+            using (var drawing = _ignition.RenderOpen())
+            {
+                drawing.PushClip(MotionClip);
+                drawing.DrawGeometry(IgnitionBlue, null, _ignitionBlue);
+                drawing.PushClip(_ignitionReveal);
+                drawing.DrawImage(IgnitionFlame, new Rect(Cx - 486, Cy - 486, 972, 972));
+                drawing.Pop();
+                drawing.DrawGeometry(IgnitionSpark, null, _ignitionHead);
+                drawing.Pop();
+            }
+            _ignition.Opacity = 0;
             var figure = new PathFigure { StartPoint = PointAt(348, 150), IsClosed = true, IsFilled = true };
             figure.Segments.Add(_outerArc); figure.Segments.Add(_endLine); figure.Segments.Add(_innerArc);
             _innerArc.Point = PointAt(304, 150); _followerPath.Figures.Add(figure);
@@ -260,19 +306,26 @@ namespace AMS2LeagueClient.Presentation
             using (var drawing = _follower.RenderOpen()) { drawing.PushClip(MotionClip); drawing.DrawGeometry(_followerBrush, null, _followerPath); drawing.Pop(); }
             foreach (var visual in new[] { _motion, _scale, _values, _rpmNumbers, _needle, _gearValues, _speedValues }) { AddVisualChild(visual); visual.Transform = _transform; }
             AddVisualChild(_fuelGauge); _fuelGauge.Transform = _transform;
+            AddVisualChild(_ignition); _ignition.Transform = _transform;
             if (Expanded)
             {
                 using var drawing = _fuelGauge.RenderOpen();
-                Gauge(drawing, 170, 615, null);
-                drawing.DrawGeometry(Gradient("#E4FFFF", "#3BADD1"), null, _fuelLevel);
+                var fuelTrack = AvanteBarGauge.Track(AvanteBarGauge.Fuel);
+                var coolantTrack = AvanteBarGauge.Track(AvanteBarGauge.Coolant);
+                drawing.DrawGeometry(GaugeBase, null, fuelTrack);
+                drawing.DrawGeometry(GaugeFill, null, _fuelLevel);
+                drawing.DrawGeometry(GaugeSheen, null, fuelTrack);
+                drawing.DrawGeometry(GaugeBase, null, coolantTrack);
+                drawing.DrawGeometry(GaugeFill, null, _coolantLevel);
+                drawing.DrawGeometry(GaugeSheen, null, coolantTrack);
             }
 
-            Loaded += (_, __) => UpdateFlash();
-            IsVisibleChanged += (_, __) => { if (!IsVisible) StopMotion(); else { UpdateFlash(); DrawMotion(); } };
+            Loaded += (_, __) => { UpdateFlash(); if (IsVisible) StartIgnition(); };
+            IsVisibleChanged += (_, __) => { if (!IsVisible) StopMotion(); else { UpdateFlash(); DrawMotion(); StartIgnition(); } };
             Unloaded += (_, __) => StopMotion();
         }
-        protected override int VisualChildrenCount => 10;
-        protected override Visual GetVisualChild(int index) => index == 0 ? _redZone : index == 1 ? _follower : index == 2 ? _motion : index == 3 ? _scale : index == 4 ? _values : index == 5 ? _rpmNumbers : index == 6 ? _needle : index == 7 ? _gearValues : index == 8 ? _speedValues : index == 9 ? _fuelGauge : throw new ArgumentOutOfRangeException(nameof(index));
+        protected override int VisualChildrenCount => 11;
+        protected override Visual GetVisualChild(int index) => index == 0 ? _redZone : index == 1 ? _follower : index == 2 ? _motion : index == 3 ? _scale : index == 4 ? _values : index == 5 ? _rpmNumbers : index == 6 ? _needle : index == 7 ? _gearValues : index == 8 ? _speedValues : index == 9 ? _fuelGauge : index == 10 ? _ignition : throw new ArgumentOutOfRangeException(nameof(index));
         private static BitmapImage LoadImage(string name = "avante-background.png")
         {
             using var stream = Application.GetResourceStream(new Uri("pack://application:,,,/AMS2LeagueClient;component/Assets/Hud/" + name)).Stream;
@@ -281,11 +334,68 @@ namespace AMS2LeagueClient.Presentation
             image.Freeze(); return image;
         }
         private static Typeface Font(string file, string family) => new Typeface(new FontFamily(
-            new Uri("pack://application:,,,/AMS2LeagueClient;component/"), "./Assets/Fonts/#" + family), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+            new Uri("pack://application:,,,/AMS2LeagueClient;component/"), "./Assets/Fonts/#" + family), FontStyles.Normal,
+            file == "Readout" ? FontWeights.Medium : FontWeights.SemiBold, FontStretches.Normal);
         private static Brush Gradient(string top, string bottom)
         {
             var brush = new LinearGradientBrush((Color)ColorConverter.ConvertFromString(top), (Color)ColorConverter.ConvertFromString(bottom), 90);
             brush.Freeze(); return brush;
+        }
+        private static Brush GaugeGradient((double Offset, string Color)[] stops, bool horizontal)
+        {
+            var brush = new LinearGradientBrush
+            {
+                MappingMode = BrushMappingMode.RelativeToBoundingBox,
+                StartPoint = horizontal ? new Point(0, .5) : new Point(.5, 0),
+                EndPoint = horizontal ? new Point(1, .5) : new Point(.5, 1)
+            };
+            foreach (var (offset, color) in stops)
+                brush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString(color), offset));
+            brush.Freeze();
+            return brush;
+        }
+        private static Brush CreateIgnitionSpark()
+        {
+            var brush = new RadialGradientBrush();
+            brush.GradientStops.Add(new GradientStop(Colors.White, 0));
+            brush.GradientStops.Add(new GradientStop(Color.FromRgb(255, 181, 45), .3));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 57, 0), 1));
+            brush.Freeze(); return brush;
+        }
+        private static Brush CreateIgnitionBlue()
+        {
+            var brush = new RadialGradientBrush { MappingMode = BrushMappingMode.Absolute,
+                Center = new Point(Cx, Cy), GradientOrigin = new Point(Cx, Cy), RadiusX = 245, RadiusY = 245 };
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 7, 198, 255), 213.0 / 245));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(145, 0, 218, 255), 221.0 / 245));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(230, 107, 249, 255), 231.0 / 245));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 7, 140, 243), 1));
+            brush.Freeze(); return brush;
+        }
+        private void StartIgnition()
+        {
+            if (_ignitionStarted || !IsVisible) return;
+            _ignitionStarted = true;
+            _ignitionMotion.Set(0, false);
+            _ignitionMotion.Set(1, true);
+        }
+        private void DrawIgnition(double progress)
+        {
+            IgnitionProgress = progress;
+            double opacity = AvanteIgnitionSweep.Opacity(progress);
+            if (opacity <= 0) { _ignition.Opacity = 0; return; }
+            double end = AvanteIgnitionSweep.Angle(progress);
+            _ignitionRevealOuter.Point = PointAt(399, end);
+            _ignitionRevealOuter.IsLargeArc = end - AvanteIgnitionSweep.StartAngle > 180;
+            _ignitionRevealEnd.Point = PointAt(335, end);
+            _ignitionRevealInner.IsLargeArc = _ignitionRevealOuter.IsLargeArc;
+            double blueEnd = AvanteIgnitionSweep.Angle(Math.Min(1, progress * 1.16));
+            _ignitionBlueOuter.Point = PointAt(245, blueEnd);
+            _ignitionBlueOuter.IsLargeArc = blueEnd - AvanteIgnitionSweep.StartAngle > 180;
+            _ignitionBlueEnd.Point = PointAt(213, blueEnd);
+            _ignitionBlueInner.IsLargeArc = _ignitionBlueOuter.IsLargeArc;
+            _ignitionHead.Center = PointAt(378, end);
+            _ignition.Opacity = opacity;
         }
         private static Point PointAt(double radius, double angle) => new Point(Cx + radius * Math.Cos(angle * Math.PI / 180), Cy + radius * Math.Sin(angle * Math.PI / 180));
         private static Geometry Sector(double inner, double outer, double start, double end)
@@ -443,6 +553,9 @@ namespace AMS2LeagueClient.Presentation
         {
             _stoppingMotion = true;
             StopFlash(true);
+            // Hiding a live view (VR switch, edit chrome, foreground change) must
+            // not replay the mode-entry sequence. A new view is created on OFF->ON.
+            _ignitionMotion.Stop(); _ignition.Opacity = 0; IgnitionProgress = 1;
             _numberPulse.Set(0, false); _previousNumberRpm = null;
             _rpmMotion.Set(_sample?.Rpm ?? 0, false);
             _stoppingMotion = false;
@@ -620,8 +733,9 @@ namespace AMS2LeagueClient.Presentation
             if (_speedKey != speedText)
             { _speedKey = speedText; using var dc = _speedValues.RenderOpen(); Text(dc,speedText,Cx,562,108,true,tabular:true); _speedRebuilds++; }
             string ambient = Value(_preview ? 23 : valid ? _session!.AmbientTemperature : (double?)null, -80, 80) + "°C";
-            bool? abs = _sample?.AbsActive;
-            bool? tcs = v != null ? (v.CarFlagsRaw & (1u << 6)) != 0 : _preview ? false : (bool?)null;
+            var abs = _preview ? AvanteIndicatorState.Off : AvanteIndicators.Abs(v, _sample);
+            var tcs = _preview ? AvanteIndicatorState.Off : AvanteIndicators.Tcs(v);
+            bool headlights = AvanteIndicators.Headlights(v);
             bool? limiter = v != null ? (v.CarFlagsRaw & (1u << 3)) != 0 : _preview ? false : (bool?)null;
             string oil = "", water = "", boost = "", torque = "", fuel = "", distance = "";
             if (Expanded)
@@ -633,11 +747,12 @@ namespace AMS2LeagueClient.Presentation
                 fuel = v != null ? Value(v.FuelLevel * v.FuelCapacityLitres, 0, 2000) + " L" : _preview ? "35 L" : "— L";
                 distance = Value(_preview ? 123 : v?.OdometerKilometres, 0, 9999999) + " km";
                 // Preserve the continuous fuel level without rebuilding every rounded readout.
-                double? level = _preview ? .7 : (double?)v?.FuelLevel;
-                var rect = new Rect(170, 615, level.HasValue && double.IsFinite(level.Value) && level >= 0 && level <= 1 ? 265 * level.Value : 0, 27);
-                if (_fuelLevel.Rect != rect) _fuelLevel.Rect = rect;
+                AvanteBarGauge.SetLevel(_fuelLevel, AvanteBarGauge.Fuel,
+                    AvanteBarGauge.FuelLevel(_preview ? .7 : (double?)v?.FuelLevel));
+                AvanteBarGauge.SetLevel(_coolantLevel, AvanteBarGauge.Coolant,
+                    AvanteBarGauge.CoolantLevel(_preview ? 89 : (double?)v?.WaterTemperatureCelsius));
             }
-            string key = string.Join("|", ambient, abs, tcs, limiter, oil, water, boost, torque, fuel, distance);
+            string key = string.Join("|", ambient, abs, tcs, headlights, limiter, oil, water, boost, torque, fuel, distance);
             if (_valuesKey == key) return;
             _valuesKey = key; _statusRebuilds++;
             using (var dc = _values.RenderOpen())
@@ -646,6 +761,12 @@ namespace AMS2LeagueClient.Presentation
                 Status(dc, "ABS", abs, 795);
                 Status(dc, "TCS", tcs, 992);
                 Status(dc, "PIT LIMITER", limiter, 1266);
+                if (headlights)
+                {
+                    dc.PushTransform(new TranslateTransform(Expanded ? 1885 : 1350, 30));
+                    dc.DrawGeometry(null, HeadlightPen, HeadlightShape);
+                    dc.Pop();
+                }
                 if (Expanded)
                 {
                     Readout(dc, oil, "°C", 319, 297);
@@ -653,10 +774,9 @@ namespace AMS2LeagueClient.Presentation
                     // DATA_DICTIONARY marks turboBoostPressure unit/scale pending; do not label the raw float as bar.
                     Readout(dc, boost, "bar", 1724, 297);
                     Readout(dc, torque, "Nm", 1724, 510);
-                    // The source PNG has painted gauge levels. Cover them before showing real levels.
-                    Gauge(dc, 1620, 615, null); // No authoritative C/H scale: keep the numeric water temperature above.
                     Text(dc, fuel, 275, 700, 45);
                     Text(dc, distance, 1820, 710, 42);
+                    AvanteNLogo.Draw(dc, 1600, 678, 68, 29);
                 }
             }
         }
@@ -675,20 +795,17 @@ namespace AMS2LeagueClient.Presentation
             _textWidths[key] = width;
             return width;
         }
-        private void Status(DrawingContext dc, string label, bool? active, double x)
+        private void Status(DrawingContext dc, string label, bool? active, double x) =>
+            Status(dc, label, active == true ? AvanteIndicatorState.Active : active == false ? AvanteIndicatorState.Off : AvanteIndicatorState.Unknown, x);
+        private void Status(DrawingContext dc, string label, AvanteIndicatorState state, double x)
         {
-            Brush color = active == true ? Brushes.Tomato : active == false ? Brushes.AliceBlue : Brushes.SlateGray;
+            Brush color = state == AvanteIndicatorState.Active ? Brushes.OrangeRed : state == AvanteIndicatorState.On
+                ? Brushes.Gold : state == AvanteIndicatorState.Off ? Brushes.AliceBlue : Brushes.SlateGray;
             const double size = 33;
             double labelWidth = TextWidth(label, false);
             double left = x - (33 + 16 + labelWidth) / 2;
             for (int i = 0; i < 3; i++) dc.DrawRoundedRectangle(color, null, new Rect(left, 673 + i * 10, 33, 5), 2.5, 2.5);
             Text(dc, label, left + 49 + labelWidth / 2, 686, size, false, false, color);
-        }
-        private static void Gauge(DrawingContext dc, double x, double y, double? level)
-        {
-            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(5,15,25)), null, new Rect(x,y,265,27));
-            if (level.HasValue && double.IsFinite(level.Value) && level >= 0 && level <= 1)
-                dc.DrawRectangle(Gradient("#E4FFFF", "#3BADD1"), null, new Rect(x,y,265*level.Value,27));
         }
     }
 }

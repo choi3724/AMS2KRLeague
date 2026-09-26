@@ -1,4 +1,7 @@
-﻿# 0.8.0 릴리즈 — 모니터 기본 투명 출력 경로 개선
+﻿# 0.8.1 비공개 후보 — 투명 배경 회귀와 N 확장 막대
+
+공개 0.8.0의 glass 불투명 배경을 기본 layered 경로로 복구하고, N 확장 계기판 연료·냉각수 막대의 사선 윤곽 및 수온 반응을 수정했다. 0.8.1 ZIP·Setup은 로컬 후보로만 생성했으며 공개 Latest는 여전히 0.8.0이다. [투명 배경 보고](docs/reports/2026-09-26-monitor-glass-opaque-background.md), [막대 보고](docs/reports/2026-09-26-avante-bar-gauge-coolant.md). Monitor RED, 실게임 화면·성능 NOT TESTED. 아래는 공개 이력이다.
+# 0.8.0 릴리즈 — 모니터 기본 투명 출력 경로 개선
 
 기존 오프라인 동일 입력 A/B/A에서 layered→DWM glass→layered의 연속 HUD 전달 p95가 약97→55→97ms였다. 0.8.0은 이를 근거로 DWM glass를 기본 선택하고 `--monitor-layered` 복구 경로를 둔다. DWM을 쓸 수 없으면 기존 layered를 선택한다. 기본 N 계기판은 WPF이며 DirectComposition N은 계속 명시적 시험 옵션이다. SHM·기록·전송·RPM·배치 계약은 유지한다. 55ms도 60Hz 목표 미달이므로 Monitor RED, 실게임/VR/장시간/물리 트리플/mixed-DPI NOT TESTED. [릴리즈 보고서](docs/reports/2026-09-25-release-0.8.0.md).
 # 0.7.7 릴리즈 — 검증된 표시 개선 통합과 시험 표시 경로

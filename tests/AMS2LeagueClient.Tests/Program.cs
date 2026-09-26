@@ -72,6 +72,11 @@ namespace AMS2LeagueClient.Tests
                 application.Shutdown();
                 return 0;
             }
+            if (args.Contains("--avante-detail-preview", StringComparer.Ordinal))
+            {
+                AvanteBarGaugesFollowSourceContours(); AvanteStatusPreservesDisplayedValues();
+                AvanteIndicatorAndIgnitionPreview(); application.Shutdown(); return 0;
+            }
             int liveUpdateArgument = Array.IndexOf(args, "--verify-live-update");
             if (liveUpdateArgument >= 0 && liveUpdateArgument + 1 < args.Length)
             {
@@ -93,8 +98,11 @@ namespace AMS2LeagueClient.Tests
             }
             var tests = new (string Name, Action Test)[]
             {
+                ("Default HUD windows retain pixel transparency", DefaultHudWindowsRetainPixelTransparency),
                 ("Optional glass HUDs retain click-through and release windows", GlassHudLifecycle),
                 ("Retained N host activates and releases both HUDs", RetainedNHudLifecycle),
+                ("Avante bar gauges follow source contours and coolant temperature", AvanteBarGaugesFollowSourceContours),
+                ("Avante indicators and one-shot ignition sweep render", AvanteIndicatorAndIgnitionPreview),
                 ("Render remediation retains graph paths and suspends inactive resources", RenderRemediationRetainsPathsAndStopsWork),
                 ("Interrupted HUD motion resumes observed target and clears stale state", InterruptedHudMotionResumesObservedTarget),
                 ("Disabled overlays release windows views and image assets", DisabledOverlaysReleaseResources),
@@ -1876,7 +1884,7 @@ namespace AMS2LeagueClient.Tests
             AssertTrue(policy.ShowStatusWindowActivated);
             AssertFalse(policy.IsBackgroundStartup);
             AssertFalse(policy.Diagnostic);
-            AssertTrue(policy.UseGlass);
+            AssertFalse(policy.UseGlass);
             AssertFalse(policy.UseRetainedN);
             AssertFalse(policy.LayeredRequested);
         }
@@ -1896,6 +1904,9 @@ namespace AMS2LeagueClient.Tests
             AssertFalse(policy.UseGlass);
             AssertFalse(policy.UseRetainedN);
             AssertTrue(policy.LayeredRequested);
+            ClientStartupPolicy glass = ClientStartupPolicy.FromArguments(new[] { "--monitor-glass" });
+            AssertTrue(glass.UseGlass);
+            AssertFalse(glass.UseRetainedN);
             ClientStartupPolicy retained = ClientStartupPolicy.FromArguments(new[] { "--monitor-retained-n" });
             AssertTrue(retained.UseGlass);
             AssertTrue(retained.UseRetainedN);

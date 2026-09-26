@@ -2,7 +2,7 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-현재 버전 및 공개 Latest: **0.8.0**
+공개 Latest: **0.8.0** · 비공개 로컬 수정 후보: **0.8.1** (아직 게시되지 않음)
 
 0.8.0 변경: 모니터 HUD의 기본 투명 표시를 DWM glass 경로로 전환해 기존 layered 출력의 동기 readback을 줄입니다. `--monitor-layered`로 기존 표시 경로를 선택할 수 있습니다. N DirectComposition은 `--monitor-retained-n`을 사용할 때만 켜집니다. 고부하 끊김은 남아 있어 Monitor 성능 RED를 유지합니다.
 
@@ -136,7 +136,7 @@ dotnet run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.c
 
 ## 버전 정책
 
-첫 공개 버전은 `0.1.0`, 현재 개발 버전은 `0.8.0`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
+첫 공개 버전은 `0.1.0`, 현재 비공개 개발 후보는 `0.8.1`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
 
 ## 현재 제한사항
 

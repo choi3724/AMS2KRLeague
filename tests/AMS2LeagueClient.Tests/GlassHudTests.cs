@@ -16,6 +16,35 @@ namespace AMS2LeagueClient.Tests
 {
     internal static partial class Program
     {
+        private static void DefaultHudWindowsRetainPixelTransparency()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "ams2-default-hud-test-" + Guid.NewGuid().ToString("N") + ".json");
+            var previous = Application.Current.Windows.Cast<Window>().ToHashSet();
+            var policy = ClientStartupPolicy.FromArguments(Array.Empty<string>());
+            var overlay = new OverlayWindow(false, path, useGlass: policy.UseGlass);
+            try
+            {
+                foreach (string key in OverlayComponentKeys.All) overlay.SetComponentEnabled(key, true);
+                overlay.SetViewModel(DemoSnapshotFactory.CreateShell(false), false);
+                overlay.ShowAt(new GameWindowSnapshot(IntPtr.Zero, 0, 0, 1920, 1080, 96, true, false, 0));
+                PumpDispatcher();
+                var surfaces = Application.Current.Windows.Cast<Window>().Where(w => !previous.Contains(w) && w.IsVisible).ToArray();
+                AssertTrue(surfaces.Length >= 10);
+                foreach (Window surface in surfaces)
+                {
+                    AssertTrue(surface.AllowsTransparency);
+                    OverlayStyleState style = OverlayWindowInterop.ReadStyleState(new WindowInteropHelper(surface).Handle);
+                    AssertTrue(style.Layered);
+                    AssertTrue(style.ClickThrough && style.NoActivate && style.ToolWindow);
+                }
+            }
+            finally
+            {
+                overlay.Close();
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
         private static void GlassHudLifecycle()
         {
             if (!OverlayWindowInterop.IsGlassAvailable()) return;
