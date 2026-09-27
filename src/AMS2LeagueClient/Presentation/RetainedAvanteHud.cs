@@ -164,14 +164,14 @@ namespace AMS2LeagueClient.Presentation
             new[]{"#00FF3019","#5CCF1C0F","#E6FF4C2A","#FFD4B9","#AC2518"}};
         private double _width,_height;
         private readonly ID2D1PathGeometry _clip,_withoutTicks,_tickRing,_innerRing,_needle,_outline,_ignitionCanvas,_ignitionThinBand,_ignitionDialArc,_ignitionCore,_ignitionVisibleArea;
-        private readonly ID2D1PathGeometry? _fuelTrack,_coolantTrack;
+        private readonly ID2D1PathGeometry? _fuelTrack,_coolantTrack,_fuelMarks,_coolantMarks;
         private ID2D1PathGeometry? _fuelFill,_coolantFill;
         private double? _fuelFillLevel,_coolantFillLevel;
         private readonly ID2D1PathGeometry[] _lightClips=new ID2D1PathGeometry[5];
         private ID2D1PathGeometry? _red,_yellow,_ticks;
         private readonly ID2D1Bitmap1[] _images=new ID2D1Bitmap1[5];
         private readonly ID2D1PathGeometry[] _logoShapes;
-        private readonly ID2D1PathGeometry _headlightShape;
+        private readonly ID2D1PathGeometry _parkingLampShape,_lowBeamShape;
         private readonly Func<string,ID2D1Bitmap1> _sharedImage;
         private ID2D1Bitmap1? _scaleAtlas;
         internal CompositionAvanteHud(ID2D1DeviceContext1 context, ID2D1Factory1 factory,bool expanded,
@@ -179,7 +179,8 @@ namespace AMS2LeagueClient.Presentation
         {
             _expanded=expanded;_c=new CompositionHudCanvas(context,factory);_sharedImage=sharedImage;
             _logoShapes=Array.ConvertAll(AvanteNLogo.Geometries,_c.Convert);
-            _headlightShape=_c.Convert(WGeometry.Parse("M0,9 L15,11 L15,27 L0,29 Q5,20 0,9 Z M22,9 L42,5 M22,18 L45,18 M22,27 L42,31"));
+            _parkingLampShape=_c.Convert(AvanteClusterView.ParkingLampShape);
+            _lowBeamShape=_c.Convert(AvanteClusterView.LowBeamShape);
             _outline=_c.Convert(AvanteClusterView.Housing(expanded));
             _ignitionCanvas=_c.Convert(new RectangleGeometry(new System.Windows.Rect(455,-150,1138,1090)));
             _ignitionThinBand=_c.Convert(SectorGeometry(395,420,0,359.5));
@@ -196,6 +197,8 @@ namespace AMS2LeagueClient.Presentation
             {
                 _fuelTrack=_c.Convert(AvanteBarGauge.Track(AvanteBarGauge.Fuel));
                 _coolantTrack=_c.Convert(AvanteBarGauge.Track(AvanteBarGauge.Coolant));
+                _fuelMarks=_c.Convert(AvanteBarGauge.QuarterMarks(AvanteBarGauge.Fuel));
+                _coolantMarks=_c.Convert(AvanteBarGauge.QuarterMarks(AvanteBarGauge.Coolant));
             }
             double[] left={169,194,219,244,270},right={372,347,322,296,270};
             for(int i=0;i<5;i++){var pair=new GeometryGroup();pair.Children.Add(SectorGeometry(360,395,140,left[i]));pair.Children.Add(SectorGeometry(360,395,right[i],400));_lightClips[i]=_c.Convert(pair);_images[i]=images[i];}
@@ -394,7 +397,8 @@ namespace AMS2LeagueClient.Presentation
             _previousNumberRpm=_sample?.Rpm!=null?(double?)rpm:null;
             double count=_scale.Maximum/1000,size=Math.Min(60,276*240/count*Math.PI/180/(count>=10?1.5:.8));
             for(int i=0;i<=count;i++){var p=P(276,_scale.Angle(i*1000));double emphasis=Math.Max(AvanteClusterView.NumberEmphasis(rpm,i),i==_pulseNumber?1+.2*Math.Max(0,1-(now-_pulseAt)/(double)Stopwatch.Frequency/.1):1);_c.Push(Matrix3x2.CreateScale((float)emphasis,new Vector2((float)p.X,(float)p.Y)));if(_scaleAtlas is { } numbers){int sx=(i%8)*256,sy=1246+(i/8)*256;dc.DrawBitmap(numbers,new Vortice.RawRectF((float)(p.X-64),(float)(p.Y-64),(float)(p.X+64),(float)(p.Y+64)),1,InterpolationMode.Linear,new Vortice.RawRectF(sx,sy,sx+256,sy+256),null);}else _c.StyledText(i.ToString(CultureInfo.InvariantCulture),p.X,p.Y,size);_c.Pop();}
-            _c.Unclip();if(_scaleAtlas==null){_c.CenterText("km/h",1168,589,17);_c.CenterText("x1000",805,591,23);_c.CenterText("rpm",805,613,20);}
+            _c.Unclip();_c.CenterText("km/h",_expanded?1168:AvanteClusterView.CompactSpeedUnitX,_expanded?589:AvanteClusterView.CompactSpeedUnitY,_expanded?17:AvanteClusterView.CompactSpeedUnitSize);
+            if(_scaleAtlas==null){_c.CenterText("x1000",805,591,23);_c.CenterText("rpm",805,613,20);}
             _c.StyledText(_sample?.Gear==0?"N":_sample?.Gear==-1?"R":_sample?.GearText??"—",1024,397,164);
             _c.StyledText(_sample?.SpeedKmh?.ToString("0",CultureInfo.InvariantCulture)??"—",1024,562,108,tabular:true);
             Values();_c.Unclip();_c.Pop();
@@ -406,7 +410,7 @@ namespace AMS2LeagueClient.Presentation
             _c.Dc.DrawBitmap(_images[index],new Vortice.RawRectF((float)left,0,(float)(left+_images[index].PixelSize.Width*pixelScale),(float)(_images[index].PixelSize.Height*750.0/_images[0].PixelSize.Height)),1,InterpolationMode.HighQualityCubic,null,null);
         }
         private static string Value(double? n,double low,double high,string format="0")=>n.HasValue&&double.IsFinite(n.Value)&&n>=low&&n<=high?n.Value.ToString(format,CultureInfo.InvariantCulture):"—";
-        private void BarGauge(string key,ID2D1PathGeometry track,AvanteBarGauge.Outline outline,double? level,
+        private void BarGauge(string key,ID2D1PathGeometry track,ID2D1PathGeometry marks,AvanteBarGauge.Outline outline,double? level,
             ref double? previous,ref ID2D1PathGeometry? fill)
         {
             if(previous!=level)
@@ -429,6 +433,15 @@ namespace AMS2LeagueClient.Presentation
             }
             _c.Dc.FillGeometry(track,_c.Gradient(key+"-sheen",AvanteBarGauge.SheenStops,top,bottom));
             _c.Dc.DrawGeometry(track,_c.Color("#A5ACD6E2"),1.5f);
+            _c.Clip(track);
+            _c.Dc.DrawGeometry(marks,_c.Color("#5A061018"),2.8f);
+            _c.Dc.DrawGeometry(marks,_c.Color("#A5E7F5FA"),1.5f);
+            _c.Unclip();
+        }
+        private void Headlight(ID2D1PathGeometry shape)
+        {
+            _c.Dc.DrawGeometry(shape,_c.Color("#2851FF64"),6);
+            _c.Dc.DrawGeometry(shape,_c.Color("#51FF64"),2.8f);
         }
         private void Values()
         {
@@ -436,19 +449,28 @@ namespace AMS2LeagueClient.Presentation
             var v=valid?session!.ViewedVehicleTelemetry:null;
             _c.Text(Value(valid?session!.AmbientTemperature:(double?)null,-80,80)+"°C",668,663,42,"AliceBlue","AvanteN UI",false,1);
             Status("ABS",AvanteIndicators.Abs(v,_sample),795);Status("TCS",AvanteIndicators.Tcs(v),992);Status("PIT LIMITER",v==null?(bool?)null:(v.CarFlagsRaw&(1u<<3))!=0,1266);
-            if(v!=null)
+            if(AvanteIndicators.Headlights(v))
             {
-                _c.Push(Matrix3x2.CreateTranslation(_expanded?1885:1350,30));
-                _c.Dc.DrawGeometry(_headlightShape,_c.Color(AvanteIndicators.Headlights(v)?"#51FF64":"#677580"),3);
-                _c.Pop();
+                if(_expanded)
+                {
+                    _c.Push(Matrix3x2.CreateTranslation((float)AvanteClusterView.HeadlightX,(float)AvanteClusterView.HeadlightY));
+                    Headlight(_parkingLampShape);Headlight(_lowBeamShape);_c.Pop();
+                }
+                else
+                {
+                    _c.Push(Matrix3x2.CreateTranslation((float)AvanteClusterView.CompactParkingX,(float)AvanteClusterView.CompactHeadlightY));
+                    Headlight(_parkingLampShape);_c.Pop();
+                    _c.Push(Matrix3x2.CreateTranslation((float)AvanteClusterView.CompactLowBeamX,(float)AvanteClusterView.CompactHeadlightY));
+                    Headlight(_lowBeamShape);_c.Pop();
+                }
             }
             if(!_expanded)return;
             _c.Text("오일 온도",319,182,37,"AliceBlue","AvanteN UI",false,1);_c.Text("냉각수 온도",319,394,37,"AliceBlue","AvanteN UI",false,1);
             _c.Text("터보",1724,182,37,"AliceBlue","AvanteN UI",false,1);_c.Text("토크",1724,394,37,"AliceBlue","AvanteN UI",false,1);
             Readout(Value(v?.OilTemperatureCelsius,-40,300),"°C",319,297);Readout(Value(v?.WaterTemperatureCelsius,-40,200),"°C",319,510);
             Readout("—","bar",1724,297);Readout(Value(v?.EngineTorqueNewtonMetres,-4000,4000),"Nm",1724,510);
-            BarGauge("avante-fuel",_fuelTrack!,AvanteBarGauge.Fuel,AvanteBarGauge.FuelLevel(v?.FuelLevel),ref _fuelFillLevel,ref _fuelFill);
-            BarGauge("avante-coolant",_coolantTrack!,AvanteBarGauge.Coolant,AvanteBarGauge.CoolantLevel(v?.WaterTemperatureCelsius),ref _coolantFillLevel,ref _coolantFill);
+            BarGauge("avante-fuel",_fuelTrack!,_fuelMarks!,AvanteBarGauge.Fuel,AvanteBarGauge.FuelLevel(v?.FuelLevel),ref _fuelFillLevel,ref _fuelFill);
+            BarGauge("avante-coolant",_coolantTrack!,_coolantMarks!,AvanteBarGauge.Coolant,AvanteBarGauge.CoolantLevel(v?.WaterTemperatureCelsius),ref _coolantFillLevel,ref _coolantFill);
             _c.Text("E",132,612,38,"AliceBlue","AvanteN UI",false,1);_c.Text("F",478,612,38,"AliceBlue","AvanteN UI",false,1);_c.Text("C",1587,612,38,"AliceBlue","AvanteN UI",false,1);_c.Text("H",1933,612,38,"AliceBlue","AvanteN UI",false,1);
             FooterText(v==null?"— L":Value(v.FuelLevel*v.FuelCapacityLitres,0,2000)+" L",265,693,48,30);
             FooterText(Value(v?.OdometerKilometres,0,9999999)+" km",1830,693,48,30);
@@ -470,6 +492,6 @@ namespace AMS2LeagueClient.Presentation
         private void Status(string text,bool? active,double x)=>Status(text,active==true?AvanteIndicatorState.Active:active==false?AvanteIndicatorState.Off:AvanteIndicatorState.Unknown,x);
         private void Status(string text,AvanteIndicatorState state,double x)
         {string color=state==AvanteIndicatorState.Active?"#FF5146":state==AvanteIndicatorState.On?"#FFDE56":state==AvanteIndicatorState.Off?"AliceBlue":"SlateGray";double width=_c.Measure(text,33,"AvanteN UI",false).Width,left=x-(49+width)/2;for(int i=0;i<3;i++)_c.Rect(left,673+i*10,33,5,color,2.5);_c.CenterText(text,left+49+width/2,690,33,color);}
-        public void Dispose(){_red?.Dispose();_yellow?.Dispose();_ticks?.Dispose();_fuelTrack?.Dispose();_coolantTrack?.Dispose();_fuelFill?.Dispose();_coolantFill?.Dispose();_clip.Dispose();_withoutTicks.Dispose();_tickRing.Dispose();_innerRing.Dispose();_needle.Dispose();_outline.Dispose();_ignitionCanvas.Dispose();_ignitionThinBand.Dispose();_ignitionDialArc.Dispose();_ignitionCore.Dispose();_ignitionVisibleArea.Dispose();_headlightShape.Dispose();foreach(var logo in _logoShapes)logo.Dispose();foreach(var clip in _lightClips)clip.Dispose();_c.Dispose();}
+        public void Dispose(){_red?.Dispose();_yellow?.Dispose();_ticks?.Dispose();_fuelTrack?.Dispose();_coolantTrack?.Dispose();_fuelMarks?.Dispose();_coolantMarks?.Dispose();_fuelFill?.Dispose();_clip.Dispose();_withoutTicks.Dispose();_tickRing.Dispose();_innerRing.Dispose();_needle.Dispose();_outline.Dispose();_ignitionCanvas.Dispose();_ignitionThinBand.Dispose();_ignitionDialArc.Dispose();_ignitionCore.Dispose();_ignitionVisibleArea.Dispose();_parkingLampShape.Dispose();_lowBeamShape.Dispose();foreach(var logo in _logoShapes)logo.Dispose();foreach(var clip in _lightClips)clip.Dispose();_c.Dispose();}
     }
 }

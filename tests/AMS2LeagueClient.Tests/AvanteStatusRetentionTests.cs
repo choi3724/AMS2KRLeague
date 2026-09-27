@@ -71,6 +71,15 @@ namespace AMS2LeagueClient.Tests
 
         private static void AvanteBarGaugesFollowSourceContours()
         {
+            var gaugeType = typeof(AvanteClusterView).Assembly.GetType("AMS2LeagueClient.Presentation.AvanteBarGauge")!;
+            var gaugeFlags = BindingFlags.NonPublic | BindingFlags.Static;
+            foreach (string name in new[] { "Fuel", "Coolant" })
+            {
+                var outline = gaugeType.GetField(name, gaugeFlags)!.GetValue(null)!;
+                var marks = (Geometry)gaugeType.GetMethod("QuarterMarks", gaugeFlags)!.Invoke(null, new[] { outline })!;
+                AssertEqual(3, marks.GetFlattenedPathGeometry().Figures.Count);
+                AssertTrue(marks.Bounds.Top > 618 && marks.Bounds.Bottom < 639); // On the fixed glass within the bar.
+            }
             var view = new AvanteClusterView(true) { Width = 2048, Height = 750 };
             string? Capture(string name)
             {
@@ -86,6 +95,10 @@ namespace AMS2LeagueClient.Tests
             var middle = StatusPixels(view, Capture("avante-bars-middle"));
             ApplyStatus(view, StatusSnapshot(2, fuel: 1, water: 120));
             var full = StatusPixels(view, Capture("avante-bars-full"));
+
+            // The original's quarter lines live on the glass, never above the bar.
+            foreach (int x in new[] { 231, 299, 366, 1692, 1758, 1823 })
+                AssertTrue(Blue(middle, x, 610) < 40);
 
             AssertTrue(Blue(middle, 1700, 628) > Blue(empty, 1700, 628) + 20);
             AssertEqual(Blue(empty, 1850, 628), Blue(middle, 1850, 628));
@@ -148,6 +161,68 @@ namespace AMS2LeagueClient.Tests
             Set("UnfilteredThrottle", .9f); Set("Throttle", .4f);
             Set("Gear", 3); Set("SpeedMetresPerSecond", 20f);
             AssertEqual("Active", State("Tcs", vehicle));
+
+            // The two green symbols belong above the dial's right shoulder, not
+            // in the far-right corner of the expanded panel.
+            var lightsOff = new AvanteClusterView(true) { Width = 820, Height = 436 };
+            var lightsOn = new AvanteClusterView(true) { Width = 820, Height = 436 };
+            ApplyStatus(lightsOff, StatusSnapshot(0));
+            ApplyStatus(lightsOn, StatusSnapshot(0, flags: 1u));
+            var unlitPixels = StatusPixels(lightsOff);
+            var litPixels = StatusPixels(lightsOn);
+            static int GreenCount(byte[] pixels, int width, int x0, int x1, int y0, int y1)
+            {
+                int count = 0;
+                for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++)
+                {
+                    int p = (y * width + x) * 4;
+                    if (pixels[p + 1] > pixels[p + 2] + 45 && pixels[p + 1] > pixels[p] + 30 && pixels[p + 1] > 110) count++;
+                }
+                return count;
+            }
+            AssertEqual(0, GreenCount(unlitPixels, 820, 510, 575, 65, 98));
+            AssertTrue(GreenCount(litPixels, 820, 510, 542, 65, 98) > 20); // Side lamps.
+            AssertTrue(GreenCount(litPixels, 820, 542, 575, 65, 98) > 20); // Dipped beam.
+            for (int y = 65; y < 98; y++) for (int x = 740; x < 790; x++)
+                for (int channel = 0; channel < 4; channel++)
+                    AssertEqual(unlitPixels[(y * 820 + x) * 4 + channel], litPixels[(y * 820 + x) * 4 + channel]);
+            var compactHousing = (Geometry)typeof(AvanteClusterView).GetMethod("Housing",
+                BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, new object[] { false })!;
+            AssertTrue(compactHousing.FillContains(new Point(1024, -12))); // Rounded crown above the old y=0 cut.
+            AssertFalse(compactHousing.FillContains(new Point(920, -12)));
+            var compactLights = new AvanteClusterView(false) { Width = 569, Height = 545 };
+            ApplyStatus(compactLights, StatusSnapshot(0, flags: 1u));
+            var compactPixels = StatusPixels(compactLights, _layoutCaptureDirectory == null ? null
+                : Path.Combine(_layoutCaptureDirectory, "avante-headlights-compact-on.png"));
+            AssertTrue(GreenCount(compactPixels, 569, 210, 260, 255, 292) > 20); // Side lamp left of gear.
+            AssertTrue(GreenCount(compactPixels, 569, 315, 360, 255, 292) > 20); // Dipped beam right of gear.
+            AssertEqual(0, GreenCount(compactPixels, 569, 410, 485, 85, 120)); // Old shoulder position cleared.
+            static (int Left, int Right) GreenBounds(byte[] pixels, int x0, int x1)
+            {
+                int left = x1, right = x0;
+                for (int y = 255; y < 292; y++) for (int x = x0; x < x1; x++)
+                {
+                    int p = (y * 569 + x) * 4;
+                    if (pixels[p + 1] > pixels[p + 2] + 45 && pixels[p + 1] > pixels[p] + 30 && pixels[p + 1] > 110)
+                    { left = Math.Min(left, x); right = Math.Max(right, x); }
+                }
+                return (left, right);
+            }
+            var side = GreenBounds(compactPixels, 210, 260);
+            var beam = GreenBounds(compactPixels, 315, 360);
+            // Positions are mapped from the user's 944x800 Photoshop dial to this 569x545 capture.
+            AssertTrue(side.Left >= 211 && side.Left <= 216 && side.Right >= 245 && side.Right <= 251);
+            AssertTrue(beam.Left >= 323 && beam.Left <= 328 && beam.Right >= 354 && beam.Right <= 361);
+            int unitLeft = 569, unitTop = 545, unitRight = 0, unitBottom = 0;
+            for (int y = 355; y < 385; y++) for (int x = 337; x < 380; x++)
+            {
+                int p = (y * 569 + x) * 4;
+                if (compactPixels[p + 2] < 190 || compactPixels[p + 1] < 205 || compactPixels[p] < 210) continue;
+                unitLeft = Math.Min(unitLeft, x); unitRight = Math.Max(unitRight, x);
+                unitTop = Math.Min(unitTop, y); unitBottom = Math.Max(unitBottom, y);
+            }
+            AssertTrue(unitLeft >= 342 && unitLeft <= 346 && unitRight >= 366 && unitRight <= 370);
+            AssertTrue(unitTop >= 365 && unitTop <= 369 && unitBottom >= 373 && unitBottom <= 377);
 
             var view = new AvanteClusterView(true) { Width = 2048, Height = 1090 };
             ApplyStatus(view, StatusSnapshot(0));

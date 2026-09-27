@@ -78,7 +78,7 @@ namespace AMS2LeagueClient.Tests
                         bool isMajor=tick%1000==0;
                         dc.DrawLine(isMajor?major:minor,Point(isMajor?331:340,angle),Point(349,angle));
                     }
-                    Text(dc,"km/h",1168,589,17);Text(dc,"x1000",805,591,23);Text(dc,"rpm",805,613,20);
+                    Text(dc,"x1000",805,591,23);Text(dc,"rpm",805,613,20);
                     dc.Pop();dc.Pop();
                     double count=maximum/1000.0;
                     double size=Math.Min(60,276*240/count*Math.PI/180/(count>=10?1.5:.8));

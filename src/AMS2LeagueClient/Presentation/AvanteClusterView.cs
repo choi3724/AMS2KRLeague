@@ -27,8 +27,10 @@ namespace AMS2LeagueClient.Presentation
         internal static Geometry Housing(bool expanded)
         {
             if (expanded) return Geometry.Parse("M30,0 H2018 Q2048,0 2048,30 V720 Q2048,750 2018,750 H30 Q0,750 0,720 V30 Q0,0 30,0 Z");
+            // Keep the complete circular crown above y=0; only the lower edge
+            // meets the footer. Clipping the ellipse at y=0 made its top flat.
             var dial = new CombinedGeometry(GeometryCombineMode.Intersect,
-                new EllipseGeometry(new Point(Cx, Cy), 412, 412), new RectangleGeometry(new Rect(570, 0, 908, 665)));
+                new EllipseGeometry(new Point(Cx, Cy), 412, 412), new RectangleGeometry(new Rect(570, -20, 908, 685)));
             var footer = Geometry.Parse("M570,665 L645,632 Q665,623 700,623 L1348,623 Q1383,623 1403,632 L1478,665 L1478,750 L570,750 Z");
             return new CombinedGeometry(GeometryCombineMode.Union, dial, footer);
         }
@@ -151,15 +153,27 @@ namespace AMS2LeagueClient.Presentation
         private static readonly Typeface UiFont = Font("UI", "AvanteN UI");
         private static readonly Typeface ReadoutFont = Font("Readout", "AvanteN Readout");
         private static readonly Typeface FooterFont = Font("Readout", "Pretendard");
-        private static readonly Pen HeadlightPen = FrozenPen(new SolidColorBrush(Color.FromRgb(81, 255, 100)), 3);
-        private static readonly Pen HeadlightOffPen = FrozenPen(new SolidColorBrush(Color.FromRgb(103, 117, 128)), 2.5);
-        private static readonly Geometry HeadlightShape = Geometry.Parse("M0,9 L15,11 L15,27 L0,29 Q5,20 0,9 Z M22,9 L42,5 M22,18 L45,18 M22,27 L42,31");
+        // Shared dial-relative placement for the layered WPF and retained DComp paths.
+        internal const double HeadlightX = 1280, HeadlightY = 27;
+        // The compact symbols follow the positions in the edited dial reference.
+        internal const double CompactParkingX = 878, CompactLowBeamX = 1030, CompactHeadlightY = 374;
+        internal const double CompactSpeedUnitX = 1168, CompactSpeedUnitY = 594, CompactSpeedUnitSize = 21;
+        internal static readonly Geometry ParkingLampShape = FrozenGeometry("M28,9 Q38,23 28,37 M49,9 Q39,23 49,37 M5,11 L19,16 M2,23 L18,23 M5,35 L19,30 M57,16 L71,11 M58,23 L73,23 M57,30 L71,35");
+        internal static readonly Geometry LowBeamShape = FrozenGeometry("M76,13 L101,8 M76,21 L101,18 M76,29 L101,28 M76,37 L101,38 M107,7 L112,7 C129,7 139,14 139,23 C139,32 129,39 112,39 L107,39 Z");
+        private static readonly Pen HeadlightGlow = FrozenPen(new SolidColorBrush(Color.FromArgb(40, 81, 255, 100)), 6);
+        private static readonly Pen HeadlightPen = FrozenPen(new SolidColorBrush(Color.FromRgb(81, 255, 100)), 2.8);
         private static readonly Brush Digits = Gradient("#FFFFFF", "#BAE6FF");
         private static readonly Brush GearRim = Gradient("#FFF5BC", "#718AAF");
         private static readonly Brush NumberRim = Gradient("#E4FAFF", "#496BBA");
         private static readonly Pen ShadowPen = FrozenPen(Brushes.MidnightBlue, 1.8);
         private static readonly Pen GearPen = FrozenPen(GearRim, 1.1), DigitPen = FrozenPen(NumberRim, 1.1);
         private static Pen FrozenPen(Brush brush, double thickness) { var pen = new Pen(brush, thickness); pen.Freeze(); return pen; }
+        private static Geometry FrozenGeometry(string path) { var geometry = Geometry.Parse(path); geometry.Freeze(); return geometry; }
+        private static void DrawHeadlight(DrawingContext dc, Geometry shape)
+        {
+            dc.DrawGeometry(null, HeadlightGlow, shape);
+            dc.DrawGeometry(null, HeadlightPen, shape);
+        }
         private int _faceRasterizations;
         private BitmapSource? _faceBitmap;
         private Size _faceSize;
@@ -299,6 +313,8 @@ namespace AMS2LeagueClient.Presentation
         private static readonly Geometry OriginalWithoutTicksAndBars = new CombinedGeometry(GeometryCombineMode.Exclude,
             OriginalWithoutTicks, AvanteBarGauge.Matte());
         private static readonly Pen GaugeEdge = FrozenPen(new SolidColorBrush(Color.FromArgb(165, 172, 214, 226)), 1.5);
+        private static readonly Pen GaugeMarkShadow = FrozenPen(new SolidColorBrush(Color.FromArgb(90, 6, 16, 24)), 2.8);
+        private static readonly Pen GaugeMarkHighlight = FrozenPen(new SolidColorBrush(Color.FromArgb(165, 231, 245, 250)), 1.5);
         private bool _preview;
         private long _flashStarted;
         private bool _flashSubscribed, _flashMonitorClock, _stoppingMotion;
@@ -378,10 +394,20 @@ namespace AMS2LeagueClient.Presentation
                 drawing.DrawGeometry(GaugeFill, null, _fuelLevel);
                 drawing.DrawGeometry(GaugeSheen, null, fuelTrack);
                 drawing.DrawGeometry(null, GaugeEdge, fuelTrack);
+                var fuelMarks = AvanteBarGauge.QuarterMarks(AvanteBarGauge.Fuel);
+                drawing.PushClip(fuelTrack);
+                drawing.DrawGeometry(null, GaugeMarkShadow, fuelMarks);
+                drawing.DrawGeometry(null, GaugeMarkHighlight, fuelMarks);
+                drawing.Pop();
                 drawing.DrawGeometry(GaugeBase, null, coolantTrack);
                 drawing.DrawGeometry(GaugeFill, null, _coolantLevel);
                 drawing.DrawGeometry(GaugeSheen, null, coolantTrack);
                 drawing.DrawGeometry(null, GaugeEdge, coolantTrack);
+                var coolantMarks = AvanteBarGauge.QuarterMarks(AvanteBarGauge.Coolant);
+                drawing.PushClip(coolantTrack);
+                drawing.DrawGeometry(null, GaugeMarkShadow, coolantMarks);
+                drawing.DrawGeometry(null, GaugeMarkHighlight, coolantMarks);
+                drawing.Pop();
             }
 
             Loaded += (_, __) => UpdateFlash();
@@ -825,8 +851,10 @@ namespace AMS2LeagueClient.Presentation
                     _rpmNumbers.Children.Add(numeral); _numberScales.Add(transform);
                 }
                 dc.Pop();
+                Text(dc, "km/h", Expanded ? 1168 : CompactSpeedUnitX,
+                    Expanded ? 589 : CompactSpeedUnitY, Expanded ? 17 : CompactSpeedUnitSize);
                 if (_scaleImages == null)
-                { Text(dc, "km/h", 1168, 589, 17); Text(dc, "x1000", 805, 591, 23); Text(dc, "rpm", 805, 613, 20); }
+                { Text(dc, "x1000", 805, 591, 23); Text(dc, "rpm", 805, 613, 20); }
             }
             var bitmap = Rasterize(_scale);
             _scale.Transform = Transform.Identity;
@@ -887,11 +915,24 @@ namespace AMS2LeagueClient.Presentation
                 Status(dc, "ABS", abs, 795);
                 Status(dc, "TCS", tcs, 992);
                 Status(dc, "PIT LIMITER", limiter, 1266);
-                if (headlights.HasValue)
+                if (headlights == true)
                 {
-                    dc.PushTransform(new TranslateTransform(Expanded ? 1885 : 1350, 30));
-                    dc.DrawGeometry(null, headlights.Value ? HeadlightPen : HeadlightOffPen, HeadlightShape);
-                    dc.Pop();
+                    if (Expanded)
+                    {
+                        dc.PushTransform(new TranslateTransform(HeadlightX, HeadlightY));
+                        DrawHeadlight(dc, ParkingLampShape);
+                        DrawHeadlight(dc, LowBeamShape);
+                        dc.Pop();
+                    }
+                    else
+                    {
+                        dc.PushTransform(new TranslateTransform(CompactParkingX, CompactHeadlightY));
+                        DrawHeadlight(dc, ParkingLampShape);
+                        dc.Pop();
+                        dc.PushTransform(new TranslateTransform(CompactLowBeamX, CompactHeadlightY));
+                        DrawHeadlight(dc, LowBeamShape);
+                        dc.Pop();
+                    }
                 }
                 if (Expanded)
                 {

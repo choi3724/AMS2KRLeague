@@ -59,6 +59,24 @@ namespace AMS2LeagueClient.Presentation
 
         internal static Geometry Track(Outline outline) => Fill(outline, 1);
 
+        // Etch three fixed divisions into the glass above the moving fill. Each
+        // mark follows the same slant as its fuel/coolant track's end caps.
+        internal static Geometry QuarterMarks(Outline outline)
+        {
+            var marks = new StreamGeometry();
+            using (var path = marks.Open())
+                for (int quarter = 1; quarter < 4; quarter++)
+                {
+                    double topX = outline.TopLeft + (outline.TopRight - outline.TopLeft) * quarter / 4.0;
+                    double bottomX = outline.BottomLeft + (outline.BottomRight - outline.BottomLeft) * quarter / 4.0;
+                    double inset = 2.5 / (Bottom - Top);
+                    path.BeginFigure(new Point(topX + (bottomX - topX) * inset, Top + 2.5), true, false);
+                    path.LineTo(new Point(bottomX - (bottomX - topX) * inset, Bottom - 2.5), true, false);
+                }
+            marks.Freeze();
+            return marks;
+        }
+
         internal static Geometry Fill(Outline outline, double fraction)
         {
             fraction = Math.Clamp(fraction, 0, 1);
