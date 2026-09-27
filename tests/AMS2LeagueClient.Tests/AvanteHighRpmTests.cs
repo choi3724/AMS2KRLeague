@@ -91,7 +91,7 @@ namespace AMS2LeagueClient.Tests
                 }
                 allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
                 AssertEqual(maximum, view.RpmScale.Maximum);
-                AssertEqual((int)(maximum/1000)+1, ((DrawingVisual)VisualTreeHelper.GetChild(view,5)).Children.Count);
+                AssertEqual((int)(maximum/1000)+1, ((DrawingVisual)VisualTreeHelper.GetChild(view,6)).Children.Count);
                 Array.Sort(times);
                 Console.WriteLine($"PROOF high RPM max={maximum} expanded={expanded} captureMedianMs={times[4]:F3} captureMaxMs={times[^1]:F3} allocated={allocated} staticRebuilds={view.StaticFaceBuilds-builds}; synchronous bitmap diagnostic, not display FPS");
                 CaptureLayout(view, $"high-rpm-{maximum}-{expanded}");

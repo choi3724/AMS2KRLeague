@@ -21,9 +21,19 @@ namespace AMS2LeagueClient.Presentation
             internal double BottomRight { get; }
         }
 
-        internal const double Top = 621, Bottom = 635;
-        internal static readonly Outline Fuel = new Outline(169, 176, 432, 439);
-        internal static readonly Outline Coolant = new Outline(1627, 1621, 1883, 1877);
+        // The source PNG has dark marks baked into its old, thin colour strip.
+        // Replace that entire inner strip with a taller inset behind the glass.
+        internal const double Top = 618, Bottom = 639;
+        internal static readonly Outline Fuel = new Outline(164, 175, 434, 443);
+        internal static readonly Outline Coolant = new Outline(1627, 1616, 1888, 1877);
+        internal static Geometry Matte()
+        {
+            var both = new GeometryGroup();
+            both.Children.Add(Track(Fuel));
+            both.Children.Add(Track(Coolant));
+            both.Freeze();
+            return both;
+        }
 
         // The colour sweep belongs to the *visible fill*, not to the full track.
         // A partly filled acrylic bar still traverses every stop from 0 to 1.
@@ -33,11 +43,11 @@ namespace AMS2LeagueClient.Presentation
         };
         internal static readonly (double Offset, string Color)[] GlassStops =
         {
-            (0, "#C4283E50"), (.32, "#E1081723"), (1, "#C2152A39")
+            (0, "#D62C4A5A"), (.32, "#B9102533"), (1, "#D51D3948")
         };
         internal static readonly (double Offset, string Color)[] SheenStops =
         {
-            (0, "#55E8FCFF"), (.2, "#18D4F7FF"), (.7, "#00FFFFFF"), (1, "#30010C17")
+            (0, "#87F5FDFF"), (.18, "#39D9F8FF"), (.62, "#00FFFFFF"), (1, "#35000B13")
         };
 
         internal static double? FuelLevel(double? ratio) => ratio.HasValue && double.IsFinite(ratio.Value)

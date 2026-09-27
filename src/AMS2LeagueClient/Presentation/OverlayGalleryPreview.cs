@@ -49,7 +49,7 @@ namespace AMS2LeagueClient.Presentation
                     bool expanded = component == OverlayComponentKeys.AvanteClusterExpanded;
                     var avante = new AvanteClusterView(expanded);
                     avante.SetSample(new DrivingTelemetrySample(DateTimeOffset.UtcNow, 1, 0, 0, .5, 0, 0, 200 / 3.6, 4, rpm: 5500, maxRpm: 8000), true);
-                    view = avante; width = expanded ? 820 : 454; height = expanded ? 300 : 375; break;
+                    view = avante; width = expanded ? 820 : 569; height = expanded ? 436 : 545; break;
                 case OverlayComponentKeys.Speed:
                 case OverlayComponentKeys.Gear:
                     bool gear = component == OverlayComponentKeys.Gear;

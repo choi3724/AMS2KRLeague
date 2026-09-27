@@ -160,16 +160,17 @@ internal sealed class CompositionHudCanvas : IDisposable
         if (_paths.TryGetValue(key, out var cached)) return cached;
         var shape = Convert(make()); _paths.Add(key, shape); return shape;
     }
-    internal ID2D1PathGeometry Sector(Vector2 center,double inner,double outer,double start,double end)
+    internal ID2D1PathGeometry Sector(Vector2 center,double inner,double outer,double start,double end,bool counterclockwise=false)
     {
         Vector2 P(double r,double a)=>center+new Vector2((float)(r*Math.Cos(a*Math.PI/180)),(float)(r*Math.Sin(a*Math.PI/180)));
-        end=Math.Max(start+.001,end);var shape=Factory.CreatePathGeometry();
+        end=counterclockwise?Math.Min(start-.001,end):Math.Max(start+.001,end);
+        double arc=Math.Abs(end-start);var shape=Factory.CreatePathGeometry();
         try
         {
             using var sink=shape.Open();sink.BeginFigure(P(outer,start),FigureBegin.Filled);
-            sink.AddArc(new Vortice.Direct2D1.ArcSegment {Point=P(outer,end),Size=new Vortice.Mathematics.Size((float)outer,(float)outer),SweepDirection=Vortice.Direct2D1.SweepDirection.Clockwise,ArcSize=end-start>180?ArcSize.Large:ArcSize.Small});
+            sink.AddArc(new Vortice.Direct2D1.ArcSegment {Point=P(outer,end),Size=new Vortice.Mathematics.Size((float)outer,(float)outer),SweepDirection=counterclockwise?Vortice.Direct2D1.SweepDirection.CounterClockwise:Vortice.Direct2D1.SweepDirection.Clockwise,ArcSize=arc>180?ArcSize.Large:ArcSize.Small});
             sink.AddLine(P(inner,end));
-            sink.AddArc(new Vortice.Direct2D1.ArcSegment {Point=P(inner,start),Size=new Vortice.Mathematics.Size((float)inner,(float)inner),SweepDirection=Vortice.Direct2D1.SweepDirection.CounterClockwise,ArcSize=end-start>180?ArcSize.Large:ArcSize.Small});
+            sink.AddArc(new Vortice.Direct2D1.ArcSegment {Point=P(inner,start),Size=new Vortice.Mathematics.Size((float)inner,(float)inner),SweepDirection=counterclockwise?Vortice.Direct2D1.SweepDirection.Clockwise:Vortice.Direct2D1.SweepDirection.CounterClockwise,ArcSize=arc>180?ArcSize.Large:ArcSize.Small});
             sink.EndFigure(FigureEnd.Closed);sink.Close();return shape;
         }
         catch{shape.Dispose();throw;}

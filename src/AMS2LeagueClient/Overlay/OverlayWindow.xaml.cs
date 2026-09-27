@@ -38,6 +38,8 @@ namespace AMS2LeagueClient.Overlay
         private DrivingNumberView? _speedView;
         private DrivingNumberView? _gearView;
         private readonly AuxiliaryOverlayWindow?[] _drivingWindows = new AuxiliaryOverlayWindow?[7];
+        private IntPtr _ignitionGameHandle;
+        private bool _ignitionGameKnown;
         private readonly DrivingTelemetryHistory _drivingHistory = new DrivingTelemetryHistory();
         private double _lastTrackTemperature = double.NaN;
         public void ResetDrivingTelemetry() { _drivingHistory.Clear(); RefreshDrivingViews(); }
@@ -163,11 +165,11 @@ namespace AMS2LeagueClient.Overlay
             if (_drivingWindows[4] == null) _dashboardView = null;
             SynchronizeSurface(ref _drivingWindows[5], OverlayComponentKeys.AvanteCluster,
                 () => CreateAuxiliaryWindow(OverlayComponentKeys.AvanteCluster, "아반떼 N 계기판 · 일반형",
-                    _avanteView = new AvanteClusterView(), 454, 375));
+                    _avanteView = new AvanteClusterView(), 569, 545));
             if (_drivingWindows[5] == null) _avanteView = null;
             SynchronizeSurface(ref _drivingWindows[6], OverlayComponentKeys.AvanteClusterExpanded,
                 () => CreateAuxiliaryWindow(OverlayComponentKeys.AvanteClusterExpanded, "아반떼 N 계기판 · 확장형",
-                    _avanteExpandedView = new AvanteClusterView(true), 820, 300));
+                    _avanteExpandedView = new AvanteClusterView(true), 820, 436));
             if (_drivingWindows[6] == null) _avanteExpandedView = null;
             if (_telemetryHost == null) { _pedalView = null; _legacyPedalView = null; }
             if (Array.TrueForAll(_drivingWindows, panel => panel == null)) _drivingHistory.Clear();
@@ -630,6 +632,19 @@ namespace AMS2LeagueClient.Overlay
             _waitingWindow?.HideOverlay();
             ShowGameplaySurfaces(gameWindow, false);
             SyncRetainedN();
+            if (!gameWindow.IsForeground || gameWindow.IsMinimized) return;
+            if (!_ignitionGameKnown || _ignitionGameHandle != gameWindow.Handle)
+            {
+                _ignitionGameKnown = true;
+                _ignitionGameHandle = gameWindow.Handle;
+                _avanteView?.RearmGameplayIgnition();
+                _avanteExpandedView?.RearmGameplayIgnition();
+            }
+            if (_retainedNWorker == null && !_retainedNActive)
+            {
+                if (IsDrivingVisible(5)) _avanteView?.BeginGameplayIgnition();
+                if (IsDrivingVisible(6)) _avanteExpandedView?.BeginGameplayIgnition();
+            }
         }
 
         public void ShowWaitingAt(GameWindowSnapshot gameWindow, MultiplayerWaitingOverlayViewModel viewModel)
@@ -670,6 +685,7 @@ namespace AMS2LeagueClient.Overlay
 
         private void ShowGameplaySurfaces(GameWindowSnapshot gameWindow, bool includeInactive)
         {
+            MigrateAvanteCanvas(gameWindow);
             OverlayComponentLayout defaults = OverlayComponentLayoutCalculator.Calculate(
                 gameWindow.Width,
                 gameWindow.Height,
@@ -678,8 +694,8 @@ namespace AMS2LeagueClient.Overlay
                 _viewModel.RaceControl.IsExpanded);
 
             OverlayBounds[] drivingBounds = { defaults.Pedals, defaults.PedalGauge, defaults.Speed, defaults.Gear, defaults.Dashboard,
-                new OverlayBounds(Math.Max(0, (gameWindow.Width - 454) / 2), Math.Max(0, gameWindow.Height - 395), 454, 375),
-                new OverlayBounds(Math.Max(0, (gameWindow.Width - 820) / 2), Math.Max(0, gameWindow.Height - 320), 820, 300) };
+                new OverlayBounds(Math.Max(0, (gameWindow.Width - 569) / 2), Math.Max(0, gameWindow.Height - 565), 569, 545),
+                new OverlayBounds(Math.Max(0, (gameWindow.Width - 820) / 2), Math.Max(0, gameWindow.Height - 456), 820, 436) };
             for (int i = 0; i < _drivingWindows.Length; i++)
             {
                 AuxiliaryOverlayWindow? panel = _drivingWindows[i];
@@ -761,9 +777,42 @@ namespace AMS2LeagueClient.Overlay
                 _waitingWindow?.HideOverlay();
         }
 
+        private void MigrateAvanteCanvas(GameWindowSnapshot viewport)
+        {
+            if (_layoutProfile.AvanteCanvasVersion >= 1) return;
+            foreach (string key in new[] { OverlayComponentKeys.AvanteCluster, OverlayComponentKeys.AvanteClusterExpanded })
+            {
+                if (!_layoutProfile.Components.TryGetValue(key, out var saved)) continue;
+                int referenceWidth = saved.ReferenceWidth > 0 ? saved.ReferenceWidth : _layoutProfile.PreviewViewport?.Width > 0 ? _layoutProfile.PreviewViewport.Width : viewport.Width;
+                int referenceHeight = saved.ReferenceHeight > 0 ? saved.ReferenceHeight : _layoutProfile.PreviewViewport?.Height > 0 ? _layoutProfile.PreviewViewport.Height : viewport.Height;
+                if (referenceWidth <= 0 || referenceHeight <= 0) continue;
+                double oldWidth = key == OverlayComponentKeys.AvanteCluster ? 908 : 2048;
+                double scale = Math.Min(saved.Width * referenceWidth / oldWidth, saved.Height * referenceHeight / 750);
+                if (!double.IsFinite(scale) || scale <= 0) continue;
+                double left = key == OverlayComponentKeys.AvanteCluster ? 115 : 0;
+                double right = key == OverlayComponentKeys.AvanteCluster ? 115 : 0;
+                saved.X -= left * scale / referenceWidth;
+                saved.Y -= 150 * scale / referenceHeight;
+                saved.Width += (left + right) * scale / referenceWidth;
+                saved.Height += 340 * scale / referenceHeight;
+                saved.AllowOutsideViewport = true;
+                saved.ReferenceWidth = referenceWidth;
+                saved.ReferenceHeight = referenceHeight;
+            }
+            _layoutProfile.AvanteCanvasVersion = 1;
+        }
+
         private OverlayBounds Resolve(string component, OverlayBounds fallback, GameWindowSnapshot gameWindow)
         {
             var desired = _layoutProfile.Resolve(component, fallback, gameWindow.Width, gameWindow.Height);
+            // A manual resize must still leave room for the outer intro ring.
+            if (component == OverlayComponentKeys.AvanteCluster || component == OverlayComponentKeys.AvanteClusterExpanded)
+            {
+                double width = component == OverlayComponentKeys.AvanteCluster ? AvanteClusterView.CompactWidth : AvanteClusterView.ExpandedWidth;
+                int requiredHeight = (int)Math.Ceiling(desired.Width * AvanteClusterView.CanvasHeight / width);
+                if (desired.Height < requiredHeight)
+                    desired = new OverlayBounds(desired.X, Math.Max(0, desired.Y - (requiredHeight - desired.Height)), desired.Width, requiredHeight);
+            }
             var screen = new OverlayBounds(gameWindow.Left + desired.X, gameWindow.Top + desired.Y, desired.Width, desired.Height);
             _requestedPlacements[component] = screen;
             var placed = OverlayWindowInterop.RecoverToDisplay(screen);

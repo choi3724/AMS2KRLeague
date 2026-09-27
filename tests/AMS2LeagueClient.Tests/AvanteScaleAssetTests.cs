@@ -23,7 +23,7 @@ namespace AMS2LeagueClient.Tests
                     double red=maximum*.9137, yellow=maximum*.8173;
                     ConfigureReferenceN(view,maximum,yellow,red); Layout();
                     AssertEqual(maximum,view.PreRenderedMaximum);
-                    AssertEqual(maximum/1000+1,((DrawingVisual)VisualTreeHelper.GetChild(view,5)).Children.Count);
+                    AssertEqual(maximum/1000+1,((DrawingVisual)VisualTreeHelper.GetChild(view,6)).Children.Count);
                     AssertEqual(red,view.RpmScale.RedStart);AssertEqual(yellow,view.RpmScale.YellowStart);
                     int builds=view.StaticFaceBuilds;
                     foreach(double rpm in new[]{yellow-.01,yellow,yellow+.01,red-.01,red,red+.01})

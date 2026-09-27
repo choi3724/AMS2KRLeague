@@ -108,7 +108,7 @@ namespace AMS2LeagueClient.Tests
                     view.Measure(new Size(908,750));view.Arrange(new Rect(0,0,908,750));view.UpdateLayout();
                 }
                 Set(3800);
-                var numbers=(DrawingVisual)VisualTreeHelper.GetChild(view,5);
+                var numbers=(DrawingVisual)VisualTreeHelper.GetChild(view,6);
                 var numeral=(DrawingVisual)numbers.Children[4];
                 int builds=view.StaticFaceBuilds;
                 foreach(double rpm in new[]{3900.0,3950,4000,4050,4100})
@@ -142,7 +142,7 @@ namespace AMS2LeagueClient.Tests
                 clock.Tick+=(_,__) =>
                 {
                     double shown=(animated.NeedleAngle-150)/240*8000;
-                    var numbers=(DrawingVisual)VisualTreeHelper.GetChild(animated,5);
+                    var numbers=(DrawingVisual)VisualTreeHelper.GetChild(animated,6);
                     var transform=(ScaleTransform)((DrawingVisual)numbers.Children[4]).Transform;
                     AssertTrue(Math.Abs(transform.ScaleX-AvanteClusterView.NumberEmphasis(shown,4))<1e-8);
                     observations++;
@@ -177,7 +177,7 @@ namespace AMS2LeagueClient.Tests
             {
                 view.SetSample(new DrivingTelemetrySample(now,1,0,0,0,0,0,speed/3.6,1,rpm:2500,maxRpm:8000));
                 view.Measure(new Size(454,375));view.Arrange(new Rect(0,0,454,375));view.UpdateLayout();
-                var ink=((DrawingVisual)VisualTreeHelper.GetChild(view,8)).ContentBounds;
+                var ink=((DrawingVisual)VisualTreeHelper.GetChild(view,9)).ContentBounds;
                 AssertTrue(Math.Abs(ink.X+ink.Width/2-1024)<1.5);
                 // Includes the existing 2px drop shadow below the centered ink.
                 AssertTrue(Math.Abs(ink.Y+ink.Height/2-562)<2);
@@ -260,13 +260,14 @@ namespace AMS2LeagueClient.Tests
                 {
                     view.SetSample(new DrivingTelemetrySample(now, 1, 0, 0, .8, 0, 0, 200 / 3.6, 4, rpm: rpm, maxRpm: 8000), true);
                     view.Measure(new Size(view.Width, view.Height)); view.Arrange(new Rect(0,0,view.Width,view.Height)); view.UpdateLayout();
-                    AssertEqual(expanded, view.Clip.FillContains(new Point(1, 1)));
-                    AssertTrue(view.Clip.FillContains(new Point(view.Width / 2, view.Height / 2)));
-                    AssertTrue(view.Clip.FillContains(new Point(view.Width / 2, view.Height - 10)));
                     var pixels = new System.Windows.Media.Imaging.RenderTargetBitmap((int)view.Width, (int)view.Height, 96, 96, PixelFormats.Pbgra32);
                     pixels.Render(view);
                     var corner = new byte[4]; pixels.CopyPixels(new Int32Rect(1, 1, 1, 1), corner, 4, 0);
-                    AssertEqual(expanded ? (byte)255 : (byte)0, corner[3]);
+                    AssertEqual((byte)0, corner[3]);
+                    var center = new byte[4]; pixels.CopyPixels(new Int32Rect((int)view.Width / 2, (int)view.Height / 2, 1, 1), center, 4, 0);
+                    AssertTrue(center[3] > 0);
+                    var footer = new byte[4]; pixels.CopyPixels(new Int32Rect((int)view.Width / 2, (int)view.Height - 10, 1, 1), footer, 4, 0);
+                    AssertTrue(footer[3] > 0);
                     AssertEqual("200", view.SpeedText); AssertEqual("4", view.GearText);
                     AssertEqual(150 + rpm / 8000.0 * 240, view.NeedleAngle);
                     CaptureLayout(view, "avante-" + (expanded ? "expanded" : "normal") + "-" + rpm, 2);

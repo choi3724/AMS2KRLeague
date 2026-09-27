@@ -123,7 +123,7 @@ namespace AMS2LeagueClient.Tests
             {
                 animationHost.Show();PumpDispatcher();
                 var property=(DependencyProperty)typeof(AvanteClusterView).GetField("RpmPositionProperty",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Static)!.GetValue(null)!;
-                var numbers=(System.Windows.Media.DrawingVisual)System.Windows.Media.VisualTreeHelper.GetChild(view,5);
+                var numbers=(System.Windows.Media.DrawingVisual)System.Windows.Media.VisualTreeHelper.GetChild(view,6);
                 for(int numeral=1;numeral<=15;numeral++)
                 {
                     // Synthetic consecutive presentation positions, not a claim about game FPS.
@@ -158,7 +158,7 @@ namespace AMS2LeagueClient.Tests
             AssertEqual(11155.0,view.RpmScale.RedStart);AssertEqual(13000.0,view.RpmScale.Maximum);
             AssertTrue(Math.Abs(view.RpmScale.YellowStart-10350)<.00001);
             AssertEqual(view.RpmScale.Angle(9870),view.NeedleAngle);
-            AssertEqual(14,((System.Windows.Media.DrawingVisual)System.Windows.Media.VisualTreeHelper.GetChild(view,5)).Children.Count);
+            AssertEqual(14,((System.Windows.Media.DrawingVisual)System.Windows.Media.VisualTreeHelper.GetChild(view,6)).Children.Count);
             CaptureLayout(view,"arc-camaro-switched-9870",1);
             view.ApplySettings(new DrivingHudSettings());Session("unconfirmed-other");Layout();PumpDispatcher();AssertFalse(view.RpmScale.HasWarningThresholds);
             Session(AvanteRpmScale.LolaSuperspeedway);view.SetSample(Sample(13371,14800));Layout();PumpDispatcher();AssertEqual(14356.0,view.RpmScale.RedStart);

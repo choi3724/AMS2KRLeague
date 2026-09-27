@@ -15,6 +15,23 @@ namespace AMS2LeagueClient.Presentation
     public sealed class AvanteClusterView : FrameworkElement
     {
         private const double Cx = 1024, Cy = 397;
+        // The supplied raster's bright ridge is slightly oval and off-centre.
+        // Measured source radii: outer X~416/Y~399, inner X~514/Y~498.
+        // Correct only their destination rectangles; all flame pixels remain intact.
+        internal static readonly Rect OuterFlameBounds = new Rect(Cx - 641, Cy - 663, 1266, 1320);
+        internal static readonly Rect InnerFlameBounds = new Rect(Cx - 499, Cy - 508, 996, 1028);
+        // The instrument art remains at 0..750. Only the transparent HWND canvas
+        // grows so both full fire rings can travel outside the physical housing.
+        internal const double CanvasTop = -150, CanvasHeight = 1090;
+        internal const double CompactLeft = 455, CompactWidth = 1138, ExpandedWidth = 2048;
+        internal static Geometry Housing(bool expanded)
+        {
+            if (expanded) return Geometry.Parse("M30,0 H2018 Q2048,0 2048,30 V720 Q2048,750 2018,750 H30 Q0,750 0,720 V30 Q0,0 30,0 Z");
+            var dial = new CombinedGeometry(GeometryCombineMode.Intersect,
+                new EllipseGeometry(new Point(Cx, Cy), 412, 412), new RectangleGeometry(new Rect(570, 0, 908, 665)));
+            var footer = Geometry.Parse("M570,665 L645,632 Q665,623 700,623 L1348,623 Q1383,623 1403,632 L1478,665 L1478,750 L570,750 Z");
+            return new CombinedGeometry(GeometryCombineMode.Union, dial, footer);
+        }
         private static readonly WeakReference<BitmapSource[]> SharedImages = new WeakReference<BitmapSource[]>(null!);
         private readonly BitmapSource[] _images = GetImages();
         private static BitmapSource[] GetImages()
@@ -133,7 +150,9 @@ namespace AMS2LeagueClient.Presentation
         private static readonly Typeface DisplayFont = Font("Display", "AvanteN Display");
         private static readonly Typeface UiFont = Font("UI", "AvanteN UI");
         private static readonly Typeface ReadoutFont = Font("Readout", "AvanteN Readout");
+        private static readonly Typeface FooterFont = Font("Readout", "Pretendard");
         private static readonly Pen HeadlightPen = FrozenPen(new SolidColorBrush(Color.FromRgb(81, 255, 100)), 3);
+        private static readonly Pen HeadlightOffPen = FrozenPen(new SolidColorBrush(Color.FromRgb(103, 117, 128)), 2.5);
         private static readonly Geometry HeadlightShape = Geometry.Parse("M0,9 L15,11 L15,27 L0,29 Q5,20 0,9 Z M22,9 L42,5 M22,18 L45,18 M22,27 L42,31");
         private static readonly Brush Digits = Gradient("#FFFFFF", "#BAE6FF");
         private static readonly Brush GearRim = Gradient("#FFF5BC", "#718AAF");
@@ -184,20 +203,42 @@ namespace AMS2LeagueClient.Presentation
         private double _numberPulseAmount;
         private readonly HudTargetMotion _numberPulse;
         private readonly HudTargetMotion _ignitionMotion;
+        private readonly DrawingVisual _ignitionCore = new DrawingVisual();
         private readonly DrawingVisual _ignition = new DrawingVisual();
         private readonly PathGeometry _ignitionReveal = new PathGeometry();
-        private readonly ArcSegment _ignitionRevealOuter = new ArcSegment { Size = new Size(399, 399), SweepDirection = SweepDirection.Clockwise };
+        private readonly ArcSegment _ignitionRevealOuter = new ArcSegment { Size = new Size(560, 560), SweepDirection = SweepDirection.Counterclockwise };
         private readonly LineSegment _ignitionRevealEnd = new LineSegment();
-        private readonly ArcSegment _ignitionRevealInner = new ArcSegment { Size = new Size(335, 335), SweepDirection = SweepDirection.Counterclockwise };
+        private static readonly Geometry IgnitionThinBand = Sector(395, 420, 0, 359.5);
+        private static readonly Geometry IgnitionDialArc = Sector(165, 250, 140, 400);
+        // The solid lower panel sits in front of the ignition ring. Keep the
+        // upper transparent margin for flames, but stop at the panel's bottom.
+        internal static readonly Geometry IgnitionVisibleArea = CreateIgnitionVisibleArea();
+        private static Geometry CreateIgnitionVisibleArea()
+        {
+            var area = new CombinedGeometry(GeometryCombineMode.Exclude,
+                new RectangleGeometry(new Rect(0, CanvasTop, 2048, 750 - CanvasTop)),
+                Geometry.Parse("M570,665 L645,632 Q665,623 700,623 L1348,623 Q1383,623 1403,632 L1478,665 L1478,750 L570,750 Z"));
+            area.Freeze(); // Native composition converts this on its render thread.
+            return area;
+        }
         private readonly PathGeometry _ignitionBlue = new PathGeometry();
-        private readonly ArcSegment _ignitionBlueOuter = new ArcSegment { Size = new Size(245, 245), SweepDirection = SweepDirection.Clockwise };
+        private readonly ArcSegment _ignitionBlueOuter = new ArcSegment { Size = new Size(245, 245), SweepDirection = SweepDirection.Counterclockwise };
         private readonly LineSegment _ignitionBlueEnd = new LineSegment();
-        private readonly ArcSegment _ignitionBlueInner = new ArcSegment { Size = new Size(213, 213), SweepDirection = SweepDirection.Counterclockwise };
+        private readonly ArcSegment _ignitionBlueInner = new ArcSegment { Size = new Size(213, 213), SweepDirection = SweepDirection.Clockwise };
+        private readonly PathGeometry _ignitionBlueAccent = new PathGeometry();
+        private readonly ArcSegment _ignitionBlueAccentOuter = new ArcSegment { Size = new Size(194, 194), SweepDirection = SweepDirection.Counterclockwise };
+        private readonly LineSegment _ignitionBlueAccentEnd = new LineSegment();
+        private readonly ArcSegment _ignitionBlueAccentInner = new ArcSegment { Size = new Size(170, 170), SweepDirection = SweepDirection.Clockwise };
         private readonly EllipseGeometry _ignitionHead = new EllipseGeometry(new Point(Cx, Cy), 11, 11);
         private static readonly Brush IgnitionSpark = CreateIgnitionSpark();
+        private static readonly Brush IgnitionCore = CreateIgnitionCore();
         private static readonly BitmapImage IgnitionFlame = LoadImage("avante-ignition-flame.png");
+        private static readonly BitmapImage IgnitionInner = LoadImage("avante-ignition-inner.png");
         private static readonly Brush IgnitionBlue = CreateIgnitionBlue();
+        private static readonly Brush IgnitionBlueAccent = CreateIgnitionBlueAccent();
         private bool _ignitionStarted;
+        private bool _ignitionQueued;
+        private int _ignitionGeneration;
         internal double IgnitionProgress { get; private set; } = 1;
         public static double NumberEmphasis(double rpm, int numeral) => double.IsFinite(rpm) ? 1 + .2 * Math.Max(0, 1 - Math.Abs(rpm - numeral * 1000.0) / 100) : 1;
         private void ApplyNumberScale(int index)
@@ -255,6 +296,9 @@ namespace AMS2LeagueClient.Presentation
         private static readonly Geometry TickRing = Sector(315, 362, 140, 400);
         private static readonly Geometry OriginalWithoutTicks = new CombinedGeometry(GeometryCombineMode.Exclude,
             new RectangleGeometry(new Rect(0, 0, 2048, 750)), new CombinedGeometry(GeometryCombineMode.Intersect, TickRing, MotionClip));
+        private static readonly Geometry OriginalWithoutTicksAndBars = new CombinedGeometry(GeometryCombineMode.Exclude,
+            OriginalWithoutTicks, AvanteBarGauge.Matte());
+        private static readonly Pen GaugeEdge = FrozenPen(new SolidColorBrush(Color.FromArgb(165, 172, 214, 226)), 1.5);
         private bool _preview;
         private long _flashStarted;
         private bool _flashSubscribed, _flashMonitorClock, _stoppingMotion;
@@ -274,11 +318,10 @@ namespace AMS2LeagueClient.Presentation
             _rpmMotion = new HudTargetMotion(65, rpm => SetValue(RpmPositionProperty, rpm), this);
             _numberPulse = new HudTargetMotion(100, value => { _numberPulseAmount = value; ApplyNumberScale(_pulseNumber); }, this);
             _ignitionMotion = new HudTargetMotion(AvanteIgnitionSweep.DurationSeconds * 1000, DrawIgnition, this);
-            var revealFigure = new PathFigure { StartPoint = PointAt(399, AvanteIgnitionSweep.StartAngle), IsClosed = true, IsFilled = true };
+            var revealFigure = new PathFigure { StartPoint = PointAt(560, AvanteIgnitionSweep.StartAngle), IsClosed = true, IsFilled = true };
             revealFigure.Segments.Add(_ignitionRevealOuter);
             revealFigure.Segments.Add(_ignitionRevealEnd);
-            revealFigure.Segments.Add(_ignitionRevealInner);
-            _ignitionRevealInner.Point = PointAt(335, AvanteIgnitionSweep.StartAngle);
+            _ignitionRevealEnd.Point = new Point(Cx, Cy);
             _ignitionReveal.Figures.Add(revealFigure);
             var blueFigure = new PathFigure { StartPoint = PointAt(245, AvanteIgnitionSweep.StartAngle), IsClosed = true, IsFilled = true };
             blueFigure.Segments.Add(_ignitionBlueOuter);
@@ -286,12 +329,31 @@ namespace AMS2LeagueClient.Presentation
             blueFigure.Segments.Add(_ignitionBlueInner);
             _ignitionBlueInner.Point = PointAt(213, AvanteIgnitionSweep.StartAngle);
             _ignitionBlue.Figures.Add(blueFigure);
-            using (var drawing = _ignition.RenderOpen())
+            var accentFigure = new PathFigure { StartPoint = PointAt(194, AvanteIgnitionSweep.StartAngle), IsClosed = true, IsFilled = true };
+            accentFigure.Segments.Add(_ignitionBlueAccentOuter);
+            accentFigure.Segments.Add(_ignitionBlueAccentEnd);
+            accentFigure.Segments.Add(_ignitionBlueAccentInner);
+            _ignitionBlueAccentInner.Point = PointAt(170, AvanteIgnitionSweep.StartAngle);
+            _ignitionBlueAccent.Figures.Add(accentFigure);
+            using (var drawing = _ignitionCore.RenderOpen())
             {
                 drawing.PushClip(MotionClip);
+                drawing.DrawEllipse(IgnitionCore, null, new Point(Cx, Cy), 265, 265);
+                drawing.Pop();
+            }
+            _ignitionCore.Opacity = 0;
+            using (var drawing = _ignition.RenderOpen())
+            {
+                drawing.PushClip(IgnitionDialArc);
+                drawing.DrawGeometry(IgnitionBlueAccent, null, _ignitionBlueAccent);
                 drawing.DrawGeometry(IgnitionBlue, null, _ignitionBlue);
+                drawing.Pop();
+                drawing.PushClip(IgnitionVisibleArea);
                 drawing.PushClip(_ignitionReveal);
-                drawing.DrawImage(IgnitionFlame, new Rect(Cx - 486, Cy - 486, 972, 972));
+                drawing.DrawImage(IgnitionFlame, OuterFlameBounds);
+                drawing.PushClip(IgnitionThinBand);
+                drawing.DrawImage(IgnitionInner, InnerFlameBounds);
+                drawing.Pop();
                 drawing.Pop();
                 drawing.DrawGeometry(IgnitionSpark, null, _ignitionHead);
                 drawing.Pop();
@@ -304,7 +366,7 @@ namespace AMS2LeagueClient.Presentation
             AddVisualChild(_redZone); _redZone.Transform = _transform;
             AddVisualChild(_follower); _follower.Transform = _transform;
             using (var drawing = _follower.RenderOpen()) { drawing.PushClip(MotionClip); drawing.DrawGeometry(_followerBrush, null, _followerPath); drawing.Pop(); }
-            foreach (var visual in new[] { _motion, _scale, _values, _rpmNumbers, _needle, _gearValues, _speedValues }) { AddVisualChild(visual); visual.Transform = _transform; }
+            foreach (var visual in new[] { _motion, _ignitionCore, _scale, _values, _rpmNumbers, _needle, _gearValues, _speedValues }) { AddVisualChild(visual); visual.Transform = _transform; }
             AddVisualChild(_fuelGauge); _fuelGauge.Transform = _transform;
             AddVisualChild(_ignition); _ignition.Transform = _transform;
             if (Expanded)
@@ -315,17 +377,19 @@ namespace AMS2LeagueClient.Presentation
                 drawing.DrawGeometry(GaugeBase, null, fuelTrack);
                 drawing.DrawGeometry(GaugeFill, null, _fuelLevel);
                 drawing.DrawGeometry(GaugeSheen, null, fuelTrack);
+                drawing.DrawGeometry(null, GaugeEdge, fuelTrack);
                 drawing.DrawGeometry(GaugeBase, null, coolantTrack);
                 drawing.DrawGeometry(GaugeFill, null, _coolantLevel);
                 drawing.DrawGeometry(GaugeSheen, null, coolantTrack);
+                drawing.DrawGeometry(null, GaugeEdge, coolantTrack);
             }
 
-            Loaded += (_, __) => { UpdateFlash(); if (IsVisible) StartIgnition(); };
-            IsVisibleChanged += (_, __) => { if (!IsVisible) StopMotion(); else { UpdateFlash(); DrawMotion(); StartIgnition(); } };
+            Loaded += (_, __) => UpdateFlash();
+            IsVisibleChanged += (_, __) => { if (!IsVisible) StopMotion(); else { UpdateFlash(); DrawMotion(); } };
             Unloaded += (_, __) => StopMotion();
         }
-        protected override int VisualChildrenCount => 11;
-        protected override Visual GetVisualChild(int index) => index == 0 ? _redZone : index == 1 ? _follower : index == 2 ? _motion : index == 3 ? _scale : index == 4 ? _values : index == 5 ? _rpmNumbers : index == 6 ? _needle : index == 7 ? _gearValues : index == 8 ? _speedValues : index == 9 ? _fuelGauge : index == 10 ? _ignition : throw new ArgumentOutOfRangeException(nameof(index));
+        protected override int VisualChildrenCount => 12;
+        protected override Visual GetVisualChild(int index) => index == 0 ? _redZone : index == 1 ? _follower : index == 2 ? _motion : index == 3 ? _ignitionCore : index == 4 ? _scale : index == 5 ? _values : index == 6 ? _rpmNumbers : index == 7 ? _needle : index == 8 ? _gearValues : index == 9 ? _speedValues : index == 10 ? _fuelGauge : index == 11 ? _ignition : throw new ArgumentOutOfRangeException(nameof(index));
         private static BitmapImage LoadImage(string name = "avante-background.png")
         {
             using var stream = Application.GetResourceStream(new Uri("pack://application:,,,/AMS2LeagueClient;component/Assets/Hud/" + name)).Stream;
@@ -362,6 +426,16 @@ namespace AMS2LeagueClient.Presentation
             brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 57, 0), 1));
             brush.Freeze(); return brush;
         }
+        private static Brush CreateIgnitionCore()
+        {
+            var brush = new RadialGradientBrush { MappingMode = BrushMappingMode.Absolute,
+                Center = new Point(Cx, Cy), GradientOrigin = new Point(Cx, Cy), RadiusX = 265, RadiusY = 265 };
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(185, 26, 203, 255), 0));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(218, 11, 174, 237), .55));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(128, 41, 217, 255), .82));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 175, 255), 1));
+            brush.Freeze(); return brush;
+        }
         private static Brush CreateIgnitionBlue()
         {
             var brush = new RadialGradientBrush { MappingMode = BrushMappingMode.Absolute,
@@ -372,30 +446,62 @@ namespace AMS2LeagueClient.Presentation
             brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 7, 140, 243), 1));
             brush.Freeze(); return brush;
         }
-        private void StartIgnition()
+        private static Brush CreateIgnitionBlueAccent()
         {
-            if (_ignitionStarted || !IsVisible) return;
-            _ignitionStarted = true;
-            _ignitionMotion.Set(0, false);
-            _ignitionMotion.Set(1, true);
+            var brush = new RadialGradientBrush { MappingMode = BrushMappingMode.Absolute,
+                Center = new Point(Cx, Cy), GradientOrigin = new Point(Cx, Cy), RadiusX = 194, RadiusY = 194 };
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 190, 255), 170.0 / 194));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(145, 0, 215, 255), 178.0 / 194));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(220, 173, 250, 255), 185.0 / 194));
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 130, 255), 1));
+            brush.Freeze(); return brush;
+        }
+        internal void RearmGameplayIgnition()
+        {
+            _ignitionGeneration++;
+            _ignitionQueued = false;
+            _ignitionStarted = false;
+            _ignitionMotion.Stop();
+            _ignition.Opacity = _ignitionCore.Opacity = 0;
+            IgnitionProgress = 1;
+        }
+        internal void BeginGameplayIgnition()
+        {
+            if (_ignitionStarted || _ignitionQueued) return;
+            _ignitionQueued = true;
+            int generation = _ignitionGeneration;
+            // ShowAt creates and positions the HWND first. Run after that layout pass;
+            // Loaded/IsVisibleChanged can fire while the game HUD is still hidden.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() =>
+            {
+                if (generation != _ignitionGeneration) return;
+                _ignitionQueued = false;
+                if (_ignitionStarted || !IsLoaded || !MonitorPresentationClock.HasVisibleContent(this)) return;
+                _ignitionMotion.Set(0, false);
+                _ignitionMotion.Set(1, true);
+                _ignitionStarted = _ignitionMotion.IsActive;
+            }));
         }
         private void DrawIgnition(double progress)
         {
             IgnitionProgress = progress;
             double opacity = AvanteIgnitionSweep.Opacity(progress);
-            if (opacity <= 0) { _ignition.Opacity = 0; return; }
+            if (opacity <= 0) { _ignition.Opacity = _ignitionCore.Opacity = 0; return; }
             double end = AvanteIgnitionSweep.Angle(progress);
-            _ignitionRevealOuter.Point = PointAt(399, end);
-            _ignitionRevealOuter.IsLargeArc = end - AvanteIgnitionSweep.StartAngle > 180;
-            _ignitionRevealEnd.Point = PointAt(335, end);
-            _ignitionRevealInner.IsLargeArc = _ignitionRevealOuter.IsLargeArc;
+            _ignitionRevealOuter.Point = PointAt(560, end);
+            _ignitionRevealOuter.IsLargeArc = AvanteIgnitionSweep.StartAngle - end > 180;
             double blueEnd = AvanteIgnitionSweep.Angle(Math.Min(1, progress * 1.16));
             _ignitionBlueOuter.Point = PointAt(245, blueEnd);
-            _ignitionBlueOuter.IsLargeArc = blueEnd - AvanteIgnitionSweep.StartAngle > 180;
+            _ignitionBlueOuter.IsLargeArc = AvanteIgnitionSweep.StartAngle - blueEnd > 180;
             _ignitionBlueEnd.Point = PointAt(213, blueEnd);
             _ignitionBlueInner.IsLargeArc = _ignitionBlueOuter.IsLargeArc;
-            _ignitionHead.Center = PointAt(378, end);
+            _ignitionBlueAccentOuter.Point = PointAt(194, blueEnd);
+            _ignitionBlueAccentOuter.IsLargeArc = _ignitionBlueOuter.IsLargeArc;
+            _ignitionBlueAccentEnd.Point = PointAt(170, blueEnd);
+            _ignitionBlueAccentInner.IsLargeArc = _ignitionBlueOuter.IsLargeArc;
+            _ignitionHead.Center = PointAt(500, end);
             _ignition.Opacity = opacity;
+            _ignitionCore.Opacity = AvanteIgnitionSweep.CoreOpacity(progress);
         }
         private static Point PointAt(double radius, double angle) => new Point(Cx + radius * Math.Cos(angle * Math.PI / 180), Cy + radius * Math.Sin(angle * Math.PI / 180));
         private static Geometry Sector(double inner, double outer, double start, double end)
@@ -459,6 +565,20 @@ namespace AMS2LeagueClient.Presentation
             }
             dc.DrawGeometry(color ?? (styled ? Digits : Brushes.AliceBlue), null, geometry);
             if (styled) dc.DrawGeometry(gear ? GearRim : NumberRim, null, glyph.Rim);
+            dc.Pop();
+        }
+        private static void FooterText(DrawingContext dc, string value, double x, double y, double numberSize, double unitSize)
+        {
+            int separator = value.LastIndexOf(' ');
+            string number = separator < 0 ? value : value.Substring(0, separator);
+            string unit = separator < 0 ? "" : value.Substring(separator + 1);
+            var formatted = new FormattedText(number + unit, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                FooterFont, numberSize, Brushes.White, 1);
+            if (unit.Length > 0) formatted.SetFontSize(unitSize, number.Length, unit.Length);
+            Geometry glyph = formatted.BuildGeometry(new Point());
+            Rect bounds = glyph.Bounds;
+            dc.PushTransform(new TranslateTransform(x - bounds.X - bounds.Width / 2, y - bounds.Y - bounds.Height / 2));
+            dc.DrawGeometry(Brushes.AliceBlue, null, glyph);
             dc.Pop();
         }
         public void ApplySettings(DrivingHudSettings settings)
@@ -555,26 +675,25 @@ namespace AMS2LeagueClient.Presentation
             StopFlash(true);
             // Hiding a live view (VR switch, edit chrome, foreground change) must
             // not replay the mode-entry sequence. A new view is created on OFF->ON.
-            _ignitionMotion.Stop(); _ignition.Opacity = 0; IgnitionProgress = 1;
+            _ignitionMotion.Stop(); _ignition.Opacity = _ignitionCore.Opacity = 0; IgnitionProgress = 1;
             _numberPulse.Set(0, false); _previousNumberRpm = null;
             _rpmMotion.Set(_sample?.Rpm ?? 0, false);
             _stoppingMotion = false;
         }
         protected override Size ArrangeOverride(Size finalSize)
         {
-            double width = Expanded ? 2048 : 908, left = Expanded ? 0 : 570;
-            double scale = Math.Min(finalSize.Width / width, finalSize.Height / 750);
-            _transform.Matrix = new Matrix(scale, 0, 0, scale, (finalSize.Width - width * scale) / 2 - left * scale, (finalSize.Height - 750 * scale) / 2);
-            Geometry outline;
-            if (Expanded) outline = new RectangleGeometry(new Rect(0, 0, 2048, 750));
-            else
-            {
-                var dial = new CombinedGeometry(GeometryCombineMode.Intersect,
-                    new EllipseGeometry(new Point(Cx, Cy), 392, 392), new RectangleGeometry(new Rect(570, 0, 908, 623)));
-                var footer = Geometry.Parse("M570,665 L645,632 Q665,623 700,623 L1348,623 Q1383,623 1403,632 L1478,665 L1478,750 L570,750 Z");
-                outline = new CombinedGeometry(GeometryCombineMode.Union, dial, footer);
-            }
-            outline.Transform = _transform.Clone(); Clip = outline;
+            double width = Expanded ? ExpandedWidth : CompactWidth, left = Expanded ? 0 : CompactLeft;
+            double widthScale = finalSize.Width / width;
+            bool fullCanvas = finalSize.Height + 1 >= CanvasHeight * widthScale;
+            double scale = fullCanvas ? Math.Min(widthScale, finalSize.Height / CanvasHeight)
+                : Math.Min(finalSize.Width / (Expanded ? 2048 : 908), finalSize.Height / 750);
+            double oldLeft = Expanded ? 0 : 570;
+            _transform.Matrix = fullCanvas
+                ? new Matrix(scale, 0, 0, scale, (finalSize.Width - width * scale) / 2 - left * scale,
+                    (finalSize.Height - CanvasHeight * scale) / 2 - CanvasTop * scale)
+                : new Matrix(scale, 0, 0, scale, (finalSize.Width - (Expanded ? 2048 : 908) * scale) / 2 - oldLeft * scale,
+                    (finalSize.Height - 750 * scale) / 2);
+            Clip = null;
             return base.ArrangeOverride(finalSize);
         }
         // Rasterize only the fixed face at the current physical display size. The original
@@ -624,9 +743,13 @@ namespace AMS2LeagueClient.Presentation
         private void DrawFace(DrawingContext dc)
         {
             dc.PushTransform(_transform);
+            var housing = Housing(Expanded);
+            dc.PushClip(housing);
+            dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(5, 12, 20)), null, housing);
             // Replace only the baked tick ring with the cleaned texture, never paint over it.
             // All other source pixels (including the decorative LED rim) retain the original image.
-            dc.PushClip(OriginalWithoutTicks); dc.DrawImage(_images[0], new Rect(0, 0, 2048, 750)); dc.Pop();
+            dc.PushClip(Expanded ? OriginalWithoutTicksAndBars : OriginalWithoutTicks);
+            dc.DrawImage(_images[0], new Rect(0, 0, 2048, 750)); dc.Pop();
             dc.PushClip(MotionClip); dc.PushClip(TickRing);
             dc.DrawImage(_images[4], new Rect(0, 0, 2048, 750)); dc.Pop(); dc.Pop();
             dc.PushClip(MotionClip);
@@ -640,6 +763,9 @@ namespace AMS2LeagueClient.Presentation
                 Text(dc, "E", 132, 635, 38); Text(dc, "F", 478, 635, 38);
                 Text(dc, "C", 1587, 635, 38); Text(dc, "H", 1933, 635, 38);
             }
+            dc.Pop();
+            dc.DrawGeometry(null, FrozenPen(new SolidColorBrush(Color.FromArgb(215, 8, 18, 28)), 10), housing);
+            dc.DrawGeometry(null, FrozenPen(new SolidColorBrush(Color.FromArgb(190, 124, 150, 166)), 3), housing);
             dc.Pop();
         }
         private void DrawMotion()
@@ -735,7 +861,7 @@ namespace AMS2LeagueClient.Presentation
             string ambient = Value(_preview ? 23 : valid ? _session!.AmbientTemperature : (double?)null, -80, 80) + "°C";
             var abs = _preview ? AvanteIndicatorState.Off : AvanteIndicators.Abs(v, _sample);
             var tcs = _preview ? AvanteIndicatorState.Off : AvanteIndicators.Tcs(v);
-            bool headlights = AvanteIndicators.Headlights(v);
+            bool? headlights = _preview ? true : v == null ? (bool?)null : AvanteIndicators.Headlights(v);
             bool? limiter = v != null ? (v.CarFlagsRaw & (1u << 3)) != 0 : _preview ? false : (bool?)null;
             string oil = "", water = "", boost = "", torque = "", fuel = "", distance = "";
             if (Expanded)
@@ -761,10 +887,10 @@ namespace AMS2LeagueClient.Presentation
                 Status(dc, "ABS", abs, 795);
                 Status(dc, "TCS", tcs, 992);
                 Status(dc, "PIT LIMITER", limiter, 1266);
-                if (headlights)
+                if (headlights.HasValue)
                 {
                     dc.PushTransform(new TranslateTransform(Expanded ? 1885 : 1350, 30));
-                    dc.DrawGeometry(null, HeadlightPen, HeadlightShape);
+                    dc.DrawGeometry(null, headlights.Value ? HeadlightPen : HeadlightOffPen, HeadlightShape);
                     dc.Pop();
                 }
                 if (Expanded)
@@ -774,8 +900,8 @@ namespace AMS2LeagueClient.Presentation
                     // DATA_DICTIONARY marks turboBoostPressure unit/scale pending; do not label the raw float as bar.
                     Readout(dc, boost, "bar", 1724, 297);
                     Readout(dc, torque, "Nm", 1724, 510);
-                    Text(dc, fuel, 275, 700, 45);
-                    Text(dc, distance, 1820, 710, 42);
+                    FooterText(dc, fuel, 265, 693, 48, 30);
+                    FooterText(dc, distance, 1830, 693, 48, 30);
                     AvanteNLogo.Draw(dc, 1600, 678, 68, 29);
                 }
             }

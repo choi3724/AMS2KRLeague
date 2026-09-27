@@ -53,7 +53,7 @@ namespace AMS2LeagueClient.Tests
                         AssertEqual(builds,view.StaticFaceBuilds);
                     }
                     view.SetSample(Sample(item.Red,item.Engine));Layout();
-                    AssertEqual((int)(item.Maximum/1000)+1,((DrawingVisual)VisualTreeHelper.GetChild(view,5)).Children.Count);
+                    AssertEqual((int)(item.Maximum/1000)+1,((DrawingVisual)VisualTreeHelper.GetChild(view,6)).Children.Count);
                     CaptureLayout(view,"policy-"+item.Engine+"-"+(expanded?"expanded":"normal"),1);
                     // Near-limit input starts the warning immediately, not after the needle's interpolation.
                     var host=new Window {Content=view,Width=view.Width+20,Height=415,Left=-5000,Top=-5000,ShowActivated=false};

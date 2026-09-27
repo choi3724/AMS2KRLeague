@@ -102,14 +102,14 @@ namespace AMS2LeagueClient.Tests
             AssertTrue(Red(middle, 1770, 628) > Red(middle, 1680, 628) + 50);
 
             // The filled pixels follow opposite slanted source caps, not rectangular ends.
-            AssertTrue(Blue(full, 172, 623) > Blue(empty, 172, 623) + 20);
-            AssertEqual(Blue(empty, 172, 633), Blue(full, 172, 633));
-            AssertEqual(Blue(empty, 436, 623), Blue(full, 436, 623));
-            AssertTrue(Blue(full, 436, 633) > Blue(empty, 436, 633) + 20);
-            AssertEqual(Blue(empty, 1623, 623), Blue(full, 1623, 623));
-            AssertTrue(Blue(full, 1623, 633) > Blue(empty, 1623, 633) + 20);
-            AssertTrue(Blue(full, 1880, 623) > Blue(empty, 1880, 623) + 20);
-            AssertEqual(Blue(empty, 1880, 633), Blue(full, 1880, 633));
+            AssertTrue(Blue(full, 170, 623) > Blue(empty, 170, 623) + 20);
+            AssertEqual(Blue(empty, 170, 635), Blue(full, 170, 635));
+            AssertEqual(Blue(empty, 438, 623), Blue(full, 438, 623));
+            AssertTrue(Blue(full, 438, 635) > Blue(empty, 438, 635) + 20);
+            AssertEqual(Blue(empty, 1622, 623), Blue(full, 1622, 623));
+            AssertTrue(Blue(full, 1622, 635) > Blue(empty, 1622, 635) + 20);
+            AssertTrue(Blue(full, 1884, 623) > Blue(empty, 1884, 623) + 20);
+            AssertEqual(Blue(empty, 1884, 635), Blue(full, 1884, 635));
 
             ApplyStatus(view, StatusSnapshot(3, fuel: 1, water: float.NaN));
             var unknown = StatusPixels(view);
@@ -118,6 +118,22 @@ namespace AMS2LeagueClient.Tests
 
         private static void AvanteIndicatorAndIgnitionPreview()
         {
+            static int Blue(byte[] pixels, int x, int y) => pixels[(y * 2048 + x) * 4];
+            static void AssertConcentricCircle(string field, double sourceCenterX, double sourceCenterY,
+                double sourceRadiusX, double sourceRadiusY)
+            {
+                var bounds = (Rect)typeof(AvanteClusterView).GetField(field,
+                    BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+                const double sourceSize = 1254;
+                AssertTrue(Math.Abs(bounds.X + sourceCenterX * bounds.Width / sourceSize - 1024) < 1);
+                AssertTrue(Math.Abs(bounds.Y + sourceCenterY * bounds.Height / sourceSize - 397) < 1);
+                AssertTrue(Math.Abs(sourceRadiusX * bounds.Width / sourceSize
+                    - sourceRadiusY * bounds.Height / sourceSize) < 1);
+            }
+            // Peak-brightness cardinal samples from the supplied raster: its
+            // line is oval/off-centre even though the dial geometry is circular.
+            AssertConcentricCircle("OuterFlameBounds", 634.5, 629.5, 415.5, 398.5);
+            AssertConcentricCircle("InnerFlameBounds", 628.5, 620, 513.5, 498);
             var type = typeof(AvanteClusterView).Assembly.GetType("AMS2LeagueClient.Presentation.AvanteIndicators")!;
             var stateFlags = BindingFlags.NonPublic | BindingFlags.Static;
             string State(string name, ViewedVehicleTelemetrySnapshot vehicle, DrivingTelemetrySample? sample = null) =>
@@ -133,31 +149,60 @@ namespace AMS2LeagueClient.Tests
             Set("Gear", 3); Set("SpeedMetresPerSecond", 20f);
             AssertEqual("Active", State("Tcs", vehicle));
 
-            var view = new AvanteClusterView(true) { Width = 2048, Height = 750 };
+            var view = new AvanteClusterView(true) { Width = 2048, Height = 1090 };
             ApplyStatus(view, StatusSnapshot(0));
             var method = typeof(AvanteClusterView).GetMethod("DrawIgnition", BindingFlags.NonPublic | BindingFlags.Instance)!;
             method.Invoke(view, new object[] { 1.0 });
             var settled = StatusPixels(view);
             if (_layoutCaptureDirectory != null)
             {
-                var actual = new AvanteClusterView(true) { Width = 820, Height = 300 };
+                var actual = new AvanteClusterView(true) { Width = 820, Height = 436 };
                 ApplyStatus(actual, StatusSnapshot(0));
-                method.Invoke(actual, new object[] { .55 });
+                method.Invoke(actual, new object[] { .18 });
                 StatusPixels(actual, Path.Combine(_layoutCaptureDirectory, "avante-ignition-actual-size.png"));
-                method.Invoke(view, new object[] { .25 });
+                var compact = new AvanteClusterView(false) { Width = 569, Height = 545 };
+                ApplyStatus(compact, StatusSnapshot(0));
+                method.Invoke(compact, new object[] { .18 });
+                StatusPixels(compact, Path.Combine(_layoutCaptureDirectory, "avante-ignition-compact.png"));
+                var headlights = new AvanteClusterView(true) { Width = 820, Height = 436 };
+                ApplyStatus(headlights, StatusSnapshot(0, flags: 1u));
+                StatusPixels(headlights, Path.Combine(_layoutCaptureDirectory, "avante-headlights-on.png"));
+                method.Invoke(view, new object[] { .08 });
                 StatusPixels(view, Path.Combine(_layoutCaptureDirectory, "avante-ignition-early.png"));
             }
-            method.Invoke(view, new object[] { .55 });
+            method.Invoke(view, new object[] { .18 });
             var lit = StatusPixels(view, _layoutCaptureDirectory == null ? null : Path.Combine(_layoutCaptureDirectory, "avante-ignition-middle.png"));
+            AssertTrue(Blue(lit, 1110, 530) > Blue(settled, 1110, 530) + 30); // Cyan face grows beneath the dial readout.
+            for (int y = 902; y < 1090; y += 8)
+                for (int x = 640; x <= 1408; x += 16)
+                {
+                    int pixel = (y * 2048 + x) * 4;
+                    for (int channel = 0; channel < 4; channel++)
+                        AssertEqual(settled[pixel + channel], lit[pixel + channel]); // No flame below the panel or its border.
+                }
+            for (int y = 800; y <= 870; y += 10)
+                for (int x = 720; x <= 1320; x += 10)
+                {
+                    int pixel = (y * 2048 + x) * 4;
+                    for (int channel = 0; channel < 4; channel++)
+                        AssertEqual(settled[pixel + channel], lit[pixel + channel]); // Lower panel stays in front of the flame.
+                }
             if (_layoutCaptureDirectory != null)
             {
-                method.Invoke(view, new object[] { .78 });
+                method.Invoke(view, new object[] { .9 });
                 StatusPixels(view, Path.Combine(_layoutCaptureDirectory, "avante-ignition-near-end.png"));
                 method.Invoke(view, new object[] { .55 });
             }
-            // Top of the ring is reached during the sweep, then cleared exactly once.
-            int top = (18 * 2048 + 1024) * 4 + 2;
-            AssertTrue(lit[top] > settled[top] + 40);
+            // The broad flame must leave the instrument housing while remaining
+            // inside the enlarged transparent output canvas.
+            bool outerFlameVisible = false;
+            for (int y = 0; y < 140 && !outerFlameVisible; y++)
+                for (int x = 560; x < 1490; x++)
+                    if (lit[(y * 2048 + x) * 4 + 3] > settled[(y * 2048 + x) * 4 + 3] + 60)
+                    { outerFlameVisible = true; break; }
+            AssertTrue(outerFlameVisible);
+            AssertEqual((byte)0, settled[3]); // The enlarged margin remains transparent at rest.
+            AssertEqual((byte)0, settled[((1090 - 1) * 2048 + 2047) * 4 + 3]);
             method.Invoke(view, new object[] { 1.0 });
             AssertTrue(settled.SequenceEqual(StatusPixels(view)));
             method.Invoke(view, new object[] { .55 });

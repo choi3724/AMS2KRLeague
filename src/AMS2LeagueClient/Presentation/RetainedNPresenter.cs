@@ -70,15 +70,13 @@ namespace AMS2LeagueClient.Presentation
                 NeedleVisual.SetEffect(NeedleEffect).CheckError();
                 WarningVisual.SetOffsetX(DialRect.Left).CheckError();
                 WarningVisual.SetOffsetY(DialRect.Top).CheckError();
-                FollowerVisual.SetOffsetX(DialRect.Left).CheckError();
-                FollowerVisual.SetOffsetY(DialRect.Top).CheckError();
                 device.CreateRotateTransform(out var rotation).CheckError(); NeedleRotation=rotation;
                 NeedleVisual.SetTransform(NeedleRotation).CheckError();
                 device.CreateSurface((uint)slot.Width, (uint)slot.Height, Format.B8G8R8A8_UNorm,
                     Vortice.DXGI.AlphaMode.Premultiplied, out var face).CheckError();
                 device.CreateSurface((uint)(DialRect.Right-DialRect.Left), (uint)(DialRect.Bottom-DialRect.Top), Format.B8G8R8A8_UNorm,
                     Vortice.DXGI.AlphaMode.Premultiplied, out var warning).CheckError();
-                device.CreateSurface((uint)(DialRect.Right-DialRect.Left), (uint)(DialRect.Bottom-DialRect.Top), Format.B8G8R8A8_UNorm,
+                device.CreateSurface((uint)slot.Width, (uint)slot.Height, Format.B8G8R8A8_UNorm,
                     Vortice.DXGI.AlphaMode.Premultiplied, out var follower).CheckError();
                 device.CreateSurface((uint)slot.Width, (uint)slot.Height, Format.B8G8R8A8_UNorm,
                     Vortice.DXGI.AlphaMode.Premultiplied, out var needle).CheckError();
@@ -100,22 +98,21 @@ namespace AMS2LeagueClient.Presentation
             }
             private static Vortice.RawRect MapDial(Slot slot)
             {
-                double designWidth=slot.Expanded?2048:908,designLeft=slot.Expanded?0:570;
-                double scale=Math.Min(slot.Width/designWidth,slot.Height/750.0);
-                double offsetX=(slot.Width-designWidth*scale)/2-designLeft*scale;
-                double offsetY=(slot.Height-750*scale)/2;
+                double designWidth=slot.Expanded?AvanteClusterView.ExpandedWidth:AvanteClusterView.CompactWidth;
+                double designLeft=slot.Expanded?0:AvanteClusterView.CompactLeft;
+                double widthScale=slot.Width/designWidth;
+                bool fullCanvas=slot.Height+1>=AvanteClusterView.CanvasHeight*widthScale;
+                double scale=fullCanvas?Math.Min(widthScale,slot.Height/AvanteClusterView.CanvasHeight)
+                    :Math.Min(slot.Width/(slot.Expanded?2048:908),slot.Height/750.0);
+                double offsetX=fullCanvas?(slot.Width-designWidth*scale)/2-designLeft*scale
+                    :(slot.Width-(slot.Expanded?2048:908)*scale)/2-(slot.Expanded?0:570)*scale;
+                double offsetY=fullCanvas?(slot.Height-AvanteClusterView.CanvasHeight*scale)/2-AvanteClusterView.CanvasTop*scale
+                    :(slot.Height-750*scale)/2;
                 int left=Math.Clamp((int)Math.Floor(620*scale+offsetX)-2,0,slot.Width-1);
                 int top=Math.Clamp((int)Math.Floor(offsetY)-2,0,slot.Height-1);
                 int right=Math.Clamp((int)Math.Ceiling(1428*scale+offsetX)+2,left+1,slot.Width);
                 int bottom=Math.Clamp((int)Math.Ceiling(630*scale+offsetY)+2,top+1,slot.Height);
                 return new Vortice.RawRect(left,top,right,bottom);
-            }
-            internal Vortice.RawRect? CropDial(Vortice.RawRect rect)
-            {
-                int left=Math.Max(rect.Left,DialRect.Left),top=Math.Max(rect.Top,DialRect.Top);
-                int right=Math.Min(rect.Right,DialRect.Right),bottom=Math.Min(rect.Bottom,DialRect.Bottom);
-                return right>left&&bottom>top?(Vortice.RawRect?)new Vortice.RawRect(left-DialRect.Left,top-DialRect.Top,
-                    right-DialRect.Left,bottom-DialRect.Top):null;
             }
             internal void SetOpacity(Slot slot)
             { Effect.SetOpacity(slot.Opacity).CheckError(); Slot = slot; }
@@ -276,9 +273,7 @@ namespace AMS2LeagueClient.Presentation
                             bool face = target.FirstDraw || target.Hud.FaceDirty;
                             var full=new Vortice.RawRect(0,0,target.Slot.Width,target.Slot.Height);
                             var dynamicRects=target.FirstDraw ? new List<Vortice.RawRect>{full} : target.Hud.DynamicDirtyRects(now);
-                            var followerRects=new List<Vortice.RawRect>();
-                            foreach(var rect in target.FirstDraw ? new List<Vortice.RawRect>{full} : target.Hud.FollowerDirtyRects(now))
-                                if(target.CropDial(rect) is { } cropped)followerRects.Add(cropped);
+                            var followerRects=target.FirstDraw ? new List<Vortice.RawRect>{full} : target.Hud.FollowerDirtyRects(now);
                             if (face)
                             {
                                 foreach (var layer in new[] { (target.FaceSurface,HudLayer.Face), (target.WarningSurface,HudLayer.Warning), (target.NeedleSurface,HudLayer.Needle) })
@@ -295,8 +290,7 @@ namespace AMS2LeagueClient.Presentation
                             }
                             foreach(var rect in followerRects)
                             {
-                                var timing=Draw(target.FollowerSurface,rect,target.Hud,dc,HudLayer.Follower,now,
-                                    target.DialRect.Left,target.DialRect.Top);
+                                var timing=Draw(target.FollowerSurface,rect,target.Hud,dc,HudLayer.Follower,now);
                                 Record(timing, beginTimes, drawTimes, endTimes);
                                 intervalDirtyPixels+=(long)(rect.Right-rect.Left)*(rect.Bottom-rect.Top);
                                 intervalDraws++;anyDraw=true;

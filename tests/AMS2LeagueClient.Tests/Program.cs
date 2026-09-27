@@ -75,7 +75,7 @@ namespace AMS2LeagueClient.Tests
             if (args.Contains("--avante-detail-preview", StringComparer.Ordinal))
             {
                 AvanteBarGaugesFollowSourceContours(); AvanteStatusPreservesDisplayedValues();
-                AvanteIndicatorAndIgnitionPreview(); application.Shutdown(); return 0;
+                AvanteIndicatorAndIgnitionPreview(); GameplayNIntroStartsOnceWhenShown(); application.Shutdown(); return 0;
             }
             int liveUpdateArgument = Array.IndexOf(args, "--verify-live-update");
             if (liveUpdateArgument >= 0 && liveUpdateArgument + 1 < args.Length)
@@ -101,6 +101,7 @@ namespace AMS2LeagueClient.Tests
                 ("Default HUD windows retain pixel transparency", DefaultHudWindowsRetainPixelTransparency),
                 ("Optional glass HUDs retain click-through and release windows", GlassHudLifecycle),
                 ("Retained N host activates and releases both HUDs", RetainedNHudLifecycle),
+                ("Gameplay N intro starts once per game window", GameplayNIntroStartsOnceWhenShown),
                 ("Avante bar gauges follow source contours and coolant temperature", AvanteBarGaugesFollowSourceContours),
                 ("Avante indicators and one-shot ignition sweep render", AvanteIndicatorAndIgnitionPreview),
                 ("Render remediation retains graph paths and suspends inactive resources", RenderRemediationRetainsPathsAndStopsWork),

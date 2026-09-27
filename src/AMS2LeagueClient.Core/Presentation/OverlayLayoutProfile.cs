@@ -64,6 +64,8 @@ namespace AMS2LeagueClient.Core.Presentation
     public sealed class OverlayLayoutProfile
     {
         public int Schema { get; set; } = 1;
+        // 0: legacy 750px N canvas; 1: transparent ignition margin around it.
+        public int AvanteCanvasVersion { get; set; }
         // Physical game-client reference for game-free editing only; never a monitor index.
         public OverlayPreviewViewport? PreviewViewport { get; set; }
         public VrHudSettings VrHud { get; set; } = new VrHudSettings();
