@@ -13,7 +13,8 @@ namespace AMS2LeagueClient.Presentation
         private readonly Slider _steeringRange = new Slider { Minimum = 180, Maximum = 1440, TickFrequency = 90, IsSnapToTickEnabled = true, Width = 200 };
         private readonly ComboBox _speedFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
         private readonly ComboBox _gearFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
-        private readonly ComboBox _frameLimit = new ComboBox { MinWidth = 240 };
+        private readonly Slider _frameLimit = new Slider { Minimum = DrivingHudSettings.MinimumHudFrameLimit, Maximum = DrivingHudSettings.MaximumHudFrameLimit,
+            SmallChange = 1, LargeChange = 10, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 200 };
         public DrivingHudSettings Settings { get; private set; }
 
         public DrivingHudSettingsWindow(DrivingHudSettings current, string vehicleName = "", double? engineMaximum = null, string profileVehicleName = "")
@@ -60,9 +61,13 @@ namespace AMS2LeagueClient.Presentation
                 panel.Children.Add(Row(i == 4 ? "속도계 그림자" : "기어 그림자", button));
             }
             panel.Children.Add(new TextBlock { Text = "HUD 프레임 제한", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
-            _frameLimit.ItemsSource = DrivingHudSettings.HudFrameLimits.Select(limit => limit + " FPS").ToArray();
-            _frameLimit.SelectedIndex = Math.Max(0, Array.IndexOf(DrivingHudSettings.HudFrameLimits, Settings.HudFrameLimit));
-            panel.Children.Add(Row("최대 FPS", _frameLimit));
+            _frameLimit.Value = Settings.HudFrameLimit;
+            var frameLimitValue = new TextBlock { Text = Settings.HudFrameLimit + " FPS", VerticalAlignment = VerticalAlignment.Center, MinWidth = 64 };
+            _frameLimit.ValueChanged += (_, __) => frameLimitValue.Text = ((int)_frameLimit.Value) + " FPS";
+            var frameLimitPanel = new StackPanel { Orientation = Orientation.Horizontal };
+            frameLimitPanel.Children.Add(_frameLimit); frameLimitPanel.Children.Add(frameLimitValue);
+            System.Windows.Automation.AutomationProperties.SetName(_frameLimit, "최대 FPS");
+            panel.Children.Add(Row("최대 FPS", frameLimitPanel));
             panel.Children.Add(new TextBlock { Text = "HUD를 1초에 최대 몇 번 새로 그릴지 정합니다. 높을수록 계기판과 순위표 움직임이 부드러워지지만 그만큼 CPU를 더 사용합니다. "
                 + "값이 바뀌지 않으면 다시 그리지 않습니다. 순위 이동 같은 일부 효과는 프로그램을 다시 실행하면 적용됩니다.",
                 FontSize = 11, Foreground = Brushes.LightGray, TextWrapping = TextWrapping.Wrap });
@@ -149,7 +154,7 @@ namespace AMS2LeagueClient.Presentation
                     ClutchColor = (string)_colors[2].Tag, HandBrakeColor = (string)_colors[3].Tag,
                     SpeedShadowColor = (string)_colors[4].Tag, GearShadowColor = (string)_colors[5].Tag,
                     SpeedFont = _speedFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName, GearFont = _gearFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName,
-                    HudFrameLimit = DrivingHudSettings.HudFrameLimits[Math.Max(0, _frameLimit.SelectedIndex)] };
+                    HudFrameLimit = (int)_frameLimit.Value };
                 DialogResult = true;
             };
             buttons.Children.Add(save);

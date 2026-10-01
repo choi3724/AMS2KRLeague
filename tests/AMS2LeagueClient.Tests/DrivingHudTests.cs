@@ -326,13 +326,14 @@ namespace AMS2LeagueClient.Tests
                 dialog.ShowActivated = false; dialog.Left = -5000; dialog.Top = -5000;
                 dialog.WindowStartupLocation = WindowStartupLocation.Manual;
                 dialog.Show(); PumpDispatcher();
-                // Two existing font selectors plus the user-requested RPM maximum mode and HUD frame limit.
-                string[] namedSelectors = { "최대 눈금 결정", "최대 FPS" };
-                AssertEqual(2, Descendants<ComboBox>(dialog).Count(box => !namedSelectors.Contains(System.Windows.Automation.AutomationProperties.GetName(box))));
+                // Two existing font selectors plus the user-requested RPM maximum mode.
+                AssertEqual(2, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) != "최대 눈금 결정"));
                 AssertEqual(1, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) == "최대 눈금 결정"));
-                var frameLimit = Descendants<ComboBox>(dialog).Single(box => System.Windows.Automation.AutomationProperties.GetName(box) == "최대 FPS");
-                AssertEqual(settings.HudFrameLimit + " FPS", (string)frameLimit.SelectedItem);
-                AssertEqual(DrivingHudSettings.HudFrameLimits.Length, frameLimit.Items.Count);
+                // HUD frame limit: 30..240 FPS in 1 FPS steps.
+                var frameLimit = Descendants<Slider>(dialog).Single(slider => System.Windows.Automation.AutomationProperties.GetName(slider) == "최대 FPS");
+                AssertEqual((double)settings.HudFrameLimit, frameLimit.Value);
+                AssertEqual(30.0, frameLimit.Minimum); AssertEqual(240.0, frameLimit.Maximum);
+                AssertEqual(1.0, frameLimit.TickFrequency); AssertTrue(frameLimit.IsSnapToTickEnabled);
                 AssertTrue(dialog.ActualHeight <= SystemParameters.WorkArea.Height);
                 AssertEqual(6, Descendants<Button>(dialog).Count(button => button.Tag is string));
                 CaptureLayout((FrameworkElement)dialog.Content, "driving-settings-menu");

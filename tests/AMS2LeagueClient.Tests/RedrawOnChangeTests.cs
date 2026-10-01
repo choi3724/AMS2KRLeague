@@ -19,8 +19,10 @@ namespace AMS2LeagueClient.Tests
             AssertEqual(60, new DrivingHudSettings().Normalize().HudFrameLimit); // fixed FPS cap, not the monitor
             AssertEqual(144, new DrivingHudSettings { HudFrameLimit = 144 }.Normalize().HudFrameLimit);
             AssertEqual(30, new DrivingHudSettings { HudFrameLimit = 30 }.Normalize().HudFrameLimit);
-            AssertEqual(60, new DrivingHudSettings { HudFrameLimit = 77 }.Normalize().HudFrameLimit);
+            AssertEqual(77, new DrivingHudSettings { HudFrameLimit = 77 }.Normalize().HudFrameLimit); // any whole FPS
             AssertEqual(60, new DrivingHudSettings { HudFrameLimit = 0 }.Normalize().HudFrameLimit);
+            AssertEqual(30, new DrivingHudSettings { HudFrameLimit = 10 }.Normalize().HudFrameLimit);
+            AssertEqual(240, new DrivingHudSettings { HudFrameLimit = 500 }.Normalize().HudFrameLimit);
         }
 
         private static void DisplaySignatureTracksShownContent()

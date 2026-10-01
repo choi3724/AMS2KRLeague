@@ -86,7 +86,7 @@ REQ-HUD-FRAME-LIMIT-089 [PARTIAL — 코드·테스트 작성, Windows 실행 �
   - 0.7.2에서 같은 PC에 맞춰 움직임 시계를 144Hz로 만들었다. 60Hz 시험은 144Hz 화면과 박자가 맞지 않아 더 나빴다.
   - 즉 개발 PC 모니터에 맞춘 고정값이었다.
   변경:
-  - `DrivingHudSettings.HudFrameLimit`(기본 60 FPS, 모니터와 무관한 최대 FPS), `HudFrameRate`(신규)
+  - `DrivingHudSettings.HudFrameLimit`(30~240 FPS 1단위 슬라이더, 기본 60, 모니터와 무관한 최대 FPS), `HudFrameRate`(신규)
   - `MonitorPresentationClock`(초 단위 deadline, 설정값 사용, 소프트웨어 HUD도 사용)
   - `HudMotion.ConfigureFrameRate(int?)`, App 시작 시 저장 설정 읽기
   - `PlayerOverlayCoordinator.DrivingFrame` 누적 deadline, `ThreadedAvanteHud` 캡처 주기
@@ -94,7 +94,7 @@ REQ-HUD-FRAME-LIMIT-089 [PARTIAL — 코드·테스트 작성, Windows 실행 �
   수용:
   - `HudFrameLimitSettingIsNormalized`
   - `DrivingFramesDoNotThrottleLocalReads` 갱신: 144 FPS 제한이면 144회, 60 FPS 제한이면 144Hz 프레임에서 58~62회 읽는다.
-  - `DrivingHudRenderingAndSettings`: 설정 창의 최대 FPS 선택 상자를 확인한다.
+  - `DrivingHudRenderingAndSettings`: 설정 창의 최대 FPS 슬라이더(30~240, 1단위)를 확인한다.
   - 누적 deadline 계산을 별도로 모의 계산했다. 60/144→60, 30/144→30, 75/165→75, 144/60→60.
 
 ## 요청하지 않은 변경

@@ -14,9 +14,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public double SteeringRangeDegrees { get; set; } = 900;
         // Most HUD frames drawn per second (an FPS cap, independent of the monitor). Higher
         // limits look smoother but use more CPU.
-        public const int DefaultHudFrameLimit = 60;
+        public const int DefaultHudFrameLimit = 60, MinimumHudFrameLimit = 30, MaximumHudFrameLimit = 240;
         public int HudFrameLimit { get; set; } = DefaultHudFrameLimit;
-        public static readonly int[] HudFrameLimits = { 30, 60, 75, 90, 120, 144, 165, 240 };
         public string TowerDesign { get; set; } = "legacy";
         public string TelemetryDesign { get; set; } = "legacy";
         public string ThrottleColor { get; set; } = "#20E050";
@@ -36,7 +35,8 @@ namespace AMS2LeagueClient.Core.Presentation
             TowerDesign = TowerDesign == "racing" ? "racing" : "legacy",
             TelemetryDesign = TelemetryDesign == "racing" ? "racing" : "legacy",
             SteeringRangeDegrees = double.IsFinite(SteeringRangeDegrees) ? Math.Clamp(SteeringRangeDegrees, 180, 1440) : 900,
-            HudFrameLimit = Array.IndexOf(HudFrameLimits, HudFrameLimit) >= 0 ? HudFrameLimit : DefaultHudFrameLimit,
+            // 1 FPS steps from 30 to 240; an unset (0 or negative) value uses the default.
+            HudFrameLimit = HudFrameLimit > 0 ? Math.Clamp(HudFrameLimit, MinimumHudFrameLimit, MaximumHudFrameLimit) : DefaultHudFrameLimit,
             ThrottleColor = Color(ThrottleColor, "#20E050"),
             ClutchColor = Color(ClutchColor, "#3399FF"),
             HandBrakeColor = Color(HandBrakeColor, "#BE60FF"),
