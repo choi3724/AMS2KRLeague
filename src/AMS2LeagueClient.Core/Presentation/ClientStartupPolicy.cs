@@ -6,7 +6,7 @@ namespace AMS2LeagueClient.Core.Presentation
     public sealed class ClientStartupPolicy
     {
         private ClientStartupPolicy(bool diagnostic, bool showStatusWindow, bool afterUpdate,
-            bool useGlass, bool useRetainedN, bool layeredRequested, bool hardwareRequested)
+            bool useGlass, bool useRetainedN, bool layeredRequested, bool hardwareRequested, bool threadedNRequested)
         {
             Diagnostic = diagnostic;
             AfterUpdate = afterUpdate;
@@ -15,6 +15,7 @@ namespace AMS2LeagueClient.Core.Presentation
             UseRetainedN = useRetainedN;
             LayeredRequested = layeredRequested;
             HardwareRequested = hardwareRequested;
+            ThreadedNRequested = threadedNRequested;
         }
 
         public bool Diagnostic { get; }
@@ -29,6 +30,10 @@ namespace AMS2LeagueClient.Core.Presentation
         // Monitor HUDs rasterize on the CPU by default. The layered hardware path waits on
         // the GPU readback behind a GPU-bound game; DWM glass and DComp remain GPU paths.
         public bool UseSoftwareRendering => !UseGlass && !HardwareRequested;
+        public bool ThreadedNRequested { get; }
+        // Experimental: each N HUD rasterizes on its own thread into a native layered window.
+        // It replaces the layered WPF surface, so glass and the DComp N take precedence.
+        public bool UseThreadedN => ThreadedNRequested && !UseGlass;
 
         public static ClientStartupPolicy FromArguments(IEnumerable<string> arguments)
         {
@@ -39,6 +44,7 @@ namespace AMS2LeagueClient.Core.Presentation
             bool glassRequested = false;
             bool retainedNRequested = false;
             bool hardwareRequested = false;
+            bool threadedNRequested = false;
             foreach (string argument in arguments)
             {
                 if (string.Equals(argument, "--after-update", StringComparison.OrdinalIgnoreCase))
@@ -74,11 +80,15 @@ namespace AMS2LeagueClient.Core.Presentation
                 {
                     hardwareRequested = true;
                 }
+                else if (string.Equals(argument, "--monitor-threaded-n", StringComparison.OrdinalIgnoreCase))
+                {
+                    threadedNRequested = true;
+                }
             }
 
             return new ClientStartupPolicy(diagnostic, showStatus || afterUpdate, afterUpdate,
                 (glassRequested || retainedNRequested) && !layeredRequested,
-                retainedNRequested && !layeredRequested, layeredRequested, hardwareRequested);
+                retainedNRequested && !layeredRequested, layeredRequested, hardwareRequested, threadedNRequested);
         }
     }
 }

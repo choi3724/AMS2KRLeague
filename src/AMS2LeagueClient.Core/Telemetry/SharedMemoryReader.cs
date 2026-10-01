@@ -22,6 +22,9 @@ namespace AMS2LeagueClient.Core.Telemetry
         public long SuccessfulSnapshots { get; private set; }
         public long SequenceRetries { get; private set; }
         public long SequenceDrops { get; private set; }
+        // SHM sequence of the last successful display read. An unchanged even sequence means the
+        // game has not written a new frame, so the display read returned identical values.
+        public uint LastDrivingSequence { get; private set; }
 
         public TelemetryReadResult TryRead()
         {
@@ -119,7 +122,9 @@ namespace AMS2LeagueClient.Core.Telemetry
                         uint copiedSequence = SharedMemoryLayout.ReadUInt32(_drivingBuffer, SharedMemoryLayout.SequenceNumber);
                         if (bytesRead == _drivingBuffer.Length && SnapshotValidator.IsConsistent(before, copiedSequence, after))
                         {
-                            return ParseDrivingBlock(_drivingBuffer, localIndex, generation, gameState, sessionState, DateTimeOffset.UtcNow);
+                            var sample = ParseDrivingBlock(_drivingBuffer, localIndex, generation, gameState, sessionState, DateTimeOffset.UtcNow);
+                            if (sample != null) LastDrivingSequence = copiedSequence;
+                            return sample;
                         }
 
                         Thread.SpinWait(32);

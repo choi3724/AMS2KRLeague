@@ -45,19 +45,28 @@ namespace AMS2LeagueClient.Tests
                     const int count = 144;
                     for (int i = 1; i <= count; i++)
                     {
+                        writer.Write(SharedMemoryLayout.SequenceNumber, (uint)(i * 2)); // one game write per frame
                         type.GetField("_latest", flags)!.SetValue(coordinator, Parse(fixture, DateTimeOffset.UtcNow));
                         var args = new object?[] { null, Frame(i / 144.0) };
                         frame.Invoke(coordinator, args);
                         frame.Invoke(coordinator, args); // WPF can repeat an event for the same frame.
                     }
                     AssertEqual(count, (int)updates.GetValue(coordinator)!);
+                    // Frames without a new game write do not republish identical values.
+                    for (int i = 1; i <= 10; i++) frame.Invoke(coordinator, new object?[] { null, Frame(1 + i / 144.0) });
+                    AssertEqual(count, (int)updates.GetValue(coordinator)!);
+                    AssertEqual(10, (int)type.GetField("_drivingDuplicates", flags)!.GetValue(coordinator)!);
+                    // Bounded: an unchanged frame is republished after 100 ms so new HUDs get values.
+                    System.Threading.Thread.Sleep(120);
+                    frame.Invoke(coordinator, new object?[] { null, Frame(1.5) });
+                    AssertEqual(count + 1, (int)updates.GetValue(coordinator)!);
                     AssertEqual(0L, reader.SuccessfulSnapshots);
                     AssertEqual(0, (int)type.GetField("_successCount", flags)!.GetValue(coordinator)!);
                     overlay.HideOverlay();
                     AssertFalse(overlay.WantsDrivingTelemetry);
                     frame.Invoke(coordinator, new object?[] { null, Frame(2) });
-                    AssertEqual(count, (int)updates.GetValue(coordinator)!);
-                    Console.WriteLine("PROOF distinct display frames=144 local reads=144 duplicate frames skipped; hidden HUD reads=0 recording reads=0 (fixture, not measured FPS)");
+                    AssertEqual(count + 1, (int)updates.GetValue(coordinator)!);
+                    Console.WriteLine("PROOF distinct display frames=144 local reads=144 duplicate frames skipped; unchanged game frames republished=0; hidden HUD reads=0 recording reads=0 (fixture, not measured FPS)");
                 }
                 finally { coordinator.Dispose(); overlay.Close(); }
             });

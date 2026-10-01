@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## Unreleased
+
+- 게임이 SHM에 새 프레임을 쓰지 않은 렌더 프레임에서는 주행 HUD 값을 다시 게시하지 않음(100ms마다 재게시, `drivingDuplicateFrames` 로그).
+- 보이는 HUD 창의 물리 픽셀 크기·합계를 `OVERLAY_SURFACES`로 기록.
+- README_KO에 끊김 대응 안내 추가.
+- 시험 옵션 `--monitor-threaded-n`: N 계기판을 HUD별 전용 스레드에서 CPU로 그려 네이티브 layered 창에 표시(기본 꺼짐).
+- 실게임 효과 NOT TESTED, Monitor RED 유지.
+
 ## 0.8.4 — 2026-10-01
 
 - 모니터 HUD 기본 렌더링을 CPU(WPF SoftwareOnly, layered 투명 창)로 변경. 기존 hardware layered 경로는 GPU에서 그린 뒤 시스템 메모리로 다시 읽어 오는 과정에서 GPU를 독점한 게임 뒤에서 대기했음.

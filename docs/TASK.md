@@ -1,3 +1,23 @@
+# REQ-DISPLAY-DEDUP-087 — 게임이 새 프레임을 쓰지 않으면 다시 그리지 않기 (1단계)
+
+사용자가 조사 보고서(docs/reports/2026-10-01-overlay-rendering-research.md)의 1·2단계 진행을 승인했다. 주행 HUD 표시 읽기에서 SHM sequence가 직전 게시와 같으면(게임이 새 프레임을 쓰지 않음) 같은 값을 다시 게시하지 않아 HUD가 동일 화면을 다시 그리지 않게 한다. 새로 표시된 HUD가 값을 받도록 동일 값도 100ms마다는 게시한다. 신선도 판정(150ms 무데이터 시 비표시)은 유지한다. 성능 로그에 `drivingDuplicateFrames`를 추가한다.
+
+# REQ-SURFACE-LOG-087 — HUD 표시 면적 로그 (1단계)
+
+layered 창 비용은 면적에 비례하므로, 보이는 HUD 창의 물리 픽셀 크기와 합계를 바뀔 때마다 `OVERLAY_SURFACES`로 기록한다. 표시·배치는 바꾸지 않는다.
+
+# REQ-GUIDE-087 — 끊김 대응 사용자 안내 (1단계)
+
+README_KO에 SimHub·RaceLab 공통 권장을 근거로 테두리 없는 창, 게임 내 FPS 제한, G-Sync 예외, 주사율 통일 안내를 추가한다.
+
+# REQ-N-THREADED-087 — N 계기판 HUD별 독립 CPU 렌더러 시험 경로 (2단계)
+
+`--monitor-threaded-n`(기본 꺼짐, glass·DComp N보다 후순위)에서 N 계기판 일반형·확장형을 각각 전용 STA 스레드에서 그린다. 기존 WPF `AvanteClusterView`를 숨은 HwndSource에 두고 `RenderTargetBitmap`(같은 스레드 동기 합성, GPU 없음)으로 래스터해 네이티브 layered 클릭 통과 창에 `UpdateLayeredWindow`로 표시한다. 입력이나 움직임이 바뀔 때만 최대 60Hz로 캡처한다. WPF 패널 창은 위치·크기·편집을 계속 담당하고 첫 프레임 표시 후에만 내용을 접는다. 편집·미리보기·실패 시 WPF 표시로 돌아간다. 점화 연출은 게임 창당 한 번만 재생한다. 디자인·RPM 정책·수집·기록·전송 계약은 바꾸지 않는다. 실측은 사용자가 나중에 수행한다.
+
+# 보류 — N 계기판 점화 영역 축소
+
+1단계 후보였던 "점화 연출 확장 영역을 연출 중에만 사용"은 계기판 창 크기·배치 변환과 디자인을 바꾸므로 사용자 명시 결정 전까지 구현하지 않는다.
+
 # REQ-RELEASE-086 — 끊김 대응 구조 변경 0.8.4 커밋·릴리즈 (2026-10-01)
 
 사용자 보고: 게임 중 N 계기판뿐 아니라 모든 HUD가 0.2~0.5초 간격으로 뚝뚝 끊겨 사용할 수 없음. 작업 관리자에서 프로세스 우선순위를 높음으로 올려도 같음. 사용자는 GPU가 필요 없는 수준이면 CPU만 쓰는 방향을 선호하고, 실게임 테스트 없이 구조 변경을 0.8.4로 커밋·릴리즈하도록 요청했다. 아래 두 REQ와 버전·릴리즈 문서만 포함한다. 실게임·VR·물리 트리플 모니터 효과는 NOT TESTED이며 Monitor RED를 유지한다. Windows 패키지 빌드·태그·GitHub Latest 게시는 Windows 환경에서 `scripts/build-release.ps1`, `scripts/publish-github-release.ps1`로 수행한다. 결과: docs/reports/2026-10-01-release-0.8.4.md.

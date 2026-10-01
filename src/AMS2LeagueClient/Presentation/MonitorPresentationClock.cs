@@ -11,15 +11,20 @@ using Microsoft.Win32.SafeHandles;
 namespace AMS2LeagueClient.Presentation
 {
     // Display interpolation only. No SHM reads, capture, session projection or upload here.
-    // One shared timer runs only while a visible hardware Monitor surface needs motion.
+    // One timer per UI thread runs only while a visible hardware Monitor surface, or a surface
+    // presented by its own HUD thread, needs motion.
     internal static class MonitorPresentationClock
     {
-        private static EventHandler? _frames;
-        private static Run? _run;
+        [ThreadStatic] private static EventHandler? _frames;
+        [ThreadStatic] private static Run? _run;
+        // Hidden sources whose content a HUD thread rasterizes itself (ThreadedAvanteHud).
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<HwndSource, object> ExternalSources =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<HwndSource, object>();
         internal static bool IsRunning => _run != null;
+        internal static void MarkExternallyPresented(HwndSource source) => ExternalSources.AddOrUpdate(source, ExternalSources);
         internal static bool CanUse(FrameworkElement? owner) => HasVisibleContent(owner)
             && PresentationSource.FromVisual(owner) is HwndSource source
-            && source.CompositionTarget.RenderMode == RenderMode.Default;
+            && (source.CompositionTarget.RenderMode == RenderMode.Default || ExternalSources.TryGetValue(source, out _));
 
         internal static bool HasVisibleContent(FrameworkElement? owner)
         {

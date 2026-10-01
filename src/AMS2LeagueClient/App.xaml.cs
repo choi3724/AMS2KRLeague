@@ -85,14 +85,17 @@ namespace AMS2LeagueClient
                 }
 
                 _overlay = new OverlayWindow(startupPolicy.Diagnostic, useGlass: startupPolicy.UseGlass,
-                    useRetainedN: startupPolicy.UseRetainedN, useSoftwareRendering: startupPolicy.UseSoftwareRendering);
+                    useRetainedN: startupPolicy.UseRetainedN, useSoftwareRendering: startupPolicy.UseSoftwareRendering,
+                    useThreadedN: startupPolicy.UseThreadedN);
                 _overlay.RetainedNStatus += message => _logger?.Info("RETAINED_N", message);
+                _overlay.ThreadedNStatus += message => _logger?.Info("THREADED_N", message);
                 _logger.Info("MONITOR_PRESENTATION_PATH", (_overlay.UsesGlass ? "dwm-glass" : "wpf-layered")
                     + (_overlay.UsesSoftwareRendering ? " render=cpu" : " render=gpu")
                     + (startupPolicy.HardwareRequested ? " hardware-requested" : string.Empty)
                     + (startupPolicy.UseGlass && !_overlay.UsesGlass ? " glass-unavailable" : string.Empty)
                     + (startupPolicy.LayeredRequested ? " layered-requested" : string.Empty)
-                    + (startupPolicy.UseRetainedN ? " retained-n-requested" : string.Empty));
+                    + (startupPolicy.UseRetainedN ? " retained-n-requested" : string.Empty)
+                    + (_overlay.UsesThreadedN ? " threaded-n" : startupPolicy.ThreadedNRequested ? " threaded-n-unavailable" : string.Empty));
                 _overlay.StartVr(message =>
                 {
                     status.VrText = message;

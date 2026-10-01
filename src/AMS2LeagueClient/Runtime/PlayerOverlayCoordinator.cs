@@ -45,7 +45,9 @@ namespace AMS2LeagueClient.Runtime
         private int _drivingLocalIndex = -1, _drivingUpdateCount;
         // WPF callbacks are not GPU presents. Keep this separate from data/update rates.
         private long _lastRenderTicks, _renderGapTicks, _renderMaxGapTicks, _drivingMaxWorkTicks;
-        private int _renderIntervals, _renderOverBudget, _drivingRejected;
+        private int _renderIntervals, _renderOverBudget, _drivingRejected, _drivingDuplicates;
+        private DrivingTelemetrySample? _lastDrivingSample;
+        private uint _lastDrivingSequence;
         private TimeSpan _lastRenderTime = TimeSpan.MinValue;
         private DateTimeOffset _nextSpeedDiagnosticAt;
         private double _drivingRate;
@@ -55,6 +57,7 @@ namespace AMS2LeagueClient.Runtime
         private readonly Stopwatch _performanceClock = Stopwatch.StartNew();
         private static readonly long UiCadenceTicks = (long)(Stopwatch.Frequency / 20.0);
         private static readonly TimeSpan DrivingSnapshotWindow = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan DuplicateRepublishInterval = TimeSpan.FromMilliseconds(100);
         private long _nextUiDueTicks = UiCadenceTicks;
         private TelemetryReadThread? _telemetryThread;
         private TelemetrySnapshot? _latest;
@@ -83,6 +86,7 @@ namespace AMS2LeagueClient.Runtime
         private bool _sharedMemoryAttached;
         private readonly SequenceCounterSampler _sequenceCounterSampler = new SequenceCounterSampler(TimeSpan.FromSeconds(30));
         private bool _styleLogged;
+        private string _lastSurfaceDescription = string.Empty;
         private TimeSpan _lastCpuTime;
         private DateTimeOffset _lastPerformanceAt = DateTimeOffset.UtcNow;
         private volatile bool _disposed;
@@ -311,6 +315,7 @@ namespace AMS2LeagueClient.Runtime
             {
                 _lastRenderTicks = 0;
                 _lastRenderTime = TimeSpan.MinValue;
+                _lastDrivingSample = null; // A HUD shown again must receive the current frame.
                 return;
             }
             TimeSpan renderingTime = ((RenderingEventArgs)eventArgs).RenderingTime;
@@ -336,16 +341,35 @@ namespace AMS2LeagueClient.Runtime
                 sample = _reader.TryReadDriving(_drivingLocalIndex, _sessionTracker.Generation, snapshot.GameStateRaw, snapshot.SessionStateRaw);
                 if (sample == null) _drivingRejected++;
             }
-            if (sample != null)
+            if (sample != null && IsUnchangedGameFrame(sample, _reader.LastDrivingSequence))
+            {
+                // The game has not written a new frame since the last display read. Keep the
+                // live state fresh but do not republish identical values; the HUDs skip a redraw.
+                _lastDrivingDataAt = sample.CapturedAt;
+                _drivingDuplicates++;
+            }
+            else if (sample != null)
             {
                 _lastDrivingDataAt = sample.CapturedAt;
+                _lastDrivingSample = sample;
+                _lastDrivingSequence = _reader.LastDrivingSequence;
                 _overlay.UpdateDrivingSample(sample);
                 _drivingUpdateCount++;
             }
             else if (DateTimeOffset.UtcNow - _lastDrivingDataAt > TimeSpan.FromMilliseconds(150))
+            {
+                _lastDrivingSample = null;
                 _overlay.UpdateDrivingSample(null);
+            }
             _drivingMaxWorkTicks = Math.Max(_drivingMaxWorkTicks, Stopwatch.GetTimestamp() - ticks);
         }
+
+        // Bounded: an unchanged frame is still republished every 100 ms so a HUD that was just
+        // created or shown receives the current values even while the game is paused.
+        private bool IsUnchangedGameFrame(DrivingTelemetrySample sample, uint sequence)
+            => _lastDrivingSample is { } previous && sequence == _lastDrivingSequence
+                && previous.Generation == sample.Generation && previous.ParticipantIndex == sample.ParticipantIndex
+                && sample.CapturedAt - previous.CapturedAt < DuplicateRepublishInterval;
 
         private void UiTick(object? sender, EventArgs eventArgs)
         {
@@ -683,6 +707,13 @@ namespace AMS2LeagueClient.Runtime
                 return;
             }
 
+            string surfaces = _overlay.DescribeVisibleSurfaces();
+            if (surfaces != _lastSurfaceDescription)
+            {
+                _lastSurfaceDescription = surfaces;
+                _logger.Info("OVERLAY_SURFACES", surfaces);
+            }
+
             using (System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess())
             {
                 DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -706,9 +737,10 @@ namespace AMS2LeagueClient.Runtime
                     + " renderIntervals=" + _renderIntervals
                     + " drivingWorkMaxMs=" + (_drivingMaxWorkTicks * 1000.0 / Stopwatch.Frequency).ToString("0.0", CultureInfo.InvariantCulture)
                     + " drivingReadRejected=" + _drivingRejected
+                    + " drivingDuplicateFrames=" + _drivingDuplicates
                     + " wpfRenderTier=" + (RenderCapability.Tier >> 16));
                 _lastRenderTicks = _renderGapTicks = _renderMaxGapTicks = _drivingMaxWorkTicks = 0;
-                _renderIntervals = _renderOverBudget = _drivingRejected = 0;
+                _renderIntervals = _renderOverBudget = _drivingRejected = _drivingDuplicates = 0;
                 _lastCpuTime = cpu;
                 _lastPerformanceAt = now;
             }
@@ -719,7 +751,7 @@ namespace AMS2LeagueClient.Runtime
         private void Detach(string reason)
         {
             int oldPid = Interlocked.Exchange(ref _processId, -1);
-            _drivingLocalIndex = -1; _lastDrivingDataAt = DateTimeOffset.MinValue;
+            _drivingLocalIndex = -1; _lastDrivingDataAt = DateTimeOffset.MinValue; _lastDrivingSample = null;
             Interlocked.Exchange(ref _latest, null);
             _lastReadStatus = TelemetryReadStatus.MappingUnavailable;
             _sharedMemoryAttached = false;

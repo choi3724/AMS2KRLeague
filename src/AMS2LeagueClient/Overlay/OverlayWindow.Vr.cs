@@ -88,6 +88,25 @@ namespace AMS2LeagueClient.Overlay
                 area.Dpi, true, false, area.MonitorHandle);
         }
 
+        // Visible HUD surfaces in physical pixels. Layered window cost scales with area, so the
+        // performance log records each surface and the total when it changes.
+        public string DescribeVisibleSurfaces()
+        {
+            var parts = new List<string>();
+            long total = 0;
+            foreach (Window window in HudWindows())
+            {
+                if (!window.IsVisible || window.Opacity <= 0) continue;
+                OverlayBounds bounds = window is AuxiliaryOverlayWindow panel ? panel.ReadPhysicalBounds()
+                    : OverlayWindowInterop.ReadPhysicalBounds(new System.Windows.Interop.WindowInteropHelper(window).Handle);
+                if (bounds.Width <= 0 || bounds.Height <= 0) continue;
+                string key = window is AuxiliaryOverlayWindow auxiliary ? auxiliary.ComponentKey : OverlayComponentKeys.TimingTower;
+                parts.Add(key + "=" + bounds.Width + "x" + bounds.Height);
+                total += (long)bounds.Width * bounds.Height;
+            }
+            return "count=" + parts.Count + " totalPixels=" + total + (parts.Count == 0 ? string.Empty : " " + string.Join(" ", parts));
+        }
+
         private IEnumerable<Window> HudWindows()
         {
             yield return this;

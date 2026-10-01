@@ -208,7 +208,8 @@ namespace AMS2LeagueClient.Presentation
             new[] { Color.FromArgb(0,255,158,14), Color.FromArgb(92,239,133,8), Color.FromArgb(230,255,190,40), Color.FromRgb(255,239,153), Color.FromRgb(190,110,12) },
             new[] { Color.FromArgb(0,255,48,25), Color.FromArgb(92,207,28,15), Color.FromArgb(230,255,76,42), Color.FromRgb(255,212,185), Color.FromRgb(172,37,24) }
         };
-        private static readonly Geometry MotionClip = new RectangleGeometry(new Rect(0, 0, 2048, 623));
+        // Shared statics are frozen so a view built on another UI thread can draw them.
+        private static readonly Geometry MotionClip = FrozenClip(new RectangleGeometry(new Rect(0, 0, 2048, 623)));
         private static readonly Geometry InnerRing = Sector(160, 187, 140, 400);
         private readonly DrawingVisual _rpmNumbers = new DrawingVisual();
         private readonly List<ScaleTransform> _numberScales = new List<ScaleTransform>();
@@ -308,10 +309,11 @@ namespace AMS2LeagueClient.Presentation
         public const double TickOuterRadius = 349, MajorTickInnerRadius = 331, MinorTickInnerRadius = 340;
         private static readonly Pen MajorTickPen = FrozenPen(Brushes.AliceBlue, 3.2), MinorTickPen = FrozenPen(Brushes.AliceBlue, 1.7);
         private static readonly Geometry TickRing = Sector(315, 362, 140, 400);
-        private static readonly Geometry OriginalWithoutTicks = new CombinedGeometry(GeometryCombineMode.Exclude,
-            new RectangleGeometry(new Rect(0, 0, 2048, 750)), new CombinedGeometry(GeometryCombineMode.Intersect, TickRing, MotionClip));
-        private static readonly Geometry OriginalWithoutTicksAndBars = new CombinedGeometry(GeometryCombineMode.Exclude,
-            OriginalWithoutTicks, AvanteBarGauge.Matte());
+        private static readonly Geometry OriginalWithoutTicks = FrozenClip(new CombinedGeometry(GeometryCombineMode.Exclude,
+            new RectangleGeometry(new Rect(0, 0, 2048, 750)), new CombinedGeometry(GeometryCombineMode.Intersect, TickRing, MotionClip)));
+        private static readonly Geometry OriginalWithoutTicksAndBars = FrozenClip(new CombinedGeometry(GeometryCombineMode.Exclude,
+            OriginalWithoutTicks, AvanteBarGauge.Matte()));
+        private static Geometry FrozenClip(Geometry geometry) { geometry.Freeze(); return geometry; }
         private static readonly Pen GaugeEdge = FrozenPen(new SolidColorBrush(Color.FromArgb(165, 172, 214, 226)), 1.5);
         private static readonly Pen GaugeMarkShadow = FrozenPen(new SolidColorBrush(Color.FromArgb(90, 6, 16, 24)), 2.8);
         private static readonly Pen GaugeMarkHighlight = FrozenPen(new SolidColorBrush(Color.FromArgb(165, 231, 245, 250)), 1.5);
@@ -321,6 +323,8 @@ namespace AMS2LeagueClient.Presentation
         private double _flashOpacity = 1;
         public bool RedFlashOn => _flashOpacity >= .56;
         public bool IsRedFlashing => _flashSubscribed;
+        // True while any frame-driven motion is running; an external presenter keeps capturing then.
+        internal bool IsAnimating => _flashSubscribed || _rpmMotion.IsActive || _numberPulse.IsActive || _ignitionMotion.IsActive;
         private static readonly DependencyProperty RpmPositionProperty = DependencyProperty.Register("RpmPosition", typeof(double),
             typeof(AvanteClusterView), new PropertyMetadata(0.0, (s, e) => ((AvanteClusterView)s).DrawMotion()));
         public bool Expanded { get; }
@@ -491,6 +495,10 @@ namespace AMS2LeagueClient.Presentation
             _ignition.Opacity = _ignitionCore.Opacity = 0;
             IgnitionProgress = 1;
         }
+        // The intro plays once per game window. When presentation moves between the WPF view and a
+        // threaded view of the same HUD, the receiving view is told the intro was already shown.
+        internal bool HasStartedGameplayIgnition => _ignitionStarted || _ignitionQueued;
+        internal void MarkGameplayIgnitionShown() { _ignitionQueued = false; _ignitionStarted = true; }
         internal void BeginGameplayIgnition()
         {
             if (_ignitionStarted || _ignitionQueued) return;

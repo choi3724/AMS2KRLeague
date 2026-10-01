@@ -83,7 +83,7 @@ namespace AMS2LeagueClient.Overlay
         private bool _closing;
 
         public OverlayWindow(bool diagnostic, string? layoutPath = null, bool useGlass = false, bool useRetainedN = false,
-            bool useSoftwareRendering = false)
+            bool useSoftwareRendering = false, bool useThreadedN = false)
         {
             _diagnostic = diagnostic;
             InitializeComponent();
@@ -91,6 +91,7 @@ namespace AMS2LeagueClient.Overlay
             _useGlass = useGlass && OverlayWindowInterop.IsGlassAvailable();
             _useSoftwareRendering = useSoftwareRendering && !_useGlass;
             _retainedNRequested = useRetainedN && _useGlass;
+            _threadedNRequested = useThreadedN && !_useGlass;
             if (_useGlass) AllowsTransparency = false;
             SizeChanged += (sender, args) => ResizeTimingPreview();
             string resolvedLayoutPath = layoutPath ?? Path.Combine(
@@ -116,6 +117,7 @@ namespace AMS2LeagueClient.Overlay
         private void SynchronizeSurfaces()
         {
             ReleaseRetainedN();
+            ReleaseThreadedN();
             _lastSessionKey = _lastEventKey = _lastRaceControlKey = _lastWaitingKey = string.Empty;
             if (_layoutProfile.IsEnabled(OverlayComponentKeys.TimingTower))
                 TimingHost.Child = TimingHud ??= new OverlayHudView();
@@ -248,6 +250,7 @@ namespace AMS2LeagueClient.Overlay
             _speedView?.ApplyShadow(settings.SpeedShadowColor);
             _gearView?.ApplyShadow(settings.GearShadowColor);
             RefreshRetainedNSettings();
+            PublishThreadedNSettings();
             RefreshDrivingViews();
         }
 
@@ -272,9 +275,10 @@ namespace AMS2LeagueClient.Overlay
             double? maximum = snapshot.ViewedVehicleTelemetry?.MaxRpm;
             if (AvanteRpmScale.IsValidEngineMaximum(maximum)) AvanteEngineMaximum = maximum;
             _lastTrackTemperature = snapshot.TrackTemperature;
-            if (!_retainedNActive && IsDrivingVisible(5)) _avanteView?.SetSession(snapshot);
-            if (!_retainedNActive && IsDrivingVisible(6)) _avanteExpandedView?.SetSession(snapshot);
+            if (!_retainedNActive && !IsThreadedNPresenting(5) && IsDrivingVisible(5)) _avanteView?.SetSession(snapshot);
+            if (!_retainedNActive && !IsThreadedNPresenting(6) && IsDrivingVisible(6)) _avanteExpandedView?.SetSession(snapshot);
             UpdateRetainedNSession(snapshot);
+            PublishThreadedNSession(snapshot);
             if (IsDrivingVisible(4)) _dashboardView?.SetSession(_lastTrackTemperature, _viewModel.Timing.RemainingTimeText);
         }
 
@@ -313,8 +317,9 @@ namespace AMS2LeagueClient.Overlay
             if (IsDrivingVisible(1)) _pedalGaugeView?.SetHistory(shown);
             if (IsDrivingVisible(2)) _speedView?.SetSample(shown.Current);
             if (IsDrivingVisible(3)) _gearView?.SetSample(shown.Current);
-            if (!_retainedNActive && IsDrivingVisible(5)) _avanteView?.SetSample(shown.Current, animatePreview);
-            if (!_retainedNActive && IsDrivingVisible(6)) _avanteExpandedView?.SetSample(shown.Current, animatePreview);
+            if (!_retainedNActive && !IsThreadedNPresenting(5) && IsDrivingVisible(5)) _avanteView?.SetSample(shown.Current, animatePreview);
+            if (!_retainedNActive && !IsThreadedNPresenting(6) && IsDrivingVisible(6)) _avanteExpandedView?.SetSample(shown.Current, animatePreview);
+            if (!_layoutEditing) PublishThreadedNSample(shown.Current);
             if (IsDrivingVisible(4)) _dashboardView?.SetSample(shown.Current, _layoutEditing && _drivingHistory.Current == null ? "P12" : _viewModel.Timing.PositionText.Split('/')[0].Trim());
             NotifyDrivingDemand();
         }
@@ -367,6 +372,7 @@ namespace AMS2LeagueClient.Overlay
                 {
                     double opacity = _layoutProfile.GetOpacity(window is AuxiliaryOverlayWindow panel ? panel.ComponentKey : OverlayComponentKeys.TimingTower);
                     root.Children[0].Opacity = opacity;
+                    if (window is AuxiliaryOverlayWindow { IsExternallyPresented: true }) continue;
                     root.Children[0].Visibility = opacity > 0 ? Visibility.Visible : Visibility.Hidden;
                 }
             RefreshDrivingViews();
@@ -408,6 +414,7 @@ namespace AMS2LeagueClient.Overlay
         {
             _closing = true;
             ReleaseRetainedN();
+            ReleaseThreadedN();
             _drivingPreviewTimer.Stop();
             StopVr();
             if (_layoutEditing)
@@ -545,6 +552,7 @@ namespace AMS2LeagueClient.Overlay
         {
             if (_layoutEditing) return true;
             ReleaseRetainedN();
+            ReleaseThreadedN();
             if (_lastGameWindow == null || !_lastGameWindow.HasValidClientRect)
             {
                 BeginLayoutPreview(false);
@@ -638,6 +646,7 @@ namespace AMS2LeagueClient.Overlay
             _waitingWindow?.HideOverlay();
             ShowGameplaySurfaces(gameWindow, false);
             SyncRetainedN();
+            SyncThreadedN();
             if (!gameWindow.IsForeground || gameWindow.IsMinimized) return;
             if (!_ignitionGameKnown || _ignitionGameHandle != gameWindow.Handle)
             {
@@ -645,11 +654,13 @@ namespace AMS2LeagueClient.Overlay
                 _ignitionGameHandle = gameWindow.Handle;
                 _avanteView?.RearmGameplayIgnition();
                 _avanteExpandedView?.RearmGameplayIgnition();
+                RearmThreadedNIgnition();
             }
             if (_retainedNWorker == null && !_retainedNActive)
             {
                 if (IsDrivingVisible(5)) _avanteView?.BeginGameplayIgnition();
                 if (IsDrivingVisible(6)) _avanteExpandedView?.BeginGameplayIgnition();
+                BeginThreadedNIgnition();
             }
         }
 
@@ -922,6 +933,7 @@ namespace AMS2LeagueClient.Overlay
         private void HideGameplayWindows()
         {
             ReleaseRetainedN();
+            ReleaseThreadedN();
             foreach (AuxiliaryOverlayWindow? panel in _drivingWindows) panel?.HideOverlay();
             if (_drivingHistory.Current != null) { _drivingHistory.MarkStale(); RefreshDrivingViews(); }
             if (IsVisible) Hide();
@@ -1018,6 +1030,16 @@ namespace AMS2LeagueClient.Overlay
 
         public string ComponentKey { get; }
         public IntPtr Handle => _handle;
+        // A HUD thread draws this panel in its own native window; the WPF content stays collapsed so
+        // the shared WPF render thread has nothing to rasterize for it.
+        public bool IsExternallyPresented { get; private set; }
+        public void SetExternalPresentation(bool enabled)
+        {
+            if (IsExternallyPresented == enabled) return;
+            IsExternallyPresented = enabled;
+            _presentedContent.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+        }
+
         public void SetRetainedPresentation(bool enabled)
         {
             if (_retainedPresentation == enabled) return;
