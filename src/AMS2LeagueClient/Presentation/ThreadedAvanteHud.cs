@@ -23,7 +23,6 @@ namespace AMS2LeagueClient.Presentation
     {
         internal const double CompactDesignWidth = 569, CompactDesignHeight = 545;
         internal const double ExpandedDesignWidth = 820, ExpandedDesignHeight = 436;
-        private static readonly long CaptureIntervalTicks = Stopwatch.Frequency / 60;
 
         internal readonly struct Placement : IEquatable<Placement>
         {
@@ -134,7 +133,6 @@ namespace AMS2LeagueClient.Presentation
                 };
                 _host = new HwndSource(parameters) { SizeToContent = SizeToContent.WidthAndHeight };
                 _host.CompositionTarget.RenderMode = RenderMode.SoftwareOnly;
-                MonitorPresentationClock.MarkExternallyPresented(_host);
                 _host.RootVisual = _root;
                 _surface = new LayeredSurface();
             }
@@ -199,7 +197,7 @@ namespace AMS2LeagueClient.Presentation
         {
             if (Volatile.Read(ref _disposed) != 0 || _view == null || _surface == null || !_placement.Visible) return;
             long now = Stopwatch.GetTimestamp();
-            if (now - _lastCaptureTicks < CaptureIntervalTicks) return;
+            if (now - _lastCaptureTicks < HudFrameRate.FrameTicks * 9 / 10) return; // user-selected HUD rate
             bool animating = _view.IsAnimating;
             // Capture only when inputs or motion changed; one extra frame settles the last motion step.
             if (!_dirty && !animating && !_wasAnimating) { Interlocked.Increment(ref _skipped); return; }

@@ -233,6 +233,7 @@ namespace AMS2LeagueClient.Tests
                 ,("Threaded N is explicit and layered-only", ThreadedNIsExplicitAndLayeredOnly)
                 ,("N static resources are frozen for HUD threads", AvanteStaticResourcesAreFrozen)
                 ,("Threaded N presents off the UI thread and falls back for editing", ThreadedNPresentsOffTheUiThreadAndFallsBack)
+                ,("HUD refresh rate setting is normalized", HudRefreshRateSettingIsNormalized)
                 ,("Display signature tracks shown content", DisplaySignatureTracksShownContent)
                 ,("Timing views rebind only when content changes", TimingViewsRebindOnlyOnChange)
                 ,("N rest window keeps the dial position", AvanteRestWindowKeepsDialPosition)

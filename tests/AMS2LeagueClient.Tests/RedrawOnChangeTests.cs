@@ -14,6 +14,15 @@ namespace AMS2LeagueClient.Tests
 {
     internal static partial class Program
     {
+        private static void HudRefreshRateSettingIsNormalized()
+        {
+            AssertEqual(0, new DrivingHudSettings().Normalize().HudRefreshRate); // follows the monitor by default
+            AssertEqual(144, new DrivingHudSettings { HudRefreshRate = 144 }.Normalize().HudRefreshRate);
+            AssertEqual(30, new DrivingHudSettings { HudRefreshRate = 30 }.Normalize().HudRefreshRate);
+            AssertEqual(0, new DrivingHudSettings { HudRefreshRate = 77 }.Normalize().HudRefreshRate);
+            AssertEqual(0, new DrivingHudSettings { HudRefreshRate = -1 }.Normalize().HudRefreshRate);
+        }
+
         private static void DisplaySignatureTracksShownContent()
         {
             OverlayViewModel first = DemoSnapshotFactory.CreateShell(false).Timing;

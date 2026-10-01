@@ -83,6 +83,9 @@ namespace AMS2LeagueClient.Overlay
         private OverlayShellViewModel? _liveViewModelBeforePreview;
         private bool _closing;
 
+        internal static string DefaultLayoutPath => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AMS2KRLeague", "overlay-layout.json");
+
         public OverlayWindow(bool diagnostic, string? layoutPath = null, bool useGlass = false, bool useRetainedN = false,
             bool useSoftwareRendering = false, bool useThreadedN = false)
         {
@@ -95,10 +98,7 @@ namespace AMS2LeagueClient.Overlay
             _threadedNRequested = useThreadedN && !_useGlass;
             if (_useGlass) AllowsTransparency = false;
             SizeChanged += (sender, args) => ResizeTimingPreview();
-            string resolvedLayoutPath = layoutPath ?? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "AMS2KRLeague",
-                "overlay-layout.json");
+            string resolvedLayoutPath = layoutPath ?? DefaultLayoutPath;
             _layoutStore = new OverlayLayoutStore(resolvedLayoutPath);
             _layoutProfile = _layoutStore.Load();
             _layoutProfile.SetDrivingPanelDefaults();
@@ -223,6 +223,7 @@ namespace AMS2LeagueClient.Overlay
         private void ApplyDrivingAppearance()
         {
             DrivingHudSettings settings = GetDrivingHudSettings();
+            HudFrameRate.Apply(settings.HudRefreshRate);
             if (_telemetryHost != null)
             {
                 if (settings.TelemetryDesign == "racing")

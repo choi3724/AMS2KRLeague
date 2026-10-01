@@ -12,14 +12,14 @@ namespace AMS2LeagueClient.Presentation
     /// </summary>
     internal static class HudMotion
     {
-        public const int AnimationFrameRate = 144;
-
-        public static void ConfigureFrameRate()
+        // WPF fixes timeline metadata per process, so the HUD refresh setting applies to these
+        // animations from the next start. Null lets WPF follow the display.
+        public static void ConfigureFrameRate(int? framesPerSecond)
         {
             Timeline.DesiredFrameRateProperty.OverrideMetadata(
-                typeof(DoubleAnimation), new PropertyMetadata((int?)AnimationFrameRate));
+                typeof(DoubleAnimation), new PropertyMetadata(framesPerSecond));
             Timeline.DesiredFrameRateProperty.OverrideMetadata(
-                typeof(DoubleAnimationUsingKeyFrames), new PropertyMetadata((int?)AnimationFrameRate));
+                typeof(DoubleAnimationUsingKeyFrames), new PropertyMetadata(framesPerSecond));
         }
 
         public static void SlideIn(UIElement element, double fromX, double fromY, int durationMs)

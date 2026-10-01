@@ -11,20 +11,16 @@ using Microsoft.Win32.SafeHandles;
 namespace AMS2LeagueClient.Presentation
 {
     // Display interpolation only. No SHM reads, capture, session projection or upload here.
-    // One timer per UI thread runs only while a visible hardware Monitor surface, or a surface
-    // presented by its own HUD thread, needs motion.
+    // One timer per UI thread runs only while a visible Monitor HUD needs motion. It ticks at the
+    // user-selected HUD refresh rate (HudFrameRate; the monitor rate by default).
     internal static class MonitorPresentationClock
     {
         [ThreadStatic] private static EventHandler? _frames;
         [ThreadStatic] private static Run? _run;
-        // Hidden sources whose content a HUD thread rasterizes itself (ThreadedAvanteHud).
-        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<HwndSource, object> ExternalSources =
-            new System.Runtime.CompilerServices.ConditionalWeakTable<HwndSource, object>();
         internal static bool IsRunning => _run != null;
-        internal static void MarkExternallyPresented(HwndSource source) => ExternalSources.AddOrUpdate(source, ExternalSources);
+        // VR-only output hides Monitor surfaces (opacity 0), so HasVisibleContent excludes it.
         internal static bool CanUse(FrameworkElement? owner) => HasVisibleContent(owner)
-            && PresentationSource.FromVisual(owner) is HwndSource source
-            && (source.CompositionTarget.RenderMode == RenderMode.Default || ExternalSources.TryGetValue(source, out _));
+            && PresentationSource.FromVisual(owner) is HwndSource;
 
         internal static bool HasVisibleContent(FrameworkElement? owner)
         {
@@ -84,12 +80,14 @@ namespace AMS2LeagueClient.Presentation
                 try
                 {
                     var waits = new[] { _timer, Cancel.Token.WaitHandle };
-                    var clock = Stopwatch.StartNew(); long deadline = 0;
+                    var clock = Stopwatch.StartNew(); double deadline = 0;
                     while (!Cancel.IsCancellationRequested && !_dispatcher.HasShutdownStarted)
                     {
-                        // Absolute deadlines prevent drift. Coalesce work when the UI is busy.
-                        deadline = Math.Max(deadline + 1, (long)(clock.Elapsed.TotalSeconds * 144) + 1);
-                        long due = -Math.Max(1, (long)((deadline / 144.0 - clock.Elapsed.TotalSeconds) * 10_000_000));
+                        // Absolute deadlines prevent drift; a late tick is not made up in a burst.
+                        // The rate is re-read every tick so a settings change applies at once.
+                        double period = 1 / HudFrameRate.Current, now = clock.Elapsed.TotalSeconds;
+                        deadline = Math.Max(deadline + period, now + period / 4);
+                        long due = -Math.Max(1, (long)((deadline - now) * 10_000_000));
                         if (!SetWaitableTimer(_timer.SafeWaitHandle, ref due, 0, IntPtr.Zero, IntPtr.Zero, false))
                         {
                             Trace.TraceError("Monitor presentation waitable timer failed: {0}", Marshal.GetLastWin32Error());

@@ -20,8 +20,6 @@ namespace AMS2LeagueClient
 {
     public partial class App : Application
     {
-        static App() => HudMotion.ConfigureFrameRate();
-
         private readonly bool _startRuntime;
 
         public App() : this(true) { }
@@ -58,6 +56,7 @@ namespace AMS2LeagueClient
             string logDirectory = ValueAfter(args, "--log-dir") ?? Path.Combine(userDataRoot, "logs");
             _logger = new FileLogger(logDirectory);
             _logger.Info("CLIENT_VERSION", "product=AMS2_LEAGUE_OVERLAY version=" + ClientVersion());
+            ConfigureHudFrameRate();
             DispatcherUnhandledException += HandleDispatcherException;
 
             try
@@ -417,6 +416,26 @@ namespace AMS2LeagueClient
             if (_allowInteractiveErrors)
             {
                 MessageBox.Show("화면 처리 중 오류가 발생했습니다. 프로그램을 다시 실행해 주세요. 자세한 내용은 로그에 기록했습니다.", "AMS2 리그 오버레이 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Runs before any window: WPF accepts the animation frame-rate override only before the
+        // first animation uses it. The saved HUD refresh setting is read without side effects.
+        private void ConfigureHudFrameRate()
+        {
+            int setting = (new OverlayLayoutStore(OverlayWindow.DefaultLayoutPath).Load().DrivingHud ?? new DrivingHudSettings())
+                .Normalize().HudRefreshRate;
+            HudFrameRate.Apply(setting);
+            try
+            {
+                HudMotion.ConfigureFrameRate(HudFrameRate.TimelineRate);
+                _logger?.Info("HUD_FRAME_RATE", "setting=" + (setting == 0 ? "monitor" : setting + "Hz")
+                    + " current=" + HudFrameRate.Current.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+            }
+            catch (InvalidOperationException exception)
+            {
+                // Metadata already in use: WPF keeps following the display for its own animations.
+                _logger?.Error("HUD_FRAME_RATE_TIMELINE", exception);
             }
         }
 

@@ -43,6 +43,10 @@ namespace AMS2LeagueClient.Tests
                     var updates = type.GetField("_drivingUpdateCount", flags)!;
                     RenderingEventArgs Frame(double seconds) => (RenderingEventArgs)Activator.CreateInstance(typeof(RenderingEventArgs), flags, null, new object[] { TimeSpan.FromSeconds(seconds) }, null)!;
                     const int count = 144;
+                    // Display reads follow the HUD refresh setting; 144Hz lets every 1/144 s frame read.
+                    var rateType = type.Assembly.GetType("AMS2LeagueClient.Presentation.HudFrameRate")!;
+                    var applyRate = rateType.GetMethod("Apply", BindingFlags.Static | BindingFlags.NonPublic)!;
+                    applyRate.Invoke(null, new object[] { 144 });
                     for (int i = 1; i <= count; i++)
                     {
                         writer.Write(SharedMemoryLayout.SequenceNumber, (uint)(i * 2)); // one game write per frame
@@ -62,10 +66,22 @@ namespace AMS2LeagueClient.Tests
                     AssertEqual(count + 1, (int)updates.GetValue(coordinator)!);
                     AssertEqual(0L, reader.SuccessfulSnapshots);
                     AssertEqual(0, (int)type.GetField("_successCount", flags)!.GetValue(coordinator)!);
+                    // At 60Hz the same 1/144 s frames read at most 60 times per second.
+                    applyRate.Invoke(null, new object[] { 60 });
+                    int before = (int)updates.GetValue(coordinator)!;
+                    for (int i = 1; i <= count; i++)
+                    {
+                        writer.Write(SharedMemoryLayout.SequenceNumber, (uint)(1000 + i * 2));
+                        frame.Invoke(coordinator, new object?[] { null, Frame(3 + i / 144.0) });
+                    }
+                    int at60 = (int)updates.GetValue(coordinator)! - before;
+                    AssertTrue(at60 >= 58 && at60 <= 62);
+                    applyRate.Invoke(null, new object[] { 0 });
                     overlay.HideOverlay();
                     AssertFalse(overlay.WantsDrivingTelemetry);
-                    frame.Invoke(coordinator, new object?[] { null, Frame(2) });
-                    AssertEqual(count + 1, (int)updates.GetValue(coordinator)!);
+                    int beforeHidden = (int)updates.GetValue(coordinator)!;
+                    frame.Invoke(coordinator, new object?[] { null, Frame(5) });
+                    AssertEqual(beforeHidden, (int)updates.GetValue(coordinator)!);
                     Console.WriteLine("PROOF distinct display frames=144 local reads=144 duplicate frames skipped; unchanged game frames republished=0; hidden HUD reads=0 recording reads=0 (fixture, not measured FPS)");
                 }
                 finally { coordinator.Dispose(); overlay.Close(); }

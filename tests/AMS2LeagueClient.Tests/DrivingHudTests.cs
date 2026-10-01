@@ -326,9 +326,13 @@ namespace AMS2LeagueClient.Tests
                 dialog.ShowActivated = false; dialog.Left = -5000; dialog.Top = -5000;
                 dialog.WindowStartupLocation = WindowStartupLocation.Manual;
                 dialog.Show(); PumpDispatcher();
-                // Two existing font selectors plus the user-requested RPM maximum mode.
-                AssertEqual(2, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) != "최대 눈금 결정"));
+                // Two existing font selectors plus the user-requested RPM maximum mode and HUD refresh rate.
+                string[] namedSelectors = { "최대 눈금 결정", "갱신 빈도" };
+                AssertEqual(2, Descendants<ComboBox>(dialog).Count(box => !namedSelectors.Contains(System.Windows.Automation.AutomationProperties.GetName(box))));
                 AssertEqual(1, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) == "최대 눈금 결정"));
+                var refresh = Descendants<ComboBox>(dialog).Single(box => System.Windows.Automation.AutomationProperties.GetName(box) == "갱신 빈도");
+                AssertEqual("모니터 주사율과 같게 (자동)", (string)refresh.SelectedItem);
+                AssertEqual(DrivingHudSettings.HudRefreshRates.Length, refresh.Items.Count);
                 AssertTrue(dialog.ActualHeight <= SystemParameters.WorkArea.Height);
                 AssertEqual(6, Descendants<Button>(dialog).Count(button => button.Tag is string));
                 CaptureLayout((FrameworkElement)dialog.Content, "driving-settings-menu");

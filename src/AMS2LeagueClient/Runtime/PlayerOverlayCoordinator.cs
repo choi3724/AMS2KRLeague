@@ -49,6 +49,7 @@ namespace AMS2LeagueClient.Runtime
         private DrivingTelemetrySample? _lastDrivingSample;
         private uint _lastDrivingSequence;
         private TimeSpan _lastRenderTime = TimeSpan.MinValue;
+        private double _nextDrivingReadAt;
         private DateTimeOffset _nextSpeedDiagnosticAt;
         private double _drivingRate;
         private DateTimeOffset _lastDrivingDataAt = DateTimeOffset.MinValue;
@@ -143,7 +144,7 @@ namespace AMS2LeagueClient.Runtime
             if (active == _drivingSubscribed) return;
             _drivingSubscribed = active;
             if (active) CompositionTarget.Rendering += DrivingFrame;
-            else { CompositionTarget.Rendering -= DrivingFrame; _lastRenderTicks = 0; _lastRenderTime = TimeSpan.MinValue; }
+            else { CompositionTarget.Rendering -= DrivingFrame; _lastRenderTicks = 0; _lastRenderTime = TimeSpan.MinValue; _nextDrivingReadAt = 0; }
         }
 
         private void ProcessTick(object? sender, EventArgs eventArgs)
@@ -314,13 +315,20 @@ namespace AMS2LeagueClient.Runtime
             if (_disposed || Volatile.Read(ref _processId) < 0 || !_overlay.WantsDrivingTelemetry)
             {
                 _lastRenderTicks = 0;
-                _lastRenderTime = TimeSpan.MinValue;
+                _lastRenderTime = TimeSpan.MinValue; _nextDrivingReadAt = 0;
                 _lastDrivingSample = null; // A HUD shown again must receive the current frame.
                 return;
             }
             TimeSpan renderingTime = ((RenderingEventArgs)eventArgs).RenderingTime;
             if (renderingTime == _lastRenderTime) return;
             _lastRenderTime = renderingTime;
+            // Follow the user-selected HUD refresh rate (the monitor rate by default). A running
+            // deadline on WPF's own frame time averages exactly that rate even when the display
+            // rate is not a multiple of it; a late frame does not cause a catch-up burst.
+            double period = 1 / HudFrameRate.Current, frameAt = renderingTime.TotalSeconds;
+            if (_nextDrivingReadAt > 0 && frameAt < _nextDrivingReadAt - period * .1) return;
+            _nextDrivingReadAt = _nextDrivingReadAt > 0 && frameAt - _nextDrivingReadAt < period
+                ? _nextDrivingReadAt + period : frameAt + period;
             if (_lastRenderTicks != 0)
             {
                 long gap = ticks - _lastRenderTicks;
