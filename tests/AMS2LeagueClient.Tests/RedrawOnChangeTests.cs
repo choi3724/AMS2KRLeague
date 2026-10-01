@@ -14,13 +14,13 @@ namespace AMS2LeagueClient.Tests
 {
     internal static partial class Program
     {
-        private static void HudRefreshRateSettingIsNormalized()
+        private static void HudFrameLimitSettingIsNormalized()
         {
-            AssertEqual(0, new DrivingHudSettings().Normalize().HudRefreshRate); // follows the monitor by default
-            AssertEqual(144, new DrivingHudSettings { HudRefreshRate = 144 }.Normalize().HudRefreshRate);
-            AssertEqual(30, new DrivingHudSettings { HudRefreshRate = 30 }.Normalize().HudRefreshRate);
-            AssertEqual(0, new DrivingHudSettings { HudRefreshRate = 77 }.Normalize().HudRefreshRate);
-            AssertEqual(0, new DrivingHudSettings { HudRefreshRate = -1 }.Normalize().HudRefreshRate);
+            AssertEqual(60, new DrivingHudSettings().Normalize().HudFrameLimit); // fixed FPS cap, not the monitor
+            AssertEqual(144, new DrivingHudSettings { HudFrameLimit = 144 }.Normalize().HudFrameLimit);
+            AssertEqual(30, new DrivingHudSettings { HudFrameLimit = 30 }.Normalize().HudFrameLimit);
+            AssertEqual(60, new DrivingHudSettings { HudFrameLimit = 77 }.Normalize().HudFrameLimit);
+            AssertEqual(60, new DrivingHudSettings { HudFrameLimit = 0 }.Normalize().HudFrameLimit);
         }
 
         private static void DisplaySignatureTracksShownContent()

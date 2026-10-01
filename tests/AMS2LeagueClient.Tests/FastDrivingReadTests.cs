@@ -43,7 +43,7 @@ namespace AMS2LeagueClient.Tests
                     var updates = type.GetField("_drivingUpdateCount", flags)!;
                     RenderingEventArgs Frame(double seconds) => (RenderingEventArgs)Activator.CreateInstance(typeof(RenderingEventArgs), flags, null, new object[] { TimeSpan.FromSeconds(seconds) }, null)!;
                     const int count = 144;
-                    // Display reads follow the HUD refresh setting; 144Hz lets every 1/144 s frame read.
+                    // Display reads follow the HUD frame limit; 144 FPS lets every 1/144 s frame read.
                     var rateType = type.Assembly.GetType("AMS2LeagueClient.Presentation.HudFrameRate")!;
                     var applyRate = rateType.GetMethod("Apply", BindingFlags.Static | BindingFlags.NonPublic)!;
                     applyRate.Invoke(null, new object[] { 144 });
@@ -66,7 +66,7 @@ namespace AMS2LeagueClient.Tests
                     AssertEqual(count + 1, (int)updates.GetValue(coordinator)!);
                     AssertEqual(0L, reader.SuccessfulSnapshots);
                     AssertEqual(0, (int)type.GetField("_successCount", flags)!.GetValue(coordinator)!);
-                    // At 60Hz the same 1/144 s frames read at most 60 times per second.
+                    // At a 60 FPS limit the same 1/144 s frames read 60 times per second.
                     applyRate.Invoke(null, new object[] { 60 });
                     int before = (int)updates.GetValue(coordinator)!;
                     for (int i = 1; i <= count; i++)
@@ -76,7 +76,7 @@ namespace AMS2LeagueClient.Tests
                     }
                     int at60 = (int)updates.GetValue(coordinator)! - before;
                     AssertTrue(at60 >= 58 && at60 <= 62);
-                    applyRate.Invoke(null, new object[] { 0 });
+                    applyRate.Invoke(null, new object[] { 60 }); // default limit
                     overlay.HideOverlay();
                     AssertFalse(overlay.WantsDrivingTelemetry);
                     int beforeHidden = (int)updates.GetValue(coordinator)!;

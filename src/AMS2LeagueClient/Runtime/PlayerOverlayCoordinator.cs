@@ -322,9 +322,8 @@ namespace AMS2LeagueClient.Runtime
             TimeSpan renderingTime = ((RenderingEventArgs)eventArgs).RenderingTime;
             if (renderingTime == _lastRenderTime) return;
             _lastRenderTime = renderingTime;
-            // Follow the user-selected HUD refresh rate (the monitor rate by default). A running
-            // deadline on WPF's own frame time averages exactly that rate even when the display
-            // rate is not a multiple of it; a late frame does not cause a catch-up burst.
+            // Follow the user-selected HUD frame limit. A running deadline on WPF's own frame time
+            // averages exactly that limit at any display rate; a late frame causes no burst.
             double period = 1 / HudFrameRate.Current, frameAt = renderingTime.TotalSeconds;
             if (_nextDrivingReadAt > 0 && frameAt < _nextDrivingReadAt - period * .1) return;
             _nextDrivingReadAt = _nextDrivingReadAt > 0 && frameAt - _nextDrivingReadAt < period

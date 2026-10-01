@@ -420,22 +420,21 @@ namespace AMS2LeagueClient
         }
 
         // Runs before any window: WPF accepts the animation frame-rate override only before the
-        // first animation uses it. The saved HUD refresh setting is read without side effects.
+        // first animation uses it. The saved HUD frame limit is read without side effects.
         private void ConfigureHudFrameRate()
         {
-            int setting = (new OverlayLayoutStore(OverlayWindow.DefaultLayoutPath).Load().DrivingHud ?? new DrivingHudSettings())
-                .Normalize().HudRefreshRate;
-            HudFrameRate.Apply(setting);
+            int limit = (new OverlayLayoutStore(OverlayWindow.DefaultLayoutPath).Load().DrivingHud ?? new DrivingHudSettings())
+                .Normalize().HudFrameLimit;
+            HudFrameRate.Apply(limit);
             try
             {
-                HudMotion.ConfigureFrameRate(HudFrameRate.TimelineRate);
-                _logger?.Info("HUD_FRAME_RATE", "setting=" + (setting == 0 ? "monitor" : setting + "Hz")
-                    + " current=" + HudFrameRate.Current.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+                HudMotion.ConfigureFrameRate(HudFrameRate.Limit);
+                _logger?.Info("HUD_FRAME_LIMIT", "fps=" + HudFrameRate.Limit);
             }
             catch (InvalidOperationException exception)
             {
-                // Metadata already in use: WPF keeps following the display for its own animations.
-                _logger?.Error("HUD_FRAME_RATE_TIMELINE", exception);
+                // Metadata already in use: WPF's own animations keep their default pacing.
+                _logger?.Error("HUD_FRAME_LIMIT_TIMELINE", exception);
             }
         }
 

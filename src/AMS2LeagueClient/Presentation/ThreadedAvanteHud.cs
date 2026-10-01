@@ -197,7 +197,7 @@ namespace AMS2LeagueClient.Presentation
         {
             if (Volatile.Read(ref _disposed) != 0 || _view == null || _surface == null || !_placement.Visible) return;
             long now = Stopwatch.GetTimestamp();
-            if (now - _lastCaptureTicks < HudFrameRate.FrameTicks * 9 / 10) return; // user-selected HUD rate
+            if (now - _lastCaptureTicks < HudFrameRate.FrameTicks * 9 / 10) return; // user-selected HUD frame limit
             bool animating = _view.IsAnimating;
             // Capture only when inputs or motion changed; one extra frame settles the last motion step.
             if (!_dirty && !animating && !_wasAnimating) { Interlocked.Increment(ref _skipped); return; }

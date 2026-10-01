@@ -223,7 +223,7 @@ namespace AMS2LeagueClient.Overlay
         private void ApplyDrivingAppearance()
         {
             DrivingHudSettings settings = GetDrivingHudSettings();
-            HudFrameRate.Apply(settings.HudRefreshRate);
+            HudFrameRate.Apply(settings.HudFrameLimit);
             if (_telemetryHost != null)
             {
                 if (settings.TelemetryDesign == "racing")

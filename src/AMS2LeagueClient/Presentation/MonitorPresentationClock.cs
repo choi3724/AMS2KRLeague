@@ -12,7 +12,7 @@ namespace AMS2LeagueClient.Presentation
 {
     // Display interpolation only. No SHM reads, capture, session projection or upload here.
     // One timer per UI thread runs only while a visible Monitor HUD needs motion. It ticks at the
-    // user-selected HUD refresh rate (HudFrameRate; the monitor rate by default).
+    // user-selected HUD frame limit (HudFrameRate).
     internal static class MonitorPresentationClock
     {
         [ThreadStatic] private static EventHandler? _frames;

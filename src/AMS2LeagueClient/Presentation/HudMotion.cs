@@ -12,8 +12,8 @@ namespace AMS2LeagueClient.Presentation
     /// </summary>
     internal static class HudMotion
     {
-        // WPF fixes timeline metadata per process, so the HUD refresh setting applies to these
-        // animations from the next start. Null lets WPF follow the display.
+        // WPF fixes timeline metadata per process, so the HUD frame limit applies to these
+        // animations from the next start.
         public static void ConfigureFrameRate(int? framesPerSecond)
         {
             Timeline.DesiredFrameRateProperty.OverrideMetadata(

@@ -1,6 +1,6 @@
-# REQ-HUD-REFRESH-089 — HUD 화면 갱신 빈도 설정 (2026-10-01)
+# REQ-HUD-FRAME-LIMIT-089 — HUD 프레임 제한 설정 (2026-10-01)
 
-사용자 요청: 개발 PC(144Hz 모니터)에 맞춰 고정된 144Hz 대신 사용자가 HUD 갱신 빈도를 고르게 하고, 높을수록 사양을 더 쓴다고 안내한다. `DrivingHudSettings.HudRefreshRate`(0=모니터 주사율, 30·60·75·90·120·144·165·240Hz)를 색상·글꼴·핸들 설정에 추가한다. 움직임 시계(MonitorPresentationClock, 이제 소프트웨어 렌더 HUD도 사용), 주행 HUD 표시 읽기(WPF 프레임 시각 기준 누적 deadline), N 스레드 캡처는 즉시 따르고, WPF 내장 Timeline 애니메이션의 DesiredFrameRate는 프로세스당 한 번만 정할 수 있어 다음 실행부터 적용한다. 수집 30Hz와 순위 20Hz 갱신은 바꾸지 않는다.
+사용자 요청: 개발 PC(144Hz 모니터)에 맞춰 고정된 144Hz 대신 사용자가 HUD 최대 FPS를 고르게 하고, 높을수록 사양을 더 쓴다고 안내한다. FPS와 주사율은 다르므로 모니터에 맞추지 않는 프레임 제한으로 한다. `DrivingHudSettings.HudFrameLimit`(30·60·75·90·120·144·165·240 FPS, 기본 60)를 색상·글꼴·핸들 설정에 추가한다. 움직임 시계(MonitorPresentationClock, 이제 소프트웨어 렌더 HUD도 사용), 주행 HUD 표시 읽기(WPF 프레임 시각 기준 누적 deadline), N 스레드 캡처는 즉시 따르고, WPF 내장 Timeline 애니메이션의 DesiredFrameRate는 프로세스당 한 번만 정할 수 있어 다음 실행부터 적용한다. 수집 30Hz와 순위 20Hz 갱신은 바꾸지 않는다.
 
 # REQ-RELEASE-088 — 1·2단계와 다시 그리기 정리를 0.8.4에 포함 (2026-10-01)
 

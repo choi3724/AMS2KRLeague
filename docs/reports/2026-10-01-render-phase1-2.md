@@ -80,21 +80,21 @@ REQ-N-INTRO-AREA-088 [PARTIAL — 코드·테스트 작성, Windows 실행 없�
   - 저장 배치와 편집 화면은 전체 캔버스 그대로다. DComp N 시험 경로도 전체 캔버스를 유지한다.
   수용: `AvanteRestWindowKeepsDialPosition`(중심·모서리 3점이 ±0.5px 이내), `AvanteWindowUsesFullCanvasOnlyForIntroAndEditing`
 
-REQ-HUD-REFRESH-089 [PARTIAL — 코드·테스트 작성, Windows 실행 없음]
+REQ-HUD-FRAME-LIMIT-089 [PARTIAL — 코드·테스트 작성, Windows 실행 없음]
   144Hz의 출처:
   - 0.3.1에서 WPF 애니메이션 `DesiredFrameRate` 힌트로 들어왔다. 당시 문서에 "현재 PC는 두 디스플레이가 144Hz"라고 적혀 있다.
   - 0.7.2에서 같은 PC에 맞춰 움직임 시계를 144Hz로 만들었다. 60Hz 시험은 144Hz 화면과 박자가 맞지 않아 더 나빴다.
   - 즉 개발 PC 모니터에 맞춘 고정값이었다.
   변경:
-  - `DrivingHudSettings.HudRefreshRate`, `HudFrameRate`(신규, DWM 합성 주기로 모니터 주사율 판단)
+  - `DrivingHudSettings.HudFrameLimit`(기본 60 FPS, 모니터와 무관한 최대 FPS), `HudFrameRate`(신규)
   - `MonitorPresentationClock`(초 단위 deadline, 설정값 사용, 소프트웨어 HUD도 사용)
   - `HudMotion.ConfigureFrameRate(int?)`, App 시작 시 저장 설정 읽기
   - `PlayerOverlayCoordinator.DrivingFrame` 누적 deadline, `ThreadedAvanteHud` 캡처 주기
-  - 설정 창의 "HUD 화면 갱신 빈도" 항목과 안내 문구
+  - 설정 창의 "HUD 프레임 제한" 항목과 안내 문구
   수용:
-  - `HudRefreshRateSettingIsNormalized`
-  - `DrivingFramesDoNotThrottleLocalReads` 갱신: 144Hz 설정이면 144회, 60Hz 설정이면 144Hz 프레임에서 58~62회 읽는다.
-  - `DrivingHudRenderingAndSettings`: 설정 창의 갱신 빈도 선택 상자를 확인한다.
+  - `HudFrameLimitSettingIsNormalized`
+  - `DrivingFramesDoNotThrottleLocalReads` 갱신: 144 FPS 제한이면 144회, 60 FPS 제한이면 144Hz 프레임에서 58~62회 읽는다.
+  - `DrivingHudRenderingAndSettings`: 설정 창의 최대 FPS 선택 상자를 확인한다.
   - 누적 deadline 계산을 별도로 모의 계산했다. 60/144→60, 30/144→30, 75/165→75, 144/60→60.
 
 ## 요청하지 않은 변경
