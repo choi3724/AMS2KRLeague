@@ -50,15 +50,45 @@ REQ-N-THREADED-087 [PARTIAL — 시험 옵션, Windows 실행 없음]
   - `ThreadedNPresentsOffTheUiThreadAndFallsBack`: 첫 프레임 표시 → 외부 표시 전환 → 편집 시 해제·복귀
   - Windows에서 실행하지 않았다.
 
+REQ-REDRAW-ON-CHANGE-088 [PARTIAL — 코드·테스트 작성, Windows 실행 없음]
+  변경: `Core/Presentation/DisplaySignature.cs`(신규), `OverlayWindow.ApplyViewModel`·`ShowGameplaySurfaces`
+  원인:
+  - 순위·전후방·랩 타이밍의 표시 키에 SHM sequence가 들어 있었다. 그래서 게임 프레임마다(20Hz 상한) 새 모델로 다시 바인딩됐다.
+  - 문자열 색상이 매번 새 Brush로 변환되어 같은 화면을 다시 그렸다.
+  수정:
+  - 실시간 경로에서 모델의 모든 표시 값(순위 행 포함) 서명이 같으면 세 뷰의 바인딩을 건너뛴다.
+  - 편집·미리보기·활성화·불투명도 변경 때는 서명을 초기화해 항상 반영한다.
+  나머지 UI 점검 결과: 이미 값을 비교한 뒤 그린다.
+  - 속도·기어: 같은 문자열이면 변화 없음
+  - 페달 막대: 같은 목표값은 무시
+  - 대시보드: 표시 키 비교
+  - 세션·이벤트·레이스 컨트롤·대기: 키 비교
+  - N 계기판: 값 묶음 비교
+  - 그래프 스크롤·바늘 보간·점멸·연출은 움직임이므로 그대로 둔다.
+  수용: `DisplaySignatureTracksShownContent`, `TimingViewsRebindOnlyOnChange`
+
+REQ-N-INTRO-AREA-088 [PARTIAL — 코드·테스트 작성, Windows 실행 없음]
+  변경:
+  - `AvanteClusterView`: RestDesignArea, RestPlacement, DesignViewport, IsIgnitionRunning
+  - `OverlayWindow.PlaceAvante/PlaceAvantePanels`
+  - threaded 배치에 viewport 전달
+  동작:
+  - 평상시 창은 계기판 영역만 덮는다(설계 단위로 일반형 908×770, 확장형 2048×770).
+  - 전체 캔버스(1138×1090 / 2048×1090)는 시작 연출 중과 편집·미리보기 중에만 쓴다.
+  - 연출이 시작되는 프레임 전에 창을 키우고, 끝나면 다음 20Hz 갱신에서 줄인다.
+  - 창 영역에 정확히 대응하는 설계 영역을 뷰에 지정하므로, 두 크기에서 계기판 화면 위치가 같다.
+  - 저장 배치와 편집 화면은 전체 캔버스 그대로다. DComp N 시험 경로도 전체 캔버스를 유지한다.
+  수용: `AvanteRestWindowKeepsDialPosition`(중심·모서리 3점이 ±0.5px 이내), `AvanteWindowUsesFullCanvasOnlyForIntroAndEditing`
+
 ## 요청하지 않은 변경
 - 0건.
-- 1단계 후보였던 "N 점화 영역 축소"는 디자인 변경이라 사용자 결정 전까지 보류했다.
 
 ## 승인 대기
-- 버전 상향과 릴리즈는 하지 않았다. CHANGELOG에는 "Unreleased"로 기록했다.
-- 0.8.4가 아직 게시되지 않았으므로, 이번 변경을 0.8.4에 포함할지 0.8.5로 낼지 결정이 필요하다.
+- 사용자 결정에 따라 이번 변경은 미게시 0.8.4에 포함한다.
+- 릴리즈 절차: Windows에서 `build-release.ps1`(테스트 포함)을 실행한 뒤 태그와 게시를 진행한다.
 
 ## 발견했지만 고치지 않은 문제
+- VR 출력 타이머는 HUD 변화와 관계없이 매 프레임 텍스처를 합성한다. 시험 지원 기능이라 이번에는 바꾸지 않았다.
 - 기존 `SetRetainedPresentation`으로 접힌 내용을 `ApplyComponentOpacities`가 다시 Visible로 되돌릴 수 있다. retained N 시험 경로에 해당한다. 새 외부 표시 경로는 이 함수에서 예외 처리했다.
 - `UiTick`의 Background 우선순위: CPU 기본 경로에서는 144Hz 시계를 쓰지 않으므로 굶을 가능성이 낮다. 그래서 바꾸지 않았다.
 

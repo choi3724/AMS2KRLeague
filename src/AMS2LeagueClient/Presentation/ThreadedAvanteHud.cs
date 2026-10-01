@@ -30,11 +30,12 @@ namespace AMS2LeagueClient.Presentation
             internal readonly int X, Y, Width, Height;
             internal readonly byte Alpha;
             internal readonly bool Visible;
-            internal Placement(int x, int y, int width, int height, byte alpha, bool visible)
-            { X = x; Y = y; Width = width; Height = height; Alpha = alpha; Visible = visible; }
+            internal readonly Rect? Viewport; // design area shown; null = full ignition canvas
+            internal Placement(int x, int y, int width, int height, byte alpha, bool visible, Rect? viewport = null)
+            { X = x; Y = y; Width = width; Height = height; Alpha = alpha; Visible = visible; Viewport = viewport; }
             internal static readonly Placement Hidden = new Placement(0, 0, 0, 0, 0, false);
             public bool Equals(Placement other) => X == other.X && Y == other.Y && Width == other.Width
-                && Height == other.Height && Alpha == other.Alpha && Visible == other.Visible;
+                && Height == other.Height && Alpha == other.Alpha && Visible == other.Visible && Viewport == other.Viewport;
             public override bool Equals(object? obj) => obj is Placement other && Equals(other);
             public override int GetHashCode() => HashCode.Combine(X, Y, Width, Height, Alpha, Visible);
         }
@@ -167,6 +168,7 @@ namespace AMS2LeagueClient.Presentation
             double designHeight = _expanded ? ExpandedDesignHeight : CompactDesignHeight;
             double scale = Math.Min(placement.Width / designWidth, placement.Height / designHeight);
             _scale.ScaleX = _scale.ScaleY = scale;
+            _view!.DesignViewport = placement.Viewport;
             _view!.Width = placement.Width / scale;
             _view.Height = placement.Height / scale;
             _root!.Width = placement.Width;

@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Threading;
 using AMS2LeagueClient.Core.Presentation;
+using AMS2LeagueClient.Core.Process;
 using AMS2LeagueClient.Core.Telemetry;
 using AMS2LeagueClient.Presentation;
 
@@ -24,6 +25,40 @@ namespace AMS2LeagueClient.Overlay
         public event Action<string>? ThreadedNStatus;
 
         private AvanteClusterView? AvanteView(int slot) => slot == 0 ? _avanteView : _avanteExpandedView;
+        private readonly System.Windows.Rect?[] _nViewport = new System.Windows.Rect?[2];
+        private readonly long[] _threadedNIgnitionUntil = new long[2];
+
+        // The N window covers the full ignition canvas only while the intro can run or while the
+        // layout is edited; otherwise it shrinks to the instrument (layered cost scales with area).
+        // The DComp N computes its own canvas mapping and keeps the full window.
+        private OverlayBounds PlaceAvante(int panelIndex, OverlayBounds full)
+        {
+            int slot = panelIndex - 5;
+            bool rest = !_layoutEditing && !_layoutPreview && !_retainedNRequested && !IsNIgnitionRunning(slot);
+            var placement = rest ? AvanteClusterView.RestPlacement(full, slot == 1) : null;
+            System.Windows.Rect? viewport = placement?.Viewport;
+            _nViewport[slot] = viewport;
+            if (AvanteView(slot) is AvanteClusterView view) view.DesignViewport = viewport;
+            return placement?.Bounds ?? full;
+        }
+
+        private static OverlayBounds AvanteDefaultBounds(GameWindowSnapshot gameWindow, int panelIndex) => panelIndex == 5
+            ? new OverlayBounds(Math.Max(0, (gameWindow.Width - 569) / 2), Math.Max(0, gameWindow.Height - 565), 569, 545)
+            : new OverlayBounds(Math.Max(0, (gameWindow.Width - 820) / 2), Math.Max(0, gameWindow.Height - 456), 820, 436);
+
+        private void PlaceAvantePanels(GameWindowSnapshot gameWindow)
+        {
+            for (int i = 5; i <= 6; i++)
+            {
+                AuxiliaryOverlayWindow? panel = _drivingWindows[i];
+                if (panel == null || !panel.IsVisible || !_layoutProfile.IsEnabled(panel.ComponentKey)) continue;
+                panel.ShowAt(gameWindow, PlaceAvante(i, Resolve(panel.ComponentKey, AvanteDefaultBounds(gameWindow, i), gameWindow)));
+            }
+        }
+
+        private bool IsNIgnitionRunning(int slot)
+            => (_threadedN[slot] != null && System.Diagnostics.Stopwatch.GetTimestamp() < _threadedNIgnitionUntil[slot])
+                || AvanteView(slot)?.IsIgnitionRunning == true;
         // True while the threaded window, not the WPF view, shows this N HUD.
         private bool IsThreadedNPresenting(int panelIndex) => (panelIndex == 5 || panelIndex == 6) && _threadedNPresenting[panelIndex - 5];
 
@@ -45,7 +80,7 @@ namespace AMS2LeagueClient.Overlay
                 if (_threadedN[slot] == null) CreateThreadedN(slot);
                 OverlayBounds bounds = panel.ReadPhysicalBounds();
                 SetThreadedNPlacement(slot, new ThreadedAvanteHud.Placement(bounds.X, bounds.Y, bounds.Width, bounds.Height,
-                    (byte)Math.Round(Math.Clamp(opacity, 0, 1) * 255), bounds.Width > 0 && bounds.Height > 0));
+                    (byte)Math.Round(Math.Clamp(opacity, 0, 1) * 255), bounds.Width > 0 && bounds.Height > 0, _nViewport[slot]));
             }
         }
 
@@ -145,6 +180,9 @@ namespace AMS2LeagueClient.Overlay
                 if (hud == null || !_threadedNIgnitionPending[slot]) continue;
                 hud.BeginIgnition();
                 _threadedNIgnitionPending[slot] = false;
+                // The thread's view runs the intro; keep the full canvas for its duration.
+                _threadedNIgnitionUntil[slot] = System.Diagnostics.Stopwatch.GetTimestamp()
+                    + (long)((AvanteIgnitionSweep.DurationSeconds + .3) * System.Diagnostics.Stopwatch.Frequency);
             }
         }
     }

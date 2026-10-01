@@ -72,6 +72,7 @@ namespace AMS2LeagueClient.Overlay
         private DisplayMode _displayMode = DisplayMode.Gameplay;
         private string _lastBoundsKey = string.Empty;
         private string _lastSessionKey = string.Empty;
+        private string? _timingSignature;
         private string _lastEventKey = string.Empty;
         private string _lastRaceControlKey = string.Empty;
         private string _lastWaitingKey = string.Empty;
@@ -367,6 +368,7 @@ namespace AMS2LeagueClient.Overlay
         }
         private void ApplyComponentOpacities()
         {
+            _timingSignature = null; // A view shown again must receive the current model.
             foreach (Window window in HudWindows())
                 if (window.Content is Grid root && root.Children.Count > 0)
                 {
@@ -442,19 +444,25 @@ namespace AMS2LeagueClient.Overlay
                 _liveViewModelBeforePreview = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
                 return;
             }
-            ApplyViewModel(viewModel, animate);
+            ApplyViewModel(viewModel, animate, live: true);
         }
 
-        private void ApplyViewModel(OverlayShellViewModel viewModel, bool animate)
+        private void ApplyViewModel(OverlayShellViewModel viewModel, bool animate, bool live = false)
         {
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+            // The live model is rebuilt for every new game frame. Rebinding identical content still
+            // re-creates converted brushes and repaints, so skip the timing views when nothing they
+            // show changed. Internal refreshes (preview, edit, enable) always push and reset this.
+            string? timingSignature = live ? DisplaySignature.Of(viewModel.Timing) : null;
+            bool timingChanged = timingSignature == null || timingSignature != _timingSignature;
+            _timingSignature = timingSignature;
             if (IsComponentActive(OverlayComponentKeys.TimingTower))
             {
                 ResizeTimingPreview();
-                TimingHud?.SetViewModel(viewModel.Timing);
+                if (timingChanged) TimingHud?.SetViewModel(viewModel.Timing);
             }
-            if (IsComponentActive(OverlayComponentKeys.RelativeDrivers)) _relativeView?.SetViewModel(viewModel.Timing);
-            if (IsComponentActive(OverlayComponentKeys.LapTiming)) _lapTimingView?.SetViewModel(viewModel.Timing);
+            if (timingChanged && IsComponentActive(OverlayComponentKeys.RelativeDrivers)) _relativeView?.SetViewModel(viewModel.Timing);
+            if (timingChanged && IsComponentActive(OverlayComponentKeys.LapTiming)) _lapTimingView?.SetViewModel(viewModel.Timing);
 
             string sessionKey = viewModel.Session.PrimaryLabel + "\u001f" + viewModel.Session.PrimaryValue + "\u001f"
                 + viewModel.Session.PositionValue + "\u001f" + viewModel.Session.LapValue;
@@ -648,6 +656,7 @@ namespace AMS2LeagueClient.Overlay
             SyncRetainedN();
             SyncThreadedN();
             if (!gameWindow.IsForeground || gameWindow.IsMinimized) return;
+            bool compactIntro = IsNIgnitionRunning(0), expandedIntro = IsNIgnitionRunning(1);
             if (!_ignitionGameKnown || _ignitionGameHandle != gameWindow.Handle)
             {
                 _ignitionGameKnown = true;
@@ -661,6 +670,12 @@ namespace AMS2LeagueClient.Overlay
                 if (IsDrivingVisible(5)) _avanteView?.BeginGameplayIgnition();
                 if (IsDrivingVisible(6)) _avanteExpandedView?.BeginGameplayIgnition();
                 BeginThreadedNIgnition();
+            }
+            // An intro that starts now needs the full canvas before its first frame.
+            if (IsNIgnitionRunning(0) != compactIntro || IsNIgnitionRunning(1) != expandedIntro)
+            {
+                PlaceAvantePanels(gameWindow);
+                SyncThreadedN();
             }
         }
 
@@ -711,14 +726,16 @@ namespace AMS2LeagueClient.Overlay
                 _viewModel.RaceControl.IsExpanded);
 
             OverlayBounds[] drivingBounds = { defaults.Pedals, defaults.PedalGauge, defaults.Speed, defaults.Gear, defaults.Dashboard,
-                new OverlayBounds(Math.Max(0, (gameWindow.Width - 569) / 2), Math.Max(0, gameWindow.Height - 565), 569, 545),
-                new OverlayBounds(Math.Max(0, (gameWindow.Width - 820) / 2), Math.Max(0, gameWindow.Height - 456), 820, 436) };
+                AvanteDefaultBounds(gameWindow, 5), AvanteDefaultBounds(gameWindow, 6) };
             for (int i = 0; i < _drivingWindows.Length; i++)
             {
                 AuxiliaryOverlayWindow? panel = _drivingWindows[i];
                 if (panel == null) continue;
                 if (_layoutProfile.IsEnabled(panel.ComponentKey))
-                    panel.ShowAt(gameWindow, Resolve(panel.ComponentKey, drivingBounds[i], gameWindow));
+                {
+                    OverlayBounds bounds = Resolve(panel.ComponentKey, drivingBounds[i], gameWindow);
+                    panel.ShowAt(gameWindow, i >= 5 ? PlaceAvante(i, bounds) : bounds);
+                }
                 else panel?.HideOverlay();
             }
 
@@ -726,7 +743,10 @@ namespace AMS2LeagueClient.Overlay
             {
                 OverlayBounds tower = Resolve(OverlayComponentKeys.TimingTower, defaults.Timing, gameWindow);
                 _viewModel.Timing.ResizeRanking(LeftTowerLayoutMetrics.CalculateRankingRows(tower.Width, tower.Height, _diagnostic));
-                TimingHud?.SetViewModel(_viewModel.Timing);
+                // Rebind only when the resized model shows something new (see ApplyViewModel).
+                string timingSignature = DisplaySignature.Of(_viewModel.Timing);
+                if (_layoutEditing || timingSignature != _timingSignature) TimingHud?.SetViewModel(_viewModel.Timing);
+                _timingSignature = _layoutEditing ? null : timingSignature;
                 if (!_layoutEditing)
                 {
                     int contentHeight = (int)Math.Ceiling(TimingHud!.Height * tower.Width / LeftTowerLayoutMetrics.Width);

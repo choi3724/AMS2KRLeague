@@ -1,5 +1,7 @@
 # 0.8.4 릴리즈 — 모니터 HUD CPU 렌더링과 SHM 읽기 전용 스레드
 
+추가 포함(사용자 결정): 게임 새 프레임이 없을 때 주행 HUD 재게시 생략, 순위·전후방·랩 타이밍의 동일 내용 재바인딩 생략, N 계기판 창은 시작 연출·편집 중에만 전체 연출 영역 사용, HUD 면적 로그, 끊김 안내, 시험 옵션 `--monitor-threaded-n`. 결과: docs/reports/2026-10-01-render-phase1-2.md.
+
 사용자가 모든 HUD가 0.2~0.5초 간격으로 끊겨 사용할 수 없다고 보고했다. 프로세스 CPU 우선순위를 높여도 같았다. 기본 모니터 HUD를 WPF SoftwareOnly layered 창으로 바꿔 GPU readback 대기를 없애고(`--monitor-hardware`로 0.8.3 경로 복구), 30Hz SHM 읽기를 전용 스레드로, 주행 HUD 읽기를 한 번 복사·재시도로 바꿨다. Linux 교차 빌드 warning/error 0만 확인했고 Windows 테스트·패키지·실게임은 NOT TESTED, Monitor RED 유지. 자세한 결과는 docs/reports/2026-10-01-release-0.8.4.md. 아래는 이전 이력이다.
 
 # 0.8.3 릴리즈 — N 계기판 위치와 눈금 정렬

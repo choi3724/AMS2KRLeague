@@ -4,7 +4,7 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 현재 버전 및 공개 Latest: **0.8.4**
 
-0.8.4 변경: 모니터 HUD를 기본적으로 CPU로 그립니다(WPF SoftwareOnly + layered 투명 창). 게임이 GPU를 모두 쓸 때 HUD가 GPU 대기열에서 밀려 0.2~0.5초씩 멈추던 hardware layered 경로의 GPU readback 대기를 피하기 위한 변경입니다. 이전 GPU 표시 경로는 `--monitor-hardware`로 선택할 수 있습니다. Shared Memory 30Hz 읽기를 전용 스레드로 옮기고 주행 HUD 읽기를 한 번 복사·재시도 방식으로 바꿨습니다. 실제 게임에서의 효과는 검증 전이며 Monitor 성능 RED를 유지합니다.
+0.8.4 변경: 모니터 HUD를 기본적으로 CPU로 그립니다(WPF SoftwareOnly + layered 투명 창). 게임이 GPU를 모두 쓸 때 HUD가 GPU 대기열에서 밀려 0.2~0.5초씩 멈추던 hardware layered 경로의 GPU readback 대기를 피하기 위한 변경입니다. 이전 GPU 표시 경로는 `--monitor-hardware`로 선택할 수 있습니다. Shared Memory 30Hz 읽기를 전용 스레드로 옮기고 주행 HUD 읽기를 한 번 복사·재시도 방식으로 바꿨습니다. 모든 HUD는 값이나 움직임이 바뀔 때만 다시 그리고, N 계기판 창은 시작 연출 중에만 전체 연출 영역을 씁니다. 실제 게임에서의 효과는 검증 전이며 Monitor 성능 RED를 유지합니다.
 
 0.8.0 변경: 모니터 HUD의 기본 투명 표시를 DWM glass 경로로 전환해 기존 layered 출력의 동기 readback을 줄입니다. `--monitor-layered`로 기존 표시 경로를 선택할 수 있습니다. N DirectComposition은 `--monitor-retained-n`을 사용할 때만 켜집니다. 고부하 끊김은 남아 있어 Monitor 성능 RED를 유지합니다.
 

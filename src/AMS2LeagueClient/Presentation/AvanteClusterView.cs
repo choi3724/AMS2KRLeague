@@ -24,6 +24,40 @@ namespace AMS2LeagueClient.Presentation
         // grows so both full fire rings can travel outside the physical housing.
         internal const double CanvasTop = -150, CanvasHeight = 1090;
         internal const double CompactLeft = 455, CompactWidth = 1138, ExpandedWidth = 2048;
+        // Outside the ignition intro only the instrument itself needs a window: the compact
+        // housing crown reaches y=-15 and the footer ends at 750; the expanded housing spans
+        // 0..2048 x 0..750. A small margin keeps edge anti-aliasing.
+        internal static Rect RestDesignArea(bool expanded) => expanded ? new Rect(0, -20, 2048, 770) : new Rect(570, -20, 908, 770);
+        // Maps the full saved canvas window to the rest window and the exact design rectangle it shows.
+        internal static (OverlayBounds Bounds, Rect Viewport)? RestPlacement(OverlayBounds full, bool expanded)
+        {
+            double width = expanded ? ExpandedWidth : CompactWidth, left = expanded ? 0 : CompactLeft;
+            double scale = Math.Min(full.Width / width, full.Height / CanvasHeight);
+            if (!double.IsFinite(scale) || scale <= 0) return null;
+            double offsetX = (full.Width - width * scale) / 2 - left * scale;
+            double offsetY = (full.Height - CanvasHeight * scale) / 2 - CanvasTop * scale;
+            Rect rest = RestDesignArea(expanded);
+            int x0 = Math.Clamp((int)Math.Floor(offsetX + rest.X * scale), 0, full.Width - 1);
+            int y0 = Math.Clamp((int)Math.Floor(offsetY + rest.Y * scale), 0, full.Height - 1);
+            int x1 = Math.Clamp((int)Math.Ceiling(offsetX + rest.Right * scale), x0 + 1, full.Width);
+            int y1 = Math.Clamp((int)Math.Ceiling(offsetY + rest.Bottom * scale), y0 + 1, full.Height);
+            var viewport = new Rect((x0 - offsetX) / scale, (y0 - offsetY) / scale, (x1 - x0) / scale, (y1 - y0) / scale);
+            return (new OverlayBounds(full.X + x0, full.Y + y0, x1 - x0, y1 - y0), viewport);
+        }
+        private Rect? _designViewport;
+        // Null maps the full ignition canvas (the saved window); a rectangle maps exactly that design area.
+        internal Rect? DesignViewport
+        {
+            get => _designViewport;
+            set
+            {
+                if (_designViewport == value) return;
+                _designViewport = value;
+                _faceBitmap = null; // The face cache is keyed by size only.
+                InvalidateArrange(); InvalidateVisual();
+            }
+        }
+        internal bool IsIgnitionRunning => _ignitionQueued || _ignitionMotion.IsActive;
         internal static Geometry Housing(bool expanded)
         {
             if (expanded) return Geometry.Parse("M30,0 H2018 Q2048,0 2048,30 V720 Q2048,750 2018,750 H30 Q0,750 0,720 V30 Q0,0 30,0 Z");
@@ -716,6 +750,14 @@ namespace AMS2LeagueClient.Presentation
         }
         protected override Size ArrangeOverride(Size finalSize)
         {
+            if (_designViewport is Rect viewport && viewport.Width > 0 && viewport.Height > 0)
+            {
+                double fit = Math.Min(finalSize.Width / viewport.Width, finalSize.Height / viewport.Height);
+                _transform.Matrix = new Matrix(fit, 0, 0, fit, (finalSize.Width - viewport.Width * fit) / 2 - viewport.X * fit,
+                    (finalSize.Height - viewport.Height * fit) / 2 - viewport.Y * fit);
+                Clip = null;
+                return base.ArrangeOverride(finalSize);
+            }
             double width = Expanded ? ExpandedWidth : CompactWidth, left = Expanded ? 0 : CompactLeft;
             double widthScale = finalSize.Width / width;
             bool fullCanvas = finalSize.Height + 1 >= CanvasHeight * widthScale;

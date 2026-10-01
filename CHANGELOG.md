@@ -1,19 +1,16 @@
 ﻿# Changelog
 
-## Unreleased
-
-- 게임이 SHM에 새 프레임을 쓰지 않은 렌더 프레임에서는 주행 HUD 값을 다시 게시하지 않음(100ms마다 재게시, `drivingDuplicateFrames` 로그).
-- 보이는 HUD 창의 물리 픽셀 크기·합계를 `OVERLAY_SURFACES`로 기록.
-- README_KO에 끊김 대응 안내 추가.
-- 시험 옵션 `--monitor-threaded-n`: N 계기판을 HUD별 전용 스레드에서 CPU로 그려 네이티브 layered 창에 표시(기본 꺼짐).
-- 실게임 효과 NOT TESTED, Monitor RED 유지.
-
 ## 0.8.4 — 2026-10-01
 
 - 모니터 HUD 기본 렌더링을 CPU(WPF SoftwareOnly, layered 투명 창)로 변경. 기존 hardware layered 경로는 GPU에서 그린 뒤 시스템 메모리로 다시 읽어 오는 과정에서 GPU를 독점한 게임 뒤에서 대기했음.
 - `--monitor-hardware`로 0.8.3의 GPU layered 경로를 선택 가능. `--monitor-glass`, `--monitor-retained-n`은 계속 GPU 경로.
 - Shared Memory 30Hz 읽기를 thread-pool 타이머에서 전용 스레드(고해상도 waitable timer, AboveNormal)로 이동.
 - 주행 HUD 읽기: 필드별 개별 읽기 대신 한 번 복사, 게임 쓰기와 겹치면 같은 프레임에서 최대 3회 재시도, 원본 전체 parsing과 잠금을 공유하지 않음. 30Hz 스냅샷 신선도 허용치 500ms→2s(표시 읽기는 실제 SHM에서 버전·상태·관전 차량·sequence를 직접 검증).
+- 게임이 SHM에 새 프레임을 쓰지 않은 렌더 프레임에서는 주행 HUD 값을 다시 게시하지 않음(100ms마다 재게시, `drivingDuplicateFrames` 로그).
+- 순위 타워·전후방·랩 타이밍: 내용이 같은 모델은 다시 바인딩하지 않음(문자열 색상 변환으로 매번 다시 그리던 문제).
+- N 계기판 창은 시작 연출 중과 배치 편집 중에만 전체 연출 영역을 쓰고, 그 외에는 계기판 영역으로 축소(일반형 약 44%, 확장형 약 29% 면적 감소). 저장 배치는 그대로.
+- 보이는 HUD 창의 물리 픽셀 크기·합계를 `OVERLAY_SURFACES`로 기록. README_KO에 끊김 대응 안내 추가.
+- 시험 옵션 `--monitor-threaded-n`: N 계기판을 HUD별 전용 스레드에서 CPU로 그려 네이티브 layered 창에 표시(기본 꺼짐).
 - 수집·기록·전송 cadence와 형식은 유지. 실게임 효과 NOT TESTED, Monitor RED 유지.
 
 ## 0.8.0 — 2026-09-25
