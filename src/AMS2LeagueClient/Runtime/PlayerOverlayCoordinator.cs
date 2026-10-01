@@ -45,7 +45,7 @@ namespace AMS2LeagueClient.Runtime
         private int _drivingLocalIndex = -1, _drivingUpdateCount;
         // WPF callbacks are not GPU presents. Keep this separate from data/update rates.
         private long _lastRenderTicks, _renderGapTicks, _renderMaxGapTicks, _drivingMaxWorkTicks;
-        private int _renderIntervals, _renderOverBudget, _drivingBusy, _drivingRejected;
+        private int _renderIntervals, _renderOverBudget, _drivingRejected;
         private TimeSpan _lastRenderTime = TimeSpan.MinValue;
         private DateTimeOffset _nextSpeedDiagnosticAt;
         private double _drivingRate;
@@ -54,8 +54,9 @@ namespace AMS2LeagueClient.Runtime
         private readonly Stopwatch _rateClock = Stopwatch.StartNew();
         private readonly Stopwatch _performanceClock = Stopwatch.StartNew();
         private static readonly long UiCadenceTicks = (long)(Stopwatch.Frequency / 20.0);
+        private static readonly TimeSpan DrivingSnapshotWindow = TimeSpan.FromSeconds(2);
         private long _nextUiDueTicks = UiCadenceTicks;
-        private System.Threading.Timer? _telemetryTimer;
+        private TelemetryReadThread? _telemetryThread;
         private TelemetrySnapshot? _latest;
         private int _processId = -1;
         private string _processName = string.Empty;
@@ -121,12 +122,13 @@ namespace AMS2LeagueClient.Runtime
         public void Start()
         {
             _status.SetWaiting();
-            _logger.Info("CLIENT_START", "mode=REAL_CLIENT readOnly=true shmRate=30Hz uiMaxRate=20Hz drivingReadCadence=EACH_RENDER_FRAME recordingReadRate=30Hz overlayWindows=BOUNDED_MULTI_HWND diagnostic=" + _diagnostic);
+            _logger.Info("CLIENT_START", "mode=REAL_CLIENT readOnly=true shmRate=30Hz shmReader=DEDICATED_THREAD uiMaxRate=20Hz drivingReadCadence=EACH_RENDER_FRAME recordingReadRate=30Hz overlayWindows=BOUNDED_MULTI_HWND diagnostic=" + _diagnostic);
             _overlay.DrivingTelemetryDemandChanged += UpdateDrivingSubscription;
             UpdateDrivingSubscription(this, EventArgs.Empty);
             _processTimer.Start();
             _uiTimer.Start();
-            _telemetryTimer = new System.Threading.Timer(ReadTelemetry, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(33.333));
+            _telemetryThread = new TelemetryReadThread("AMS2 telemetry read", 30, () => ReadTelemetry(null));
+            _telemetryThread.Start();
             ProcessTick(this, EventArgs.Empty);
         }
 
@@ -201,11 +203,8 @@ namespace AMS2LeagueClient.Runtime
                     return;
                 }
 
-                TelemetryReadResult result;
-                lock (_readerGate)
-                {
-                    result = _reader.TryRead();
-                }
+                // The reader guards its own view; the display read is never blocked by parsing.
+                TelemetryReadResult result = _reader.TryRead();
 
                 TelemetryReadStatus previousStatus = _lastReadStatus;
                 _lastReadStatus = result.Status;
@@ -329,16 +328,13 @@ namespace AMS2LeagueClient.Runtime
             // Do not apply recorder cadence to the display path.
             TelemetrySnapshot? snapshot = Volatile.Read(ref _latest);
             DrivingTelemetrySample? sample = null;
-            if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CapturedAt < TimeSpan.FromMilliseconds(500)
-                )
+            // The display read validates version, state, viewed car and sequence against live SHM
+            // itself. The snapshot only supplies the expected state, so a late 30 Hz read must not
+            // freeze the HUD; a snapshot older than the window still stops display reads.
+            if (snapshot != null && DateTimeOffset.UtcNow - snapshot.CapturedAt < DrivingSnapshotWindow)
             {
-                if (Monitor.TryEnter(_readerGate))
-                {
-                    try { sample = _reader.TryReadDriving(_drivingLocalIndex, _sessionTracker.Generation, snapshot.GameStateRaw, snapshot.SessionStateRaw); }
-                    finally { Monitor.Exit(_readerGate); }
-                    if (sample == null) _drivingRejected++;
-                }
-                else _drivingBusy++;
+                sample = _reader.TryReadDriving(_drivingLocalIndex, _sessionTracker.Generation, snapshot.GameStateRaw, snapshot.SessionStateRaw);
+                if (sample == null) _drivingRejected++;
             }
             if (sample != null)
             {
@@ -709,10 +705,10 @@ namespace AMS2LeagueClient.Runtime
                     + " renderGapsOver16ms=" + _renderOverBudget
                     + " renderIntervals=" + _renderIntervals
                     + " drivingWorkMaxMs=" + (_drivingMaxWorkTicks * 1000.0 / Stopwatch.Frequency).ToString("0.0", CultureInfo.InvariantCulture)
-                    + " drivingReadBusy=" + _drivingBusy + " drivingReadRejected=" + _drivingRejected
+                    + " drivingReadRejected=" + _drivingRejected
                     + " wpfRenderTier=" + (RenderCapability.Tier >> 16));
                 _lastRenderTicks = _renderGapTicks = _renderMaxGapTicks = _drivingMaxWorkTicks = 0;
-                _renderIntervals = _renderOverBudget = _drivingBusy = _drivingRejected = 0;
+                _renderIntervals = _renderOverBudget = _drivingRejected = 0;
                 _lastCpuTime = cpu;
                 _lastPerformanceAt = now;
             }
@@ -815,13 +811,13 @@ namespace AMS2LeagueClient.Runtime
             UpdateDrivingSubscription(this, EventArgs.Empty);
             _processTimer.Stop(); _uiTimer.Stop();
             _overlay.HideOverlay();
-            System.Threading.Timer? telemetryTimer = _telemetryTimer;
-            _telemetryTimer = null;
+            TelemetryReadThread? telemetryThread = _telemetryThread;
+            _telemetryThread = null;
             _shutdownTask = Task.Run(async () =>
             {
-                // Timer callbacks and a previous process detach finish before
+                // The read thread and a previous process detach finish before
                 // the reader and downstream capture are allowed to shut down.
-                if (telemetryTimer != null) await telemetryTimer.DisposeAsync().ConfigureAwait(false);
+                if (telemetryThread != null) await telemetryThread.StopAsync().ConfigureAwait(false);
                 try { await _detachTask.ConfigureAwait(false); }
                 catch (Exception exception) { _logger.Error("DETACH_DRAIN_FAILED", exception); }
                 lock (_telemetryGate) { lock (_readerGate) { _reader.Dispose(); } }

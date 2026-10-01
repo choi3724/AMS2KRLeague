@@ -100,8 +100,12 @@ namespace AMS2LeagueClient.Tests
                 var coordinator = new PlayerOverlayCoordinator(overlay, new ClientStatusViewModel(), logger, false);
                 using var entered = new ManualResetEventSlim();
                 using var release = new ManualResetEventSlim();
-                var timer = new Timer(_ => { entered.Set(); release.Wait(); }, null, 0, Timeout.Infinite);
-                typeof(PlayerOverlayCoordinator).GetField("_telemetryTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(coordinator, timer);
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                Type threadType = typeof(PlayerOverlayCoordinator).Assembly.GetType("AMS2LeagueClient.Runtime.TelemetryReadThread")!;
+                Action tick = () => { entered.Set(); release.Wait(); };
+                object thread = Activator.CreateInstance(threadType, flags, null, new object[] { "test telemetry read", 30.0, tick }, null)!;
+                threadType.GetMethod("Start", flags)!.Invoke(thread, null);
+                typeof(PlayerOverlayCoordinator).GetField("_telemetryThread", flags)!.SetValue(coordinator, thread);
                 try
                 {
                     AssertTrue(entered.Wait(5000));

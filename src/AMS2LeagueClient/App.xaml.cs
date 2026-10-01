@@ -85,9 +85,11 @@ namespace AMS2LeagueClient
                 }
 
                 _overlay = new OverlayWindow(startupPolicy.Diagnostic, useGlass: startupPolicy.UseGlass,
-                    useRetainedN: startupPolicy.UseRetainedN);
+                    useRetainedN: startupPolicy.UseRetainedN, useSoftwareRendering: startupPolicy.UseSoftwareRendering);
                 _overlay.RetainedNStatus += message => _logger?.Info("RETAINED_N", message);
                 _logger.Info("MONITOR_PRESENTATION_PATH", (_overlay.UsesGlass ? "dwm-glass" : "wpf-layered")
+                    + (_overlay.UsesSoftwareRendering ? " render=cpu" : " render=gpu")
+                    + (startupPolicy.HardwareRequested ? " hardware-requested" : string.Empty)
                     + (startupPolicy.UseGlass && !_overlay.UsesGlass ? " glass-unavailable" : string.Empty)
                     + (startupPolicy.LayeredRequested ? " layered-requested" : string.Empty)
                     + (startupPolicy.UseRetainedN ? " retained-n-requested" : string.Empty));

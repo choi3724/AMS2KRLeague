@@ -2,7 +2,9 @@
 
 Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국어 Player Overlay입니다.
 
-공개 Latest: **0.8.0** · 비공개 로컬 수정 후보: **0.8.1** (아직 게시되지 않음)
+현재 버전 및 공개 Latest: **0.8.4**
+
+0.8.4 변경: 모니터 HUD를 기본적으로 CPU로 그립니다(WPF SoftwareOnly + layered 투명 창). 게임이 GPU를 모두 쓸 때 HUD가 GPU 대기열에서 밀려 0.2~0.5초씩 멈추던 hardware layered 경로의 GPU readback 대기를 피하기 위한 변경입니다. 이전 GPU 표시 경로는 `--monitor-hardware`로 선택할 수 있습니다. Shared Memory 30Hz 읽기를 전용 스레드로 옮기고 주행 HUD 읽기를 한 번 복사·재시도 방식으로 바꿨습니다. 실제 게임에서의 효과는 검증 전이며 Monitor 성능 RED를 유지합니다.
 
 0.8.0 변경: 모니터 HUD의 기본 투명 표시를 DWM glass 경로로 전환해 기존 layered 출력의 동기 readback을 줄입니다. `--monitor-layered`로 기존 표시 경로를 선택할 수 있습니다. N DirectComposition은 `--monitor-retained-n`을 사용할 때만 켜집니다. 고부하 끊김은 남아 있어 Monitor 성능 RED를 유지합니다.
 
@@ -47,12 +49,12 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 
 ## 실행 방법
 
-1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 `AMS2-League-Overlay-0.8.0-Setup.exe`를 다운로드하고 실행합니다.
+1. [Latest Release](https://github.com/choi3724/AMS2KRLeague/releases/latest)에서 `AMS2-League-Overlay-0.8.4-Setup.exe`를 다운로드하고 실행합니다.
 2. 설치 후 시작 메뉴의 **AMS2 League Overlay**를 실행합니다.
 3. AMS2의 `Options → System → Shared Memory`에서 `Project CARS 2`를 선택합니다.
 4. AMS2를 Borderless Windowed 또는 Windowed 모드로 실행합니다.
 
-설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.8.0-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
+설치 프로그램을 사용하지 않으려면 `AMS2-League-Overlay-0.8.4-win-x64.zip`을 원하는 폴더에 풀고 `AMS2LeagueClient.exe`를 실행해도 됩니다. 별도 .NET 설치나 명령줄 설정은 필요하지 않습니다.
 
 게임이 실행되지 않았거나 Shared Memory를 사용할 수 없으면 오버레이는 대기 상태로 유지됩니다. 프로그램은 게임 설정, 실행 파일, 저장 파일을 자동 변경하지 않습니다.
 
@@ -66,7 +68,7 @@ Automobilista 2의 Shared Memory v14를 읽기 전용으로 사용하는 한국�
 - 설정과 기록은 기존 `%LOCALAPPDATA%\AMS2KRLeague`에 유지합니다. ZIP 실행본도 현재 폴더에 적용하며 포터블 상태를 유지합니다. 설치판은 기존 Windows 제거 항목을 갱신합니다.
 - 설치 경로에 쓰기 권한이 필요합니다. 게임과 다른 오버레이 프로세스를 강제 종료하거나 Windows를 자동 재부팅하지 않습니다.
 - 데모·화면 캡처·자동 종료 실행은 자동 업데이트를 생략합니다. 필요 시 `--updates-disabled`로 이번 실행의 업데이트만 끌 수 있습니다.
-- 0.4.0 이하에는 이 기능이 없으므로 **0.8.0을 한 번 수동 설치**해야 합니다. 커밋만으로 업데이트가 배포되지 않으며 GitHub 릴리스에 새 설치 파일이 게시되어야 합니다.
+- 0.4.0 이하에는 이 기능이 없으므로 **0.8.4를 한 번 수동 설치**해야 합니다. 커밋만으로 업데이트가 배포되지 않으며 GitHub 릴리스에 새 설치 파일이 게시되어야 합니다.
 
 ## 오버레이 위치와 크기 조절
 
@@ -136,7 +138,7 @@ dotnet run --project .\tests\AMS2LeagueActivity.Tests\AMS2LeagueActivity.Tests.c
 
 ## 버전 정책
 
-첫 공개 버전은 `0.1.0`, 현재 비공개 개발 후보는 `0.8.1`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
+첫 공개 버전은 `0.1.0`, 현재 버전은 `0.8.4`, 안정 기준선은 `0.2.2`입니다. 자세한 규칙은 [VERSIONING.md](VERSIONING.md)를 참고하십시오.
 
 ## 현재 제한사항
 

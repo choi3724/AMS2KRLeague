@@ -23,9 +23,10 @@ namespace AMS2LeagueClient.Tests
             string path = Path.Combine(Path.GetTempPath(), "ams2-default-hud-test-" + Guid.NewGuid().ToString("N") + ".json");
             var previous = Application.Current.Windows.Cast<Window>().ToHashSet();
             var policy = ClientStartupPolicy.FromArguments(Array.Empty<string>());
-            var overlay = new OverlayWindow(false, path, useGlass: policy.UseGlass);
+            var overlay = new OverlayWindow(false, path, useGlass: policy.UseGlass, useSoftwareRendering: policy.UseSoftwareRendering);
             try
             {
+                AssertTrue(overlay.UsesSoftwareRendering);
                 foreach (string key in OverlayComponentKeys.All) overlay.SetComponentEnabled(key, true);
                 overlay.SetViewModel(DemoSnapshotFactory.CreateShell(false), false);
                 overlay.ShowAt(new GameWindowSnapshot(IntPtr.Zero, 0, 0, 1920, 1080, 96, true, false, 0));
@@ -38,6 +39,9 @@ namespace AMS2LeagueClient.Tests
                     OverlayStyleState style = OverlayWindowInterop.ReadStyleState(new WindowInteropHelper(surface).Handle);
                     AssertTrue(style.Layered);
                     AssertTrue(style.ClickThrough && style.NoActivate && style.ToolWindow);
+                    // Default Monitor HUDs rasterize on the CPU and never wait on a GPU readback.
+                    var source = (HwndSource)PresentationSource.FromVisual(surface)!;
+                    AssertEqual(RenderMode.SoftwareOnly, source.CompositionTarget.RenderMode);
                 }
             }
             finally

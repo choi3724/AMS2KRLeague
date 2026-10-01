@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## 0.8.4 — 2026-10-01
+
+- 모니터 HUD 기본 렌더링을 CPU(WPF SoftwareOnly, layered 투명 창)로 변경. 기존 hardware layered 경로는 GPU에서 그린 뒤 시스템 메모리로 다시 읽어 오는 과정에서 GPU를 독점한 게임 뒤에서 대기했음.
+- `--monitor-hardware`로 0.8.3의 GPU layered 경로를 선택 가능. `--monitor-glass`, `--monitor-retained-n`은 계속 GPU 경로.
+- Shared Memory 30Hz 읽기를 thread-pool 타이머에서 전용 스레드(고해상도 waitable timer, AboveNormal)로 이동.
+- 주행 HUD 읽기: 필드별 개별 읽기 대신 한 번 복사, 게임 쓰기와 겹치면 같은 프레임에서 최대 3회 재시도, 원본 전체 parsing과 잠금을 공유하지 않음. 30Hz 스냅샷 신선도 허용치 500ms→2s(표시 읽기는 실제 SHM에서 버전·상태·관전 차량·sequence를 직접 검증).
+- 수집·기록·전송 cadence와 형식은 유지. 실게임 효과 NOT TESTED, Monitor RED 유지.
+
 ## 0.8.0 — 2026-09-25
 
 - 모니터 HUD 기본 출력을 DWM glass 합성 경로로 변경해 기존 layered 창의 동기 readback 경로를 피함.

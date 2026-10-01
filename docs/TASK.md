@@ -1,3 +1,15 @@
+# REQ-RELEASE-086 — 끊김 대응 구조 변경 0.8.4 커밋·릴리즈 (2026-10-01)
+
+사용자 보고: 게임 중 N 계기판뿐 아니라 모든 HUD가 0.2~0.5초 간격으로 뚝뚝 끊겨 사용할 수 없음. 작업 관리자에서 프로세스 우선순위를 높음으로 올려도 같음. 사용자는 GPU가 필요 없는 수준이면 CPU만 쓰는 방향을 선호하고, 실게임 테스트 없이 구조 변경을 0.8.4로 커밋·릴리즈하도록 요청했다. 아래 두 REQ와 버전·릴리즈 문서만 포함한다. 실게임·VR·물리 트리플 모니터 효과는 NOT TESTED이며 Monitor RED를 유지한다. Windows 패키지 빌드·태그·GitHub Latest 게시는 Windows 환경에서 `scripts/build-release.ps1`, `scripts/publish-github-release.ps1`로 수행한다. 결과: docs/reports/2026-10-01-release-0.8.4.md.
+
+# REQ-MONITOR-CPU-086 — 모니터 HUD 기본 CPU 렌더링
+
+기본(인자 없음)과 `--monitor-layered` 모니터 HUD 창은 WPF `RenderMode.SoftwareOnly` + layered 투명 창으로 그린다. 근거: 현재 기본 layered hardware 경로는 `PresentWithGDI → ReadIntoSysMemBuffer → GetRenderTargetData` GPU readback이 GPU를 점유한 게임 뒤에서 대기한다(2026-09-25 보고, 고부하 p95 약97ms). 2026-09-12 renderer matrix에서 SoftwareOnly layered는 GPU 부하 없이 N 105.9Hz/p95 13.9ms/>33ms 0회, CPU 7.2%(hardware 4.8%)로 HUD 내용이 CPU만으로 60Hz를 낼 수 있음을 보였다. `--monitor-hardware`는 0.8.3 GPU layered 경로를 복구한다. `--monitor-glass`, `--monitor-retained-n`, VR 텍스처 경로는 변경하지 않는다. SoftwareOnly 창에서는 144Hz Monitor 시계 대신 기존 `CompositionTarget.Rendering` fallback을 사용한다. 디자인·배치·투명·클릭 통과는 유지한다.
+
+# REQ-SHM-READ-086 — 표시 데이터 경로 분리
+
+30Hz Shared Memory 전체 읽기를 thread-pool 타이머에서 전용 스레드(고해상도 waitable timer 절대 deadline, AboveNormal)로 옮긴다. 주행 HUD 표시 읽기는 필드별 읽기 대신 mapping 시작부터 HandBrake까지 한 번 복사하고 sequence가 겹치면 같은 프레임에서 최대 3회 재시도한다. 리더 내부 잠금은 mapping 수명과 복사에만 걸고 전체 parsing은 잠금 밖에서 수행해 표시 읽기가 parsing을 기다리지 않게 한다. 표시 읽기는 버전·게임/세션 상태·관전 차량·참가자 활성·sequence를 실제 SHM에서 검증하므로 30Hz 스냅샷 신선도 허용치를 500ms에서 2초로 늘린다. 기록 cadence 30Hz, 기록·전송 형식, SHM 읽기 전용 계약은 유지한다.
+
 # REQ-RELEASE-085 — N 계기판 위치 수정본 0.8.3 공개 (2026-09-28)
 
 사용자가 간결 계기판의 포토샵 참조 위치에 맞춘 차폭등·하향등과 km/h, 원형 상단 테두리 및 확장 막대 눈금 수정본을 0.8.3으로 커밋·릴리즈하도록 요청했다. 기존 미커밋 변경과 버전·패키지·릴리즈 문서만 포함한다. Release 빌드와 검사, 휴대용 실행 스모크, 패키지 감사, 커밋·태그·push·GitHub Latest 게시 및 공개 자산 검증을 수행한다. 기존 설치본과 사용자의 다른 작업 폴더는 덮어쓰지 않는다. 실제 게임·VR·물리 트리플 모니터 시각/성능은 미검증이고 Monitor RED를 릴리즈 노트와 보고서에 유지한다. 결과: docs/reports/2026-09-28-release-0.8.3.md.

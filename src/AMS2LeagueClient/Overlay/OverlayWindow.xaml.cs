@@ -27,6 +27,10 @@ namespace AMS2LeagueClient.Overlay
         private readonly bool _diagnostic;
         private readonly bool _useGlass;
         public bool UsesGlass => _useGlass;
+        private readonly bool _useSoftwareRendering;
+        public bool UsesSoftwareRendering => _useSoftwareRendering;
+        private System.Windows.Interop.RenderMode MonitorRenderMode
+            => OverlayWindowInterop.MonitorRenderMode(_useGlass, _useSoftwareRendering);
         private PedalTelemetryView? _pedalView;
         private LegacyPedalTelemetryView? _legacyPedalView;
         private ContentControl? _telemetryHost;
@@ -78,12 +82,14 @@ namespace AMS2LeagueClient.Overlay
         private OverlayShellViewModel? _liveViewModelBeforePreview;
         private bool _closing;
 
-        public OverlayWindow(bool diagnostic, string? layoutPath = null, bool useGlass = false, bool useRetainedN = false)
+        public OverlayWindow(bool diagnostic, string? layoutPath = null, bool useGlass = false, bool useRetainedN = false,
+            bool useSoftwareRendering = false)
         {
             _diagnostic = diagnostic;
             InitializeComponent();
             // Must be selected before the first HWND is created; the startup policy selects the default.
             _useGlass = useGlass && OverlayWindowInterop.IsGlassAvailable();
+            _useSoftwareRendering = useSoftwareRendering && !_useGlass;
             _retainedNRequested = useRetainedN && _useGlass;
             if (_useGlass) AllowsTransparency = false;
             SizeChanged += (sender, args) => ResizeTimingPreview();
@@ -105,7 +111,7 @@ namespace AMS2LeagueClient.Overlay
 
         private AuxiliaryOverlayWindow CreateAuxiliaryWindow(string componentKey, string label,
             FrameworkElement content, double designWidth, double designHeight)
-            => new AuxiliaryOverlayWindow(componentKey, label, content, designWidth, designHeight, _useGlass);
+            => new AuxiliaryOverlayWindow(componentKey, label, content, designWidth, designHeight, _useGlass, _useSoftwareRendering);
 
         private void SynchronizeSurfaces()
         {
@@ -394,7 +400,7 @@ namespace AMS2LeagueClient.Overlay
         {
             base.OnSourceInitialized(eventArgs);
             _handle = new WindowInteropHelper(this).Handle;
-            OverlayWindowInterop.Configure(_handle, _useGlass);
+            OverlayWindowInterop.Configure(_handle, _useGlass, _useSoftwareRendering);
             OverlayWindowInterop.SetEditMode(_handle, _layoutEditing);
         }
 
@@ -952,7 +958,8 @@ namespace AMS2LeagueClient.Overlay
         private string _lastBoundsKey = string.Empty;
         private bool _editing;
 
-        public AuxiliaryOverlayWindow(string componentKey, string label, FrameworkElement content, double designWidth, double designHeight, bool useGlass = false)
+        public AuxiliaryOverlayWindow(string componentKey, string label, FrameworkElement content, double designWidth, double designHeight, bool useGlass = false,
+            bool useSoftwareRendering = false)
         {
             ComponentKey = componentKey;
             Title = "AMS2 " + label;
@@ -1003,7 +1010,7 @@ namespace AMS2LeagueClient.Overlay
             SourceInitialized += (sender, args) =>
             {
                 _handle = new WindowInteropHelper(this).Handle;
-                OverlayWindowInterop.Configure(_handle, useGlass);
+                OverlayWindowInterop.Configure(_handle, useGlass, useSoftwareRendering);
                 OverlayWindowInterop.SetEditMode(_handle, _editing);
             };
             Closed += (sender, args) => OverlayWindowInterop.Forget(_handle);

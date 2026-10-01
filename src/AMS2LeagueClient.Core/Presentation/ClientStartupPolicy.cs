@@ -6,7 +6,7 @@ namespace AMS2LeagueClient.Core.Presentation
     public sealed class ClientStartupPolicy
     {
         private ClientStartupPolicy(bool diagnostic, bool showStatusWindow, bool afterUpdate,
-            bool useGlass, bool useRetainedN, bool layeredRequested)
+            bool useGlass, bool useRetainedN, bool layeredRequested, bool hardwareRequested)
         {
             Diagnostic = diagnostic;
             AfterUpdate = afterUpdate;
@@ -14,6 +14,7 @@ namespace AMS2LeagueClient.Core.Presentation
             UseGlass = useGlass;
             UseRetainedN = useRetainedN;
             LayeredRequested = layeredRequested;
+            HardwareRequested = hardwareRequested;
         }
 
         public bool Diagnostic { get; }
@@ -24,6 +25,10 @@ namespace AMS2LeagueClient.Core.Presentation
         public bool UseGlass { get; }
         public bool UseRetainedN { get; }
         public bool LayeredRequested { get; }
+        public bool HardwareRequested { get; }
+        // Monitor HUDs rasterize on the CPU by default. The layered hardware path waits on
+        // the GPU readback behind a GPU-bound game; DWM glass and DComp remain GPU paths.
+        public bool UseSoftwareRendering => !UseGlass && !HardwareRequested;
 
         public static ClientStartupPolicy FromArguments(IEnumerable<string> arguments)
         {
@@ -33,6 +38,7 @@ namespace AMS2LeagueClient.Core.Presentation
             bool layeredRequested = false;
             bool glassRequested = false;
             bool retainedNRequested = false;
+            bool hardwareRequested = false;
             foreach (string argument in arguments)
             {
                 if (string.Equals(argument, "--after-update", StringComparison.OrdinalIgnoreCase))
@@ -64,11 +70,15 @@ namespace AMS2LeagueClient.Core.Presentation
                 {
                     retainedNRequested = true;
                 }
+                else if (string.Equals(argument, "--monitor-hardware", StringComparison.OrdinalIgnoreCase))
+                {
+                    hardwareRequested = true;
+                }
             }
 
             return new ClientStartupPolicy(diagnostic, showStatus || afterUpdate, afterUpdate,
                 (glassRequested || retainedNRequested) && !layeredRequested,
-                retainedNRequested && !layeredRequested, layeredRequested);
+                retainedNRequested && !layeredRequested, layeredRequested, hardwareRequested);
         }
     }
 }

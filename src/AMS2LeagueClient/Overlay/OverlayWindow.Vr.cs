@@ -104,7 +104,7 @@ namespace AMS2LeagueClient.Overlay
             {
                 window.Opacity = monitor ? 1 : 0;
                 if (System.Windows.PresentationSource.FromVisual(window) is System.Windows.Interop.HwndSource source)
-                    source.CompositionTarget.RenderMode = monitor ? System.Windows.Interop.RenderMode.Default : System.Windows.Interop.RenderMode.SoftwareOnly;
+                    source.CompositionTarget.RenderMode = monitor ? MonitorRenderMode : System.Windows.Interop.RenderMode.SoftwareOnly;
             }
         }
 

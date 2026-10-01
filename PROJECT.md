@@ -1,3 +1,7 @@
+# 0.8.4 릴리즈 — 모니터 HUD CPU 렌더링과 SHM 읽기 전용 스레드
+
+사용자가 모든 HUD가 0.2~0.5초 간격으로 끊겨 사용할 수 없다고 보고했다. 프로세스 CPU 우선순위를 높여도 같았다. 기본 모니터 HUD를 WPF SoftwareOnly layered 창으로 바꿔 GPU readback 대기를 없애고(`--monitor-hardware`로 0.8.3 경로 복구), 30Hz SHM 읽기를 전용 스레드로, 주행 HUD 읽기를 한 번 복사·재시도로 바꿨다. Linux 교차 빌드 warning/error 0만 확인했고 Windows 테스트·패키지·실게임은 NOT TESTED, Monitor RED 유지. 자세한 결과는 docs/reports/2026-10-01-release-0.8.4.md. 아래는 이전 이력이다.
+
 # 0.8.3 릴리즈 — N 계기판 위치와 눈금 정렬
 
 0.8.2 이후 간결 계기판의 원형 상단 테두리, 기어 양옆 차폭등·하향등과 km/h 위치, 확장 연료·냉각수 막대 눈금을 사용자가 제공한 참조에 맞췄다. 사용자 요청으로 0.8.3 커밋과 릴리즈를 진행한다. 실제 게임·VR·물리 트리플 모니터의 화면 및 성능은 미검증이고 Monitor 성능은 RED다. 자세한 결과는 docs/reports/2026-09-28-release-0.8.3.md에 기록한다. 아래는 이전 이력이다.

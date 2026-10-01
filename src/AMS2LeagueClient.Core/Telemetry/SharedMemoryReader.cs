@@ -12,6 +12,8 @@ namespace AMS2LeagueClient.Core.Telemetry
         public SharedMemoryReader(string mappingName = SharedMemoryLayout.MappingName) => _mappingName = mappingName;
         private readonly SharedMemoryParser _parser = new SharedMemoryParser();
         private readonly byte[] _buffer = new byte[SharedMemoryLayout.RequiredBytes];
+        private readonly byte[] _drivingBuffer = new byte[DrivingBlockBytes];
+        private readonly object _viewGate = new object();
         private MemoryMappedFile? _mapping;
         private MemoryMappedViewAccessor? _view;
         private DateTimeOffset _nextAttachAttempt = DateTimeOffset.MinValue;
@@ -23,102 +25,150 @@ namespace AMS2LeagueClient.Core.Telemetry
 
         public TelemetryReadResult TryRead()
         {
-            if (_disposed)
+            int attempt;
+            bool copied = false;
+            // The view lock covers attach and the raw copy only. Parsing runs outside it so the
+            // display read never waits for participant parsing. TryRead has a single caller.
+            lock (_viewGate)
             {
-                throw new ObjectDisposedException(nameof(SharedMemoryReader));
-            }
-
-            TelemetryReadResult? attachFailure = EnsureAttached();
-            if (attachFailure != null)
-            {
-                return attachFailure;
-            }
-
-            for (int attempt = 0; attempt < MaxSequenceAttempts; attempt++)
-            {
-                try
+                if (_disposed)
                 {
-                    uint before = _view!.ReadUInt32(SharedMemoryLayout.SequenceNumber);
-                    if ((before & 1U) != 0U)
-                    {
-                        SequenceRetries++;
-                        Thread.SpinWait(32);
-                        continue;
-                    }
+                    throw new ObjectDisposedException(nameof(SharedMemoryReader));
+                }
 
-                    int bytesRead = _view.ReadArray(0, _buffer, 0, _buffer.Length);
-                    uint after = _view.ReadUInt32(SharedMemoryLayout.SequenceNumber);
-                    uint copied = SharedMemoryLayout.ReadUInt32(_buffer, SharedMemoryLayout.SequenceNumber);
+                TelemetryReadResult? attachFailure = EnsureAttached();
+                if (attachFailure != null)
+                {
+                    return attachFailure;
+                }
 
-                    if (bytesRead == _buffer.Length && SnapshotValidator.IsConsistent(before, copied, after))
+                for (attempt = 0; attempt < MaxSequenceAttempts; attempt++)
+                {
+                    try
                     {
-                        TelemetryReadResult parsed = _parser.Parse(_buffer, DateTimeOffset.UtcNow, attempt);
-                        if (parsed.Status == TelemetryReadStatus.Success)
+                        uint before = _view!.ReadUInt32(SharedMemoryLayout.SequenceNumber);
+                        if ((before & 1U) != 0U)
                         {
-                            SuccessfulSnapshots++;
+                            SequenceRetries++;
+                            Thread.SpinWait(32);
+                            continue;
                         }
 
-                        return parsed;
-                    }
+                        int bytesRead = _view.ReadArray(0, _buffer, 0, _buffer.Length);
+                        uint after = _view.ReadUInt32(SharedMemoryLayout.SequenceNumber);
+                        uint copiedSequence = SharedMemoryLayout.ReadUInt32(_buffer, SharedMemoryLayout.SequenceNumber);
 
-                    SequenceRetries++;
-                    Thread.SpinWait(32);
-                }
-                catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
-                {
-                    Reset();
-                    return TelemetryReadResult.Failure(TelemetryReadStatus.Error, exception.GetType().Name + ": " + exception.Message);
+                        if (bytesRead == _buffer.Length && SnapshotValidator.IsConsistent(before, copiedSequence, after))
+                        {
+                            copied = true;
+                            break;
+                        }
+
+                        SequenceRetries++;
+                        Thread.SpinWait(32);
+                    }
+                    catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+                    {
+                        Reset();
+                        return TelemetryReadResult.Failure(TelemetryReadStatus.Error, exception.GetType().Name + ": " + exception.Message);
+                    }
                 }
             }
 
-            SequenceDrops++;
-            return TelemetryReadResult.Failure(
-                TelemetryReadStatus.InconsistentSnapshot,
-                "Sequence changed or remained odd across three bounded attempts.",
-                MaxSequenceAttempts);
+            if (!copied)
+            {
+                SequenceDrops++;
+                return TelemetryReadResult.Failure(
+                    TelemetryReadStatus.InconsistentSnapshot,
+                    "Sequence changed or remained odd across three bounded attempts.",
+                    MaxSequenceAttempts);
+            }
+
+            TelemetryReadResult parsed = _parser.Parse(_buffer, DateTimeOffset.UtcNow, attempt);
+            if (parsed.Status == TelemetryReadStatus.Success)
+            {
+                SuccessfulSnapshots++;
+            }
+
+            return parsed;
         }
 
         // A display-only read. It never parses participants/archives or changes recorder counters.
-        // The caller uses the same reader gate with TryEnter so the UI never waits for a full snapshot.
+        // One contiguous copy keeps the read window short; a copy that overlaps a game write is
+        // retried within the same frame instead of dropping the frame.
         public AMS2LeagueClient.Core.Presentation.DrivingTelemetrySample? TryReadDriving(
             int localIndex, int generation, uint gameState, uint sessionState)
         {
-            if (_disposed || _view == null || localIndex < 0 || localIndex >= SharedMemoryLayout.MaxParticipants) return null;
-            try
+            if (localIndex < 0 || localIndex >= SharedMemoryLayout.MaxParticipants) return null;
+            lock (_viewGate)
             {
-                uint before = _view.ReadUInt32(SharedMemoryLayout.SequenceNumber);
-                if ((before & 1U) != 0) return null;
-                if (_view.ReadUInt32(SharedMemoryLayout.Version) != SharedMemoryLayout.SupportedVersion
-                    || _view.ReadUInt32(SharedMemoryLayout.GameState) != gameState
-                    || _view.ReadUInt32(SharedMemoryLayout.SessionState) != sessionState
-                    || _view.ReadInt32(SharedMemoryLayout.ViewedParticipantIndex) != localIndex) return null;
-                int count = _view.ReadInt32(SharedMemoryLayout.NumParticipants);
-                if (count <= localIndex || count > SharedMemoryLayout.MaxParticipants
-                    || _view.ReadByte(SharedMemoryLayout.ParticipantOffset(localIndex)) == 0) return null;
-                float brake = _view.ReadSingle(SharedMemoryLayout.Brake), throttle = _view.ReadSingle(SharedMemoryLayout.Throttle);
-                float clutch = _view.ReadSingle(SharedMemoryLayout.Clutch), handBrake = _view.ReadSingle(SharedMemoryLayout.HandBrake);
-                float speed = _view.ReadSingle(SharedMemoryLayout.Speed), steering = _view.ReadSingle(SharedMemoryLayout.UnfilteredSteering);
-                float rpm = _view.ReadSingle(SharedMemoryLayout.Rpm), maxRpm = _view.ReadSingle(SharedMemoryLayout.MaxRpm);
-                int gear = _view.ReadInt32(SharedMemoryLayout.Gear);
-                bool abs = _view.ReadByte(SharedMemoryLayout.AntiLockActive) != 0;
-                uint after = _view.ReadUInt32(SharedMemoryLayout.SequenceNumber);
-                if (!SnapshotValidator.IsConsistent(before, before, after)) return null;
-                return new AMS2LeagueClient.Core.Presentation.DrivingTelemetrySample(DateTimeOffset.UtcNow, generation, localIndex,
-                    brake, throttle, clutch, handBrake, speed, gear, abs, steering, rpm, maxRpm);
+                if (_disposed || _view == null) return null;
+                for (int attempt = 0; attempt < MaxSequenceAttempts; attempt++)
+                {
+                    try
+                    {
+                        uint before = _view.ReadUInt32(SharedMemoryLayout.SequenceNumber);
+                        if ((before & 1U) != 0U)
+                        {
+                            Thread.SpinWait(32);
+                            continue;
+                        }
+
+                        int bytesRead = _view.ReadArray(0, _drivingBuffer, 0, _drivingBuffer.Length);
+                        uint after = _view.ReadUInt32(SharedMemoryLayout.SequenceNumber);
+                        uint copiedSequence = SharedMemoryLayout.ReadUInt32(_drivingBuffer, SharedMemoryLayout.SequenceNumber);
+                        if (bytesRead == _drivingBuffer.Length && SnapshotValidator.IsConsistent(before, copiedSequence, after))
+                        {
+                            return ParseDrivingBlock(_drivingBuffer, localIndex, generation, gameState, sessionState, DateTimeOffset.UtcNow);
+                        }
+
+                        Thread.SpinWait(32);
+                    }
+                    catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+                    {
+                        return null; // The independent recording loop owns attach/error recovery.
+                    }
+                }
             }
-            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
-            {
-                return null; // The independent recording loop owns attach/error recovery.
-            }
+
+            return null;
+        }
+
+        // Bytes from the start of the mapping through the last field the display read uses.
+        public const int DrivingBlockBytes = SharedMemoryLayout.HandBrake + sizeof(float);
+
+        public static AMS2LeagueClient.Core.Presentation.DrivingTelemetrySample? ParseDrivingBlock(
+            byte[] block, int localIndex, int generation, uint gameState, uint sessionState, DateTimeOffset capturedAt)
+        {
+            if (block == null) throw new ArgumentNullException(nameof(block));
+            if (block.Length < DrivingBlockBytes || localIndex < 0 || localIndex >= SharedMemoryLayout.MaxParticipants) return null;
+            if (SharedMemoryLayout.ReadUInt32(block, SharedMemoryLayout.Version) != SharedMemoryLayout.SupportedVersion
+                || SharedMemoryLayout.ReadUInt32(block, SharedMemoryLayout.GameState) != gameState
+                || SharedMemoryLayout.ReadUInt32(block, SharedMemoryLayout.SessionState) != sessionState
+                || SharedMemoryLayout.ReadInt32(block, SharedMemoryLayout.ViewedParticipantIndex) != localIndex) return null;
+            int count = SharedMemoryLayout.ReadInt32(block, SharedMemoryLayout.NumParticipants);
+            if (count <= localIndex || count > SharedMemoryLayout.MaxParticipants
+                || block[SharedMemoryLayout.ParticipantOffset(localIndex) + SharedMemoryLayout.ParticipantIsActive] == 0) return null;
+            float brake = SharedMemoryLayout.ReadSingle(block, SharedMemoryLayout.Brake), throttle = SharedMemoryLayout.ReadSingle(block, SharedMemoryLayout.Throttle);
+            float clutch = SharedMemoryLayout.ReadSingle(block, SharedMemoryLayout.Clutch), handBrake = SharedMemoryLayout.ReadSingle(block, SharedMemoryLayout.HandBrake);
+            float speed = SharedMemoryLayout.ReadSingle(block, SharedMemoryLayout.Speed), steering = SharedMemoryLayout.ReadSingle(block, SharedMemoryLayout.UnfilteredSteering);
+            float rpm = SharedMemoryLayout.ReadSingle(block, SharedMemoryLayout.Rpm), maxRpm = SharedMemoryLayout.ReadSingle(block, SharedMemoryLayout.MaxRpm);
+            int gear = SharedMemoryLayout.ReadInt32(block, SharedMemoryLayout.Gear);
+            bool abs = block[SharedMemoryLayout.AntiLockActive] != 0;
+            return new AMS2LeagueClient.Core.Presentation.DrivingTelemetrySample(capturedAt, generation, localIndex,
+                brake, throttle, clutch, handBrake, speed, gear, abs, steering, rpm, maxRpm);
         }
 
         public void Reset()
         {
-            _view?.Dispose();
-            _mapping?.Dispose();
-            _view = null;
-            _mapping = null;
-            _nextAttachAttempt = DateTimeOffset.MinValue;
+            lock (_viewGate)
+            {
+                _view?.Dispose();
+                _mapping?.Dispose();
+                _view = null;
+                _mapping = null;
+                _nextAttachAttempt = DateTimeOffset.MinValue;
+            }
         }
 
         private TelemetryReadResult? EnsureAttached()
@@ -168,13 +218,16 @@ namespace AMS2LeagueClient.Core.Telemetry
 
         public void Dispose()
         {
-            if (_disposed)
+            lock (_viewGate)
             {
-                return;
-            }
+                if (_disposed)
+                {
+                    return;
+                }
 
-            _disposed = true;
-            Reset();
+                _disposed = true;
+                Reset();
+            }
         }
     }
 }

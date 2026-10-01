@@ -144,7 +144,12 @@ namespace AMS2LeagueClient.Overlay
             public uint Flags;
         }
 
-        public static void Configure(IntPtr handle, bool useGlass = false)
+        // Layered windows rasterize on the CPU unless hardware is requested: the hardware layered
+        // path reads its GPU render target back and stalls behind a GPU-bound game. Glass stays GPU.
+        public static RenderMode MonitorRenderMode(bool useGlass, bool useSoftwareRendering)
+            => useSoftwareRendering && !useGlass ? RenderMode.SoftwareOnly : RenderMode.Default;
+
+        public static void Configure(IntPtr handle, bool useGlass = false, bool useSoftwareRendering = false)
         {
             long styles = GetWindowLongPtr(handle, ExtendedStyleIndex).ToInt64();
             styles |= ExtendedTransparent | ExtendedToolWindow | ExtendedNoActivate;
@@ -153,11 +158,10 @@ namespace AMS2LeagueClient.Overlay
             SetWindowLongPtr(handle, ExtendedStyleIndex, new IntPtr(styles));
 
             HwndSource? source = HwndSource.FromHwnd(handle);
-            // Renderer matrix: Default hardware + independent Monitor motion reduced CPU and delivery gaps.
-            // WPF retains its device-loss/software fallback; VR-only surfaces select SoftwareOnly below.
+            // VR-only surfaces select SoftwareOnly separately; Monitor surfaces follow the startup policy.
             if (source?.CompositionTarget != null)
             {
-                source.CompositionTarget.RenderMode = RenderMode.Default;
+                source.CompositionTarget.RenderMode = MonitorRenderMode(useGlass, useSoftwareRendering);
                 if (useGlass)
                 {
                     source.CompositionTarget.BackgroundColor = Colors.Transparent;
