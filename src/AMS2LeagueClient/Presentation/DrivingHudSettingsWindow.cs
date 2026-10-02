@@ -13,6 +13,8 @@ namespace AMS2LeagueClient.Presentation
         private readonly Slider _steeringRange = new Slider { Minimum = 180, Maximum = 1440, TickFrequency = 90, IsSnapToTickEnabled = true, Width = 200 };
         private readonly ComboBox _speedFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
         private readonly ComboBox _gearFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
+        private readonly Slider _raceControlFontScale = new Slider { Minimum = 75, Maximum = 200,
+            SmallChange = 5, LargeChange = 10, TickFrequency = 5, IsSnapToTickEnabled = true, Width = 200 };
         private readonly Slider _frameLimit = new Slider { Minimum = DrivingHudSettings.MinimumHudFrameLimit, Maximum = DrivingHudSettings.MaximumHudFrameLimit,
             SmallChange = 1, LargeChange = 10, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 200 };
         public DrivingHudSettings Settings { get; private set; }
@@ -52,6 +54,17 @@ namespace AMS2LeagueClient.Presentation
             _gearFont.SelectedItem = fonts.Contains(Settings.GearFont) ? Settings.GearFont : DrivingHudSettings.DefaultFontName;
             panel.Children.Add(FontRow("속도계", _speedFont, "123 km/h", 30));
             panel.Children.Add(FontRow("기어", _gearFont, "3", 38));
+            panel.Children.Add(new TextBlock { Text = "레이스 컨트롤 글자 크기", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
+            _raceControlFontScale.Value = Settings.RaceControlFontScale * 100;
+            var raceControlFontValue = new TextBlock { Text = ((int)_raceControlFontScale.Value) + "%",
+                VerticalAlignment = VerticalAlignment.Center, MinWidth = 48 };
+            _raceControlFontScale.ValueChanged += (_, __) => raceControlFontValue.Text = ((int)_raceControlFontScale.Value) + "%";
+            System.Windows.Automation.AutomationProperties.SetName(_raceControlFontScale, "레이스 컨트롤 글자 크기");
+            var raceControlFontPanel = new StackPanel { Orientation = Orientation.Horizontal };
+            raceControlFontPanel.Children.Add(_raceControlFontScale); raceControlFontPanel.Children.Add(raceControlFontValue);
+            panel.Children.Add(Row("레이스 컨트롤", raceControlFontPanel));
+            panel.Children.Add(new TextBlock { Text = "작은 카드에서는 글자가 잘리지 않도록 자동으로 맞춥니다. 더 크게 보려면 레이아웃 편집에서 카드도 키워 주세요.",
+                FontSize = 11, Foreground = Brushes.LightGray, TextWrapping = TextWrapping.Wrap });
             panel.Children.Add(new TextBlock { Text = "글자 그림자 색상", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
             for (int i = 4; i < 6; i++)
             {
@@ -155,7 +168,8 @@ namespace AMS2LeagueClient.Presentation
                     ClutchColor = (string)_colors[2].Tag, HandBrakeColor = (string)_colors[3].Tag,
                     SpeedShadowColor = (string)_colors[4].Tag, GearShadowColor = (string)_colors[5].Tag,
                     SpeedFont = _speedFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName, GearFont = _gearFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName,
-                    HudFrameLimit = (int)_frameLimit.Value };
+                    HudFrameLimit = (int)_frameLimit.Value,
+                    RaceControlFontScale = _raceControlFontScale.Value / 100 };
                 DialogResult = true;
             };
             buttons.Children.Add(save);

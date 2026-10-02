@@ -72,6 +72,7 @@ namespace AMS2LeagueClient.Presentation
                     view = eventCard; width = OverlayUiMetrics.EventWidth; height = OverlayUiMetrics.EventHeight; break;
                 case OverlayComponentKeys.RaceControl:
                     var control = new RaceControlView();
+                    control.ApplyFontScale(settings.RaceControlFontScale);
                     control.SetViewModel(new RaceControlViewModel { IsVisible = true, IsExpanded = true, Title = "레이스 컨트롤",
                         DriverLine = "플레이어", Message = "트랙 제한 · 랩타임 삭제", StateLabel = "황색기" }, false);
                     view = control; width = OverlayUiMetrics.RaceControlExpandedWidth; height = OverlayUiMetrics.RaceControlExpandedHeight; break;

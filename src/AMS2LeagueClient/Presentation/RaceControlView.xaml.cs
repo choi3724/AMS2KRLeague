@@ -20,12 +20,19 @@ namespace AMS2LeagueClient.Presentation
         private string _stateLabel = string.Empty;
         private string _messageKey = string.Empty;
         private bool _presented;
+        private double _fontScale = 1;
 
         public RaceControlView()
         {
             InitializeComponent();
             DataContextChanged += (sender, args) => FitTextToCard();
             SizeChanged += (sender, args) => FitTextToCard();
+        }
+
+        public void ApplyFontScale(double scale)
+        {
+            _fontScale = double.IsFinite(scale) ? Math.Clamp(scale, 0.75, 2) : 1;
+            FitTextToCard();
         }
 
         private void FitTextToCard()
@@ -57,10 +64,10 @@ namespace AMS2LeagueClient.Presentation
             double scale = Math.Clamp(Math.Min(ActualWidth / designWidth, ActualHeight / designHeight), 0.65, 1.5);
             Body.Width = Math.Max(1, ActualWidth - Panel.Padding.Left - Panel.Padding.Right
                 - Panel.BorderThickness.Left - Panel.BorderThickness.Right);
-            TitleText.FontSize = (expanded ? 19 : 17) * scale;
-            MessageText.FontSize = 17 * scale;
-            DriverText.FontSize = 15 * scale;
-            StateLabelText.FontSize = 12.5 * scale;
+            TitleText.FontSize = (expanded ? 19 : 17) * scale * _fontScale;
+            MessageText.FontSize = 17 * scale * _fontScale;
+            DriverText.FontSize = 15 * scale * _fontScale;
+            StateLabelText.FontSize = 12.5 * scale * _fontScale;
             StateLabelText.MaxWidth = Body.Width * (inline ? (expanded ? 0.3 : 0.45) : 1);
         }
 

@@ -24,22 +24,22 @@ namespace AMS2LeagueClient.Presentation
         private double? _engineMaximum;
         private TelemetrySnapshot? _sessionSource,_session;
         private int? _generation,_participant;
-        private object? _dialKey, _gearKey, _speedKey, _statusKey, _oilKey, _waterKey, _fuelKey, _torqueKey, _odoKey;
+        private object? _dialKey, _gearKey, _speedKey, _statusKey, _oilKey, _waterKey, _fuelKey, _boostKey, _torqueKey, _odoKey;
         private bool _faceDirty=true, _dialDirty=true, _gearDirty=true, _speedDirty=true, _statusDirty=true;
-        private bool _oilDirty=true, _waterDirty=true, _fuelDirty=true, _torqueDirty=true, _odoDirty=true;
+        private bool _oilDirty=true, _waterDirty=true, _fuelDirty=true, _boostDirty=true, _torqueDirty=true, _odoDirty=true;
         private double _renderedRpm = double.NaN;
         private int _renderedBand = -1, _renderedPairs = -1;
         private bool _followerDrawn;
         private long _ignitionAt;
         private bool _ignitionSettled;
-        private readonly Vortice.RawRect?[] _fixedSlots=new Vortice.RawRect?[8];
+        private readonly Vortice.RawRect?[] _fixedSlots=new Vortice.RawRect?[9];
         private Vortice.RawRect? _coolantGaugeSlot;
         private readonly Vortice.RawRect?[] _numberSlots=new Vortice.RawRect?[21];
         internal bool FaceDirty => _faceDirty;
         internal void Accepted(bool face, bool dynamic, bool follower, long now)
         {
             if (face) _faceDirty=false;
-            if (dynamic) _gearDirty=_speedDirty=_statusDirty=_oilDirty=_waterDirty=_fuelDirty=_torqueDirty=_odoDirty=false;
+            if (dynamic) _gearDirty=_speedDirty=_statusDirty=_oilDirty=_waterDirty=_fuelDirty=_boostDirty=_torqueDirty=_odoDirty=false;
             if (follower)
             {
                 _dialDirty=false; _followerDrawn=true;
@@ -72,7 +72,8 @@ namespace AMS2LeagueClient.Presentation
                 new System.Windows.Rect(100,457,440,105), // water
                 new System.Windows.Rect(100,602,440,110), // fuel
                 new System.Windows.Rect(1540,457,400,105), // torque
-                new System.Windows.Rect(1490,645,520,75) // odometer
+                new System.Windows.Rect(1490,645,520,75), // odometer
+                new System.Windows.Rect(1540,160,400,230) // boost and ERS mode
             };
             for(int i=0;i<design.Length;i++)_fixedSlots[i]=MapRect(design[i]);
             _coolantGaugeSlot=MapRect(new System.Windows.Rect(1600,610,320,40));
@@ -138,6 +139,7 @@ namespace AMS2LeagueClient.Presentation
                 if (_fuelDirty) Add(_fixedSlots[5]);
                 if (_torqueDirty) Add(_fixedSlots[6]);
                 if (_odoDirty) Add(_fixedSlots[7]);
+                if (_boostDirty) Add(_fixedSlots[8]);
             }
             double rpm=Rpm(now);
             if (_dialDirty || _from!=_to&&now<_at+Stopwatch.Frequency*.065 || _pulseNumber>=0&&now<_pulseAt+Stopwatch.Frequency*.1)
@@ -227,7 +229,7 @@ namespace AMS2LeagueClient.Presentation
             {bool major=rpm%1000==0;var line=new LineGeometry(P(major?331:340,_scale.Angle(rpm)),P(349,_scale.Angle(rpm)));ticks.Children.Add(line.GetWidenedPathGeometry(new Pen(Brushes.White,major?3.2:1.7)));}
             _ticks=_c.Convert(ticks);_flashAt=0;_previousNumberRpm=null;_pulseNumber=-1;
             _faceDirty=_dialDirty=_gearDirty=_speedDirty=_statusDirty=true;
-            _oilDirty=_waterDirty=_fuelDirty=_torqueDirty=_odoDirty=true;
+            _oilDirty=_waterDirty=_fuelDirty=_boostDirty=_torqueDirty=_odoDirty=true;
             _followerDrawn=false;_renderedRpm=double.NaN;_renderedBand=_renderedPairs=-1;
         }
         internal void Update(CompositionHudFrame frame,DrivingTelemetrySample? sample,double width,double height)
@@ -272,6 +274,8 @@ namespace AMS2LeagueClient.Presentation
             Changed(v?.OilTemperatureCelsius,ref _oilKey,ref _oilDirty);
             Changed(v?.WaterTemperatureCelsius,ref _waterKey,ref _waterDirty);
             Changed((v?.FuelLevel,v?.FuelCapacityLitres),ref _fuelKey,ref _fuelDirty);
+            var power=AvantePowerReadout.From(v);
+            Changed((power.Label,power.Value,power.Unit,power.SecondaryText),ref _boostKey,ref _boostDirty);
             Changed(v?.EngineTorqueNewtonMetres,ref _torqueKey,ref _torqueDirty);
             Changed(v?.OdometerKilometres,ref _odoKey,ref _odoDirty);
             _frame=frame;
@@ -466,9 +470,12 @@ namespace AMS2LeagueClient.Presentation
             }
             if(!_expanded)return;
             _c.Text("오일 온도",319,182,37,"AliceBlue","AvanteN UI",false,1);_c.Text("냉각수 온도",319,394,37,"AliceBlue","AvanteN UI",false,1);
-            _c.Text("터보",1724,182,37,"AliceBlue","AvanteN UI",false,1);_c.Text("토크",1724,394,37,"AliceBlue","AvanteN UI",false,1);
+            var power=AvantePowerReadout.From(v);
+            _c.Text(power.Label,1724,182,37,"AliceBlue","AvanteN UI",false,1);_c.Text("토크",1724,394,37,"AliceBlue","AvanteN UI",false,1);
             Readout(Value(v?.OilTemperatureCelsius,-40,300),"°C",319,297);Readout(Value(v?.WaterTemperatureCelsius,-40,200),"°C",319,510);
-            Readout("—","bar",1724,297);Readout(Value(v?.EngineTorqueNewtonMetres,-4000,4000),"Nm",1724,510);
+            Readout(power.Value,power.Unit,1724,297,power.ValueSize);
+            if(power.SecondaryText.Length!=0)_c.Text(power.SecondaryText,1724,365,20,"AliceBlue","AvanteN UI",false,1);
+            Readout(AvantePowerReadout.Torque(v?.EngineTorqueNewtonMetres),"Nm",1724,510);
             BarGauge("avante-fuel",_fuelTrack!,_fuelMarks!,AvanteBarGauge.Fuel,AvanteBarGauge.FuelLevel(v?.FuelLevel),ref _fuelFillLevel,ref _fuelFill);
             BarGauge("avante-coolant",_coolantTrack!,_coolantMarks!,AvanteBarGauge.Coolant,AvanteBarGauge.CoolantLevel(v?.WaterTemperatureCelsius),ref _coolantFillLevel,ref _coolantFill);
             _c.Text("E",132,612,38,"AliceBlue","AvanteN UI",false,1);_c.Text("F",478,612,38,"AliceBlue","AvanteN UI",false,1);_c.Text("C",1587,612,38,"AliceBlue","AvanteN UI",false,1);_c.Text("H",1933,612,38,"AliceBlue","AvanteN UI",false,1);
@@ -478,7 +485,7 @@ namespace AMS2LeagueClient.Presentation
             for(int i=0;i<_logoShapes.Length;i++)_c.Dc.FillGeometry(_logoShapes[i],_c.Color(AvanteNLogo.Colours[i]));
             _c.Pop();
         }
-        private void Readout(string value,string unit,double x,double y){_c.StyledText(value,x,y,140,true);_c.CenterText(unit,x+_c.Measure(value,140,"AvanteN Readout",false).Width/2+28,y+45,33);}
+        private void Readout(string value,string unit,double x,double y,int size=140){_c.StyledText(value,x,y,size,true);if(unit.Length!=0)_c.CenterText(unit,x+_c.Measure(value,size,"AvanteN Readout",false).Width/2+28,y+45,33);}
         private void FooterText(string value,double x,double y,double numberSize,double unitSize)
         {
             int separator=value.LastIndexOf(' ');

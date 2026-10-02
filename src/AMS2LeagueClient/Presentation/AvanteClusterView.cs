@@ -835,7 +835,7 @@ namespace AMS2LeagueClient.Presentation
             if (Expanded)
             {
                 Text(dc, "오일 온도", 319, 206, 37); Text(dc, "냉각수 온도", 319, 418, 37);
-                Text(dc, "터보", 1724, 206, 37); Text(dc, "토크", 1724, 418, 37);
+                Text(dc, "토크", 1724, 418, 37);
                 Text(dc, "E", 132, 635, 38); Text(dc, "F", 478, 635, 38);
                 Text(dc, "C", 1587, 635, 38); Text(dc, "H", 1933, 635, 38);
             }
@@ -941,13 +941,14 @@ namespace AMS2LeagueClient.Presentation
             var tcs = _preview ? AvanteIndicatorState.Off : AvanteIndicators.Tcs(v);
             bool? headlights = _preview ? true : v == null ? (bool?)null : AvanteIndicators.Headlights(v);
             bool? limiter = v != null ? (v.CarFlagsRaw & (1u << 3)) != 0 : _preview ? false : (bool?)null;
-            string oil = "", water = "", boost = "", torque = "", fuel = "", distance = "";
+            string oil = "", water = "", torque = "", fuel = "", distance = "";
+            AvantePowerReadout? power = null;
             if (Expanded)
             {
                 oil = Value(_preview ? 74 : v?.OilTemperatureCelsius, -40, 300);
                 water = Value(_preview ? 89 : v?.WaterTemperatureCelsius, -40, 200);
-                boost = Value(_preview ? 1.1 : (double?)null, 0, 9, "0.0");
-                torque = Value(_preview ? 285 : v?.EngineTorqueNewtonMetres, -4000, 4000);
+                power = AvantePowerReadout.From(v, _preview);
+                torque = AvantePowerReadout.Torque(_preview ? 285 : v?.EngineTorqueNewtonMetres);
                 fuel = v != null ? Value(v.FuelLevel * v.FuelCapacityLitres, 0, 2000) + " L" : _preview ? "35 L" : "— L";
                 distance = Value(_preview ? 123 : v?.OdometerKilometres, 0, 9999999) + " km";
                 // Preserve the continuous fuel level without rebuilding every rounded readout.
@@ -956,7 +957,8 @@ namespace AMS2LeagueClient.Presentation
                 AvanteBarGauge.SetLevel(_coolantLevel, AvanteBarGauge.Coolant,
                     AvanteBarGauge.CoolantLevel(_preview ? 89 : (double?)v?.WaterTemperatureCelsius));
             }
-            string key = string.Join("|", ambient, abs, tcs, headlights, limiter, oil, water, boost, torque, fuel, distance);
+            string key = string.Join("|", ambient, abs, tcs, headlights, limiter, oil, water,
+                power?.Label, power?.Value, power?.Unit, power?.SecondaryText, torque, fuel, distance);
             if (_valuesKey == key) return;
             _valuesKey = key; _statusRebuilds++;
             using (var dc = _values.RenderOpen())
@@ -988,8 +990,9 @@ namespace AMS2LeagueClient.Presentation
                 {
                     Readout(dc, oil, "°C", 319, 297);
                     Readout(dc, water, "°C", 319, 510);
-                    // DATA_DICTIONARY marks turboBoostPressure unit/scale pending; do not label the raw float as bar.
-                    Readout(dc, boost, "bar", 1724, 297);
+                    Text(dc, power!.Label, 1724, 206, 37);
+                    Readout(dc, power.Value, power.Unit, 1724, 297, power.ValueSize);
+                    if (power.SecondaryText.Length != 0) Text(dc, power.SecondaryText, 1724, 375, 22);
                     Readout(dc, torque, "Nm", 1724, 510);
                     FooterText(dc, fuel, 265, 693, 48, 30);
                     FooterText(dc, distance, 1830, 693, 48, 30);
@@ -997,10 +1000,15 @@ namespace AMS2LeagueClient.Presentation
                 }
             }
         }
-        private void Readout(DrawingContext dc, string number, string unit, double x, double y)
+        private void Readout(DrawingContext dc, string number, string unit, double x, double y, int size = 140)
         {
-            Text(dc, number, x, y, 140, readout: true);
-            Text(dc, unit, x + TextWidth(number, true) / 2 + 28, y + 45, 33);
+            Text(dc, number, x, y, size, readout: true);
+            if (unit.Length != 0)
+            {
+                double width = size == 140 ? TextWidth(number, true) : new FormattedText(number,
+                    CultureInfo.InvariantCulture, FlowDirection.LeftToRight, ReadoutFont, size, Brushes.White, 1).Width;
+                Text(dc, unit, x + width / 2 + 28, y + 45, 33);
+            }
         }
         private double TextWidth(string value, bool readout)
         {

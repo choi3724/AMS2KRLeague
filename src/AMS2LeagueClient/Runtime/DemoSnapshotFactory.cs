@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using AMS2LeagueClient.Core.Events;
 using AMS2LeagueClient.Core.Localization;
 using AMS2LeagueClient.Core.Presentation;
@@ -102,6 +104,10 @@ namespace AMS2LeagueClient.Runtime
             if (!local.IsValid || local.Participant == null) throw new InvalidOperationException(local.Reason);
             LeagueClassification league = new LeagueClassificationResolver().Resolve(snapshot, local.Participant);
             OverlayEvent? item = eventType.HasValue ? CreateEvent(eventType.Value) : null;
+            var demoLeaderGaps = new Dictionary<int, string>();
+            foreach (LeagueParticipant driver in league.Participants)
+                demoLeaderGaps[driver.Source.Index] = driver.LeaguePosition == 1 ? "0.000"
+                    : "+" + (driver.LeaguePosition * 1.125).ToString("0.000", CultureInfo.InvariantCulture);
             OverlayViewModel timing = OverlayViewModel.Build(
                 snapshot,
                 local.Participant,
@@ -111,7 +117,8 @@ namespace AMS2LeagueClient.Runtime
                 diagnostic,
                 OverlayTextCatalog.Korean.Get(OverlayTextKey.DemoSimulation),
                 item,
-                eventType.HasValue ? 2 : 0);
+                eventType.HasValue ? 2 : 0,
+                leaderTimeGaps: demoLeaderGaps);
             timing.AheadDistanceTrendArrow = "▲";
             timing.AheadDistanceColor = "#FF7777";
             timing.BehindDistanceTrendArrow = "▼";

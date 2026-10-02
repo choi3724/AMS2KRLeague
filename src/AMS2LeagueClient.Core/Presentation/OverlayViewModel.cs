@@ -204,7 +204,8 @@ namespace AMS2LeagueClient.Core.Presentation
             string? eventTimeRemainingTextOverride = null,
             int rankingRowCapacity = MaxRankingRows,
             IReadOnlyDictionary<int, float>? participantLapTimes = null, // Legacy probe argument; best laps never use observed clocks.
-            IReadOnlyCollection<int>? outLapParticipants = null)
+            IReadOnlyCollection<int>? outLapParticipants = null,
+            IReadOnlyDictionary<int, string>? leaderTimeGaps = null)
         {
             rankingRowCapacity = LeftTowerLayoutMetrics.ClampRankingRows(rankingRowCapacity);
             OverlayTextCatalog catalog = text ?? OverlayTextCatalog.Korean;
@@ -243,7 +244,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 local.Index,
                 broadcastStates,
                 league.FastestLapParticipant?.Source.Index,
-                outLapParticipants);
+                outLapParticipants,
+                leaderTimeGaps);
             IReadOnlyList<RankingRowViewModel> rankingRows = SelectRankingRows(allRankingRows, rankingRowCapacity);
             bool playerPinnedAfterLeaders = league.Local?.LeaguePosition > rankingRowCapacity;
             float displayedEventTimeRemaining = eventTimeRemainingOverride ?? snapshot.EventTimeRemaining;
@@ -322,7 +324,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 ClassPositionText = FormatClassPosition(league, local),
                 CurrentLapHeaderText = "랩 " + displayLap,
                 RankingRangeText = range,
-                RankingTimeHeaderText = snapshot.KnownSessionState == Telemetry.SessionState.Race ? "1위 최고랩 차" : "최고 랩",
+                RankingTimeHeaderText = snapshot.KnownSessionState == Telemetry.SessionState.Race ? "1위 시간 차" : "최고 랩",
                 IsRaceTowerGap = snapshot.KnownSessionState == Telemetry.SessionState.Race,
                 RankingRowCapacity = rankingRowCapacity,
                 AllRankingRows = allRankingRows,
@@ -405,9 +407,9 @@ namespace AMS2LeagueClient.Core.Presentation
             int localIndex,
             IReadOnlyDictionary<int, ParticipantBroadcastState>? broadcastStates,
             int? fastestIndex,
-            IReadOnlyCollection<int>? outLapParticipants)
+            IReadOnlyCollection<int>? outLapParticipants,
+            IReadOnlyDictionary<int, string>? leaderTimeGaps)
         {
-            ParticipantSnapshot? leader = league.Participants.FirstOrDefault(item => item.LeaguePosition == 1)?.Source;
             return league.Participants
                 .Select(item =>
                 {
@@ -432,7 +434,8 @@ namespace AMS2LeagueClient.Core.Presentation
                         Lap = "L" + (item.Source.CurrentLap > 0 ? item.Source.CurrentLap : item.Source.LapsCompleted + 1),
                         CurrentTime = lapText,
                         TowerTimeText = snapshot.KnownSessionState == Telemetry.SessionState.Race
-                            ? TowerBestLapGapText(snapshot, item.Source, leader, lapText)
+                            ? leaderTimeGaps != null && leaderTimeGaps.TryGetValue(item.Source.Index, out string? gap)
+                                ? gap : item.LeaguePosition == 1 ? "0.000" : "—"
                             : lapText,
                         IsPlayer = player,
                         DisplayState = displayState,
@@ -447,7 +450,8 @@ namespace AMS2LeagueClient.Core.Presentation
                         ClassBackground = dimmed ? "#394652" : classBadge.Background,
                         ClassForeground = dimmed ? "#AAB4BE" : classBadge.Foreground,
                         TimeForeground = dimmed ? OverlayUiPalette.InactiveTime
-                            : visibleFastestIndex == item.Source.Index ? "#E765F4" : OverlayUiPalette.ActiveTime,
+                            : snapshot.KnownSessionState != Telemetry.SessionState.Race
+                                && visibleFastestIndex == item.Source.Index ? "#E765F4" : OverlayUiPalette.ActiveTime,
                         PenaltyText = StateText.Penalty(item.Source, snapshot),
                         Status = terminal.Length > 0 ? terminal : StatusOf(item.Source.Index, broadcastStates, visibleFastestIndex),
                         StatusColor = terminal.Length > 0 ? (dimmed ? "#FF7777" : "#91A5B8")
@@ -455,27 +459,6 @@ namespace AMS2LeagueClient.Core.Presentation
                     };
                 })
                 .ToArray();
-        }
-
-        private static string TowerBestLapGapText(TelemetrySnapshot snapshot, ParticipantSnapshot driver,
-            ParticipantSnapshot? leader, string lapText)
-        {
-            if (!IsPositiveFinite(driver.BestLapTime) ||
-                (snapshot.KnownSessionState == Telemetry.SessionState.Race && driver.IsActive
-                    && driver.KnownRaceState == RaceState.Racing && driver.LapsCompleted < 2))
-                return lapText;
-            if (leader == null || !IsPositiveFinite(leader.BestLapTime)
-                || (snapshot.KnownSessionState == Telemetry.SessionState.Race && leader.IsActive
-                    && leader.KnownRaceState == RaceState.Racing && leader.LapsCompleted < 2)) return "—";
-            if (driver.Index == leader.Index) return "0.000";
-            double difference = driver.BestLapTime - leader.BestLapTime;
-            long milliseconds = (long)Math.Round(Math.Abs(difference) * 1000, MidpointRounding.AwayFromZero);
-            if (milliseconds == 0) return "0.000";
-            string magnitude = milliseconds < 60000
-                ? (milliseconds / 1000.0).ToString("0.000", CultureInfo.InvariantCulture)
-                : (milliseconds / 60000).ToString(CultureInfo.InvariantCulture) + ":"
-                    + ((milliseconds % 60000) / 1000.0).ToString("00.000", CultureInfo.InvariantCulture);
-            return (difference < 0 ? "-" : "+") + magnitude;
         }
 
         private static string TowerLapText(TelemetrySnapshot snapshot, ParticipantSnapshot driver, IReadOnlyCollection<int>? outLapParticipants)

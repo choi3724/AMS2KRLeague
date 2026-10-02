@@ -37,6 +37,7 @@ namespace AMS2LeagueClient.Runtime
         private readonly OverlayVisibilityController _visibilityController = new OverlayVisibilityController();
         private readonly MultiplayerWaitingOverlayController _multiplayerOverlayController = new MultiplayerWaitingOverlayController();
         private readonly RelativeDistanceTrendTracker _relativeDistanceTrendTracker = new RelativeDistanceTrendTracker();
+        private readonly LeaderTimeGapTracker _leaderTimeGapTracker = new LeaderTimeGapTracker();
         private readonly InvalidLapDisplayTracker _invalidLapDisplayTracker = new InvalidLapDisplayTracker();
         private readonly object _readerGate = new object();
         private readonly object _telemetryGate = new object();
@@ -473,6 +474,19 @@ namespace AMS2LeagueClient.Runtime
                 _lastVisibilityReason = effectiveVisibilityReason;
             }
 
+            // Keep observed crossing times while the tower is hidden, so enabling it mid-race
+            // does not discard timing history. Nothing here writes to the game's telemetry.
+            LeagueClassification? league = snapshot != null && local?.Participant != null
+                ? _leagueResolver.Resolve(snapshot, local.Participant) : null;
+            IReadOnlyDictionary<int, string> leaderTimeGaps;
+            if (snapshot != null && league != null)
+                leaderTimeGaps = _leaderTimeGapTracker.Observe(snapshot, league, _sessionTracker.Generation);
+            else
+            {
+                _leaderTimeGapTracker.Reset();
+                leaderTimeGaps = new Dictionary<int, string>();
+            }
+
             if (!decision.ShouldShow || window == null || snapshot == null)
             {
                 _overlay.HideOverlay();
@@ -505,8 +519,7 @@ namespace AMS2LeagueClient.Runtime
                 return;
             }
 
-            LeagueClassification league = _leagueResolver.Resolve(snapshot, local.Participant);
-            if (!league.IsLocalEligible)
+            if (league == null || !league.IsLocalEligible)
             {
                 _overlay.HideOverlay();
                 return;
@@ -624,7 +637,8 @@ namespace AMS2LeagueClient.Runtime
                     eventTimeRemainingOverride: multiplayerDecision.EffectiveRemainingSeconds,
                     eventTimeRemainingTextOverride: multiplayerDecision.RemainingDisplayTextOverride,
                     rankingRowCapacity: rankingRowCapacity,
-                    outLapParticipants: _invalidLapDisplayTracker.OutLapParticipants);
+                    outLapParticipants: _invalidLapDisplayTracker.OutLapParticipants,
+                    leaderTimeGaps: leaderTimeGaps);
                 _relativeDistanceTrendTracker.Apply(timing, _sessionTracker.Generation);
                 _invalidLapDisplayTracker.Apply(timing, snapshot, _sessionTracker.Generation);
                 _overlay.SetViewModel(OverlayShellViewModel.Build(snapshot, timing, eventUpdate.CurrentEvent, false, raceControl: raceControlUpdate));
@@ -765,6 +779,7 @@ namespace AMS2LeagueClient.Runtime
             _lastPresentationKey = _lastWindowKey = _lastInvalidSplitKey = _lastEventId = string.Empty;
             _eventEngine.Reset();
             _raceControlAnalyzer.Reset();
+            _leaderTimeGapTracker.Reset();
             _multiplayerOverlayController.Reset();
             _overlay.ResetDrivingTelemetry();
             _overlay.HideOverlay();

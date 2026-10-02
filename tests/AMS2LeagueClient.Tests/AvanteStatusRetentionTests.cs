@@ -15,13 +15,16 @@ namespace AMS2LeagueClient.Tests
     internal static partial class Program
     {
         private static TelemetrySnapshot StatusSnapshot(int revision, float fuel = .63f, uint flags = 0,
-            float oil = 101.1f, float water = 91.1f, float torque = 498.1f, float distance = 123.1f)
+            float oil = 101.1f, float water = 91.1f, float torque = 498.1f, float distance = 123.1f,
+            float pressure = -1, float boost = 0, bool boostActive = false, int ersMode = 0)
         {
             var vehicle = (ViewedVehicleTelemetrySnapshot)Activator.CreateInstance(typeof(ViewedVehicleTelemetrySnapshot), true)!;
             void Set(string name, object value) => typeof(ViewedVehicleTelemetrySnapshot).GetProperty(name)!.SetValue(vehicle, value);
             Set("MaxRpm", 8000f); Set("FuelLevel", fuel); Set("FuelCapacityLitres", 110f);
             Set("OilTemperatureCelsius", oil); Set("WaterTemperatureCelsius", water);
             Set("EngineTorqueNewtonMetres", torque); Set("OdometerKilometres", distance); Set("CarFlagsRaw", flags);
+            Set("TurboBoostPressure", pressure); Set("BoostAmount", boost);
+            Set("BoostActive", boostActive); Set("ErsDeploymentModeRaw", ersMode);
             return new TelemetrySnapshot(FixedTime().AddMilliseconds(revision * 7), 14, 3398, 0, 2, 1, 2, 0, 2, 0, 0, 0, 0, 0,
                 Array.Empty<ParticipantSnapshot>(), rootCarName: "status-retention", viewedVehicleTelemetry: vehicle);
         }
@@ -50,7 +53,7 @@ namespace AMS2LeagueClient.Tests
             ApplyStatus(view, StatusSnapshot(0));
             var before = StatusPixels(view); int builds = StatusRebuilds(view);
             // Raw changes below the visible rounding threshold and unused flags have no visible effect.
-            ApplyStatus(view, StatusSnapshot(1, flags: 1u << 10, oil: 101.2f, water: 91.1f, torque: 498.2f, distance: 123.2f));
+            ApplyStatus(view, StatusSnapshot(1, flags: 1u << 10, oil: 101.2f, water: 91.1f, torque: 498.11f, distance: 123.2f));
             AssertEqual(builds, StatusRebuilds(view)); AssertTrue(before.SequenceEqual(StatusPixels(view)));
             // Keep sub-litre fuel precision in the continuous gauge, independently of rounded strings.
             ApplyStatus(view, StatusSnapshot(2, fuel: .627f));
@@ -67,6 +70,52 @@ namespace AMS2LeagueClient.Tests
             ApplyStatus(view, StatusSnapshot(7, fuel: float.NaN)); int invalidBuilds = StatusRebuilds(view);
             AssertTrue(invalid.SequenceEqual(StatusPixels(view))); AssertEqual(invalidBuilds, StatusRebuilds(view));
             view.SetSample(null);
+        }
+
+        private static void AvantePowerSourcesAndSignedTorque()
+        {
+            var type = typeof(AvanteClusterView).Assembly.GetType("AMS2LeagueClient.Presentation.AvantePowerReadout")!;
+            var method = type.GetMethod("From", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var torqueMethod = type.GetMethod("Torque", BindingFlags.NonPublic | BindingFlags.Static)!;
+            var vehicle = (ViewedVehicleTelemetrySnapshot)Activator.CreateInstance(typeof(ViewedVehicleTelemetrySnapshot), true)!;
+            void Set(string name, object value) => typeof(ViewedVehicleTelemetrySnapshot).GetProperty(name)!.SetValue(vehicle, value);
+            (string Label, string Value, string Unit, string Secondary) Power()
+            {
+                object result = method.Invoke(null, new object?[] { vehicle, false })!;
+                string Get(string name) => (string)type.GetProperty(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(result)!;
+                return (Get("Label"), Get("Value"), Get("Unit"), Get("SecondaryText"));
+            }
+            Set("TurboBoostPressure", 1.42f); Set("BoostAmount", 56.5f); Set("BoostActive", true); Set("ErsDeploymentModeRaw", 4);
+            AssertEqual(("터보", "1.42", "bar", "부스트 56.5 · ERS 공격"), Power());
+            Set("TurboBoostPressure", -1f);
+            AssertEqual(("부스트량", "56.5", "", "ERS 모드: 공격"), Power());
+            Set("BoostAmount", 0f); Set("BoostActive", false);
+            AssertEqual(("ERS 모드", "공격", "", ""), Power());
+            Set("ErsDeploymentModeRaw", 0); Set("TurboBoostPressure", 0f);
+            AssertEqual(("터보", "0.00", "bar", ""), Power());
+            Set("TurboBoostPressure", -1f);
+            AssertEqual(("터보", "—", "bar", ""), Power());
+            AssertEqual("498.5", torqueMethod.Invoke(null, new object?[] { (float?)498.5f }));
+            AssertEqual("-12.5", torqueMethod.Invoke(null, new object?[] { (float?)(-12.5f) }));
+            AssertEqual("—", torqueMethod.Invoke(null, new object?[] { (float?)float.NaN }));
+
+            var view = new AvanteClusterView(true) { Width = 1024, Height = 375 };
+            string? Capture(string name)
+            {
+                if (_layoutCaptureDirectory == null) return null;
+                Directory.CreateDirectory(_layoutCaptureDirectory);
+                return Path.Combine(_layoutCaptureDirectory, name + ".png");
+            }
+            ApplyStatus(view, StatusSnapshot(0, torque: -12.5f, pressure: 1.25f, boost: 56.5f, boostActive: true, ersMode: 4));
+            byte[] first = StatusPixels(view, Capture("avante-turbo-boost-ers-negative-torque")); int builds = StatusRebuilds(view);
+            ApplyStatus(view, StatusSnapshot(1, torque: -12.5f, pressure: 1.50f, boost: 56.5f, boostActive: true, ersMode: 4));
+            AssertTrue(StatusRebuilds(view) > builds);
+            AssertFalse(first.SequenceEqual(StatusPixels(view)));
+            ApplyStatus(view, StatusSnapshot(2, pressure: -1, boost: 22.5f, boostActive: true));
+            AssertTrue(StatusRebuilds(view) > builds + 1);
+            StatusPixels(view, Capture("avante-generic-boost"));
+            ApplyStatus(view, StatusSnapshot(3, pressure: -1, ersMode: 4));
+            StatusPixels(view, Capture("avante-ers-mode"));
         }
 
         private static void AvanteBarGaugesFollowSourceContours()

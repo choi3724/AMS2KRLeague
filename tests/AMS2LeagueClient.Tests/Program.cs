@@ -138,6 +138,7 @@ namespace AMS2LeagueClient.Tests
                 ("Avante packaged scales preserve warning coordinates and reuse resources", AvantePackagedScales),
                 ("Avante text cache preserves recent readouts under capacity pressure", AvanteTextCachePreservesRecentReadouts),
                 ("Avante status retains rounded values and continuous fuel", AvanteStatusPreservesDisplayedValues),
+                ("Avante power sources and signed torque render from telemetry", AvantePowerSourcesAndSignedTorque),
                 ("Main overlay gallery previews and direct selection persist", MainOverlayGallery),
                 ("Telemetry layouts separate gauges and keep wheel angle compact", TelemetryPanelLayouts),
                 ("Driving graph scrolls existing points left between samples", DrivingGraphScrollsLeft),
@@ -276,7 +277,9 @@ namespace AMS2LeagueClient.Tests
                 ,("Participant lap clocks start independently at observed lines", ParticipantLapClocksStartIndependently)
                 ,("Participant lap clocks reject stale identity and terminal states", ParticipantLapClocksRejectInvalidContinuity)
                 ,("Tower best lap ignores sector loss and observed clocks", TowerTimingFallsBackForMissingSectors)
-                ,("Tower labels participant best-lap difference to P1", TowerShowsLeaderBestLapDifference)
+                ,("Race tower follows live same-point gap to P1", TowerShowsLiveLeaderTimeGap)
+                ,("Live leader gap handles lead changes and lapped cars", LiveLeaderGapHandlesLeadChangeAndLaps)
+                ,("Live leader gap respects the timed race clock and pause", LiveLeaderGapRespectsGameClock)
                 ,("Tower best lap uses only the participant best source", OpponentTimingUsesCurrentLapSectors)
                 ,("Opening lap shows out-lap label per driver only in the tower", OpeningLapLabelInTower)
                 ,("Race control shows current green flag without history", RaceControlShowsCurrentGreenWithoutHistory)
@@ -3164,26 +3167,52 @@ namespace AMS2LeagueClient.Tests
             AssertEqual("1:13.500", timing.RankingRows.Single(row => row.ParticipantIndex == 1).CurrentTime);
         }
 
-        private static void TowerShowsLeaderBestLapDifference()
+        private static void TowerShowsLiveLeaderTimeGap()
         {
             var fixture = new RawFixtureBuilder(4).SetSession(SessionState.Race)
+                .SetTrackTelemetry(1000, 300).SetSequence(1)
+                .SetParticipantLapDistance(0, 100).SetParticipantLapDistance(1, 80)
+                .SetParticipantLapDistance(2, 60).SetParticipantLapDistance(3, 40)
                 .SetParticipantLapTimes(0, 70.125f, 70.125f)
                 .SetParticipantLapTimes(1, 73.5f, 73.5f)
                 .SetParticipantLapTimes(2, 69.625f, 69.625f)
                 .SetParticipantLapTimes(3, -1, -1);
-            OverlayViewModel model = BuildTiming(fixture);
+            var tracker = new LeaderTimeGapTracker();
+            DateTimeOffset start = FixedTime();
+            OverlayViewModel Observe(int seconds)
+            {
+                TelemetrySnapshot snapshot = Parse(fixture, start.AddSeconds(seconds));
+                LeagueClassification league = Classify(snapshot);
+                IReadOnlyDictionary<int, string> gaps = tracker.Observe(snapshot, league, 1);
+                return OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), league, 30, 20, false, "TEST",
+                    leaderTimeGaps: gaps);
+            }
+            OverlayViewModel model = Observe(0);
+            AssertEqual("—", model.AllRankingRows.Single(row => row.ParticipantIndex == 1).TowerTimeText);
+            fixture.SetSequence(2).SetParticipantLapDistance(0, 200).SetParticipantLapDistance(1, 100)
+                .SetParticipantLapDistance(2, 90).SetParticipantLapDistance(3, 80);
+            model = Observe(1);
+            AssertEqual("+1.000", model.AllRankingRows.Single(row => row.ParticipantIndex == 1).TowerTimeText);
+            fixture.SetSequence(3).SetParticipantLapDistance(0, 300).SetParticipantLapDistance(1, 150)
+                .SetParticipantLapDistance(2, 120).SetParticipantLapDistance(3, 100);
+            model = Observe(2);
+            AssertEqual("+1.500", model.AllRankingRows.Single(row => row.ParticipantIndex == 1).TowerTimeText);
+            AssertEqual("+1.800", model.AllRankingRows.Single(row => row.ParticipantIndex == 2).TowerTimeText);
+            OverlayViewModel raceModel = model;
+            TelemetrySnapshot raceSnapshot = Parse(fixture, start.AddSeconds(2));
+            var raceGaps = raceModel.AllRankingRows.ToDictionary(row => row.ParticipantIndex, row => row.TowerTimeText);
             foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify,
                 SessionState.Race, SessionState.Test, SessionState.TimeAttack })
             {
-                model = BuildTiming(fixture.SetSession(session));
+                model = session == SessionState.Race ? raceModel : BuildTiming(fixture.SetSession(session));
                 string Gap(int index) => model.AllRankingRows.Single(row => row.ParticipantIndex == index).TowerTimeText;
                 if (session == SessionState.Race)
                 {
-                    AssertEqual("1위 최고랩 차", model.RankingTimeHeaderText);
+                    AssertEqual("1위 시간 차", model.RankingTimeHeaderText);
                     AssertTrue(model.IsRaceTowerGap);
                     AssertEqual("0.000", Gap(0));
-                    AssertEqual("+3.375", Gap(1));
-                    AssertEqual("-0.500", Gap(2));
+                    AssertEqual("+1.500", Gap(1));
+                    AssertEqual("+1.800", Gap(2));
                 }
                 else
                 {
@@ -3193,12 +3222,14 @@ namespace AMS2LeagueClient.Tests
                     AssertEqual("1:13.500", Gap(1));
                     AssertEqual("1:09.625", Gap(2));
                 }
-                AssertEqual(session == SessionState.Race ? "레이스 중"
+                AssertEqual(session == SessionState.Race ? "+2.000"
                     : session == SessionState.TimeAttack ? "--" : "랩 타임 주행 중", Gap(3));
             }
-            AssertEqual("+1:00.000", BuildTiming(fixture.SetSession(SessionState.Race)
-                .SetParticipantLapTimes(1, 130.125f, 130.125f)).AllRankingRows
-                .Single(row => row.ParticipantIndex == 1).TowerTimeText);
+            fixture.SetSession(SessionState.Race).SetParticipantLapTimes(1, 130.125f, 130.125f);
+            TelemetrySnapshot changedBest = Parse(fixture, start.AddSeconds(2));
+            OverlayViewModel unchangedGap = OverlayViewModel.Build(changedBest, ResolveLocal(changedBest),
+                Classify(changedBest), 30, 20, false, "TEST", leaderTimeGaps: raceGaps);
+            AssertEqual("+1.500", unchangedGap.AllRankingRows.Single(row => row.ParticipantIndex == 1).TowerTimeText);
             fixture.SetParticipantLapTimes(1, 73.5f, 73.5f);
             foreach (bool racing in new[] { false, true })
             {
@@ -3207,14 +3238,15 @@ namespace AMS2LeagueClient.Tests
                     Left = -5000, Top = -5000, ShowActivated = false };
                 try
                 {
-                    model = BuildTiming(fixture.SetSession(SessionState.Race));
                     tower.SetRacingDesign(racing);
-                    tower.SetViewModel(model);
+                    raceModel = OverlayViewModel.Build(raceSnapshot, ResolveLocal(raceSnapshot), Classify(raceSnapshot),
+                        30, 20, false, "TEST", leaderTimeGaps: raceGaps);
+                    tower.SetViewModel(raceModel);
                     host.Show(); PumpDispatcher(); tower.UpdateLayout();
-                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "1위 최고랩 차"));
-                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "+3.375"));
+                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "1위 시간 차"));
+                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "+1.500"));
                     tower.Height = OverlayUiMetrics.TowerHeight;
-                    CaptureLayout(tower, racing ? "leader-best-gap-racing" : "leader-best-gap-legacy");
+                    CaptureLayout(tower, racing ? "leader-live-gap-racing" : "leader-live-gap-legacy");
                     tower.SetViewModel(BuildTiming(fixture.SetSession(SessionState.Practice)));
                     PumpDispatcher(); tower.UpdateLayout();
                     AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "1:13.500"));
@@ -3225,8 +3257,73 @@ namespace AMS2LeagueClient.Tests
                 }
                 finally { host.Close(); }
             }
-            model = BuildTiming(fixture.SetSession(SessionState.Race).SetParticipantLapTimes(0, -1, -1));
+            tracker.Reset();
+            fixture.SetSession(SessionState.Race);
+            model = Observe(2);
             AssertEqual("—", model.AllRankingRows.Single(row => row.ParticipantIndex == 1).TowerTimeText);
+        }
+
+        private static void LiveLeaderGapHandlesLeadChangeAndLaps()
+        {
+            var fixture = new RawFixtureBuilder(4).SetSession(SessionState.Race)
+                .SetTrackTelemetry(1000, 300).SetSequence(1)
+                .SetParticipantLapDistance(0, 100).SetParticipantLapDistance(1, 80)
+                .SetParticipantLapDistance(2, 60).SetParticipantLapDistance(3, 40);
+            var tracker = new LeaderTimeGapTracker();
+            DateTimeOffset start = FixedTime();
+            string Gap(int index, int second)
+            {
+                TelemetrySnapshot snapshot = Parse(fixture, start.AddSeconds(second));
+                LeagueClassification league = new LeagueClassificationResolver().Resolve(snapshot,
+                    snapshot.Participants.Single(item => item.Index == 3));
+                IReadOnlyDictionary<int, string> gaps = tracker.Observe(snapshot, league, 1);
+                return gaps.TryGetValue(index, out string? gap) ? gap : "—";
+            }
+            AssertEqual("—", Gap(1, 0));
+            fixture.SetSequence(2).SetParticipantLapDistance(0, 200).SetParticipantLapDistance(1, 180);
+            AssertEqual("+0.200", Gap(1, 1));
+            fixture.SetSequence(3)
+                .SetParticipant(0, true, "DRIVER_0", 2, 2, 3, RaceState.Racing, PitMode.None)
+                .SetParticipant(1, true, "DRIVER_1", 1, 2, 3, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 240).SetParticipantLapDistance(1, 260);
+            AssertEqual("+0.250", Gap(0, 2));
+            AssertEqual("0.000", Gap(1, 2));
+
+            tracker.Reset();
+            fixture.SetSequence(4)
+                .SetParticipant(0, true, "DRIVER_0", 1, 3, 4, RaceState.Racing, PitMode.None)
+                .SetParticipant(1, true, "DRIVER_1", 2, 1, 2, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 100).SetParticipantLapDistance(1, 900);
+            AssertEqual("+1랩", Gap(1, 3));
+            fixture.SetSession(SessionState.Practice).SetSequence(5);
+            AssertEqual("—", Gap(1, 4));
+        }
+
+        private static void LiveLeaderGapRespectsGameClock()
+        {
+            var fixture = new RawFixtureBuilder(4).SetSession(SessionState.Race)
+                .SetSessionTiming(10, 0, 100).SetTrackTelemetry(1000, 100).SetSequence(1)
+                .SetParticipantLapDistance(0, 100).SetParticipantLapDistance(1, 80)
+                .SetParticipantLapDistance(2, 60).SetParticipantLapDistance(3, 40);
+            var tracker = new LeaderTimeGapTracker();
+            DateTimeOffset start = FixedTime();
+            string Gap(int index, int second)
+            {
+                TelemetrySnapshot snapshot = Parse(fixture, start.AddSeconds(second));
+                LeagueClassification league = new LeagueClassificationResolver().Resolve(snapshot,
+                    snapshot.Participants.Single(item => item.Index == 3));
+                IReadOnlyDictionary<int, string> gaps = tracker.Observe(snapshot, league, 1);
+                return gaps.TryGetValue(index, out string? gap) ? gap : "—";
+            }
+            AssertEqual("—", Gap(1, 0));
+            fixture.SetSequence(2).SetTrackTelemetry(1000, 99)
+                .SetParticipantLapDistance(0, 200).SetParticipantLapDistance(1, 100);
+            AssertEqual("+1.000", Gap(1, 1));
+            fixture.SetSequence(3).SetGameState(GameState.InGamePaused);
+            AssertEqual("+1.000", Gap(1, 2));
+            fixture.SetSequence(4).SetGameState(GameState.InGamePlaying).SetTrackTelemetry(1000, 98.5f)
+                .SetParticipantLapDistance(0, 250).SetParticipantLapDistance(1, 125);
+            AssertEqual("+1.250", Gap(1, 3));
         }
 
         private static void OpponentTimingUsesCurrentLapSectors()
@@ -3289,7 +3386,7 @@ namespace AMS2LeagueClient.Tests
             AssertEqual("0:11.000", later.CurrentLapText);
             AssertEqual("1:20.500", later.AllRankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
             AssertEqual("무효", PlayerRow(later).Status);
-            AssertEqual("#E765F4", PlayerRow(later).TimeForeground);
+            AssertEqual(OverlayUiPalette.ActiveTime, PlayerRow(later).TimeForeground);
             AssertEqual("#FF7777", PlayerRow(later).StatusColor);
             AssertFalse(PlayerRow(later).IsDimmed);
             AssertTrue(later.CurrentLabel.Contains("무효", StringComparison.Ordinal));
@@ -3831,6 +3928,20 @@ namespace AMS2LeagueClient.Tests
                 if ((width == 288 && !expanded) || (expanded && (width == 160 || width == 600 || width == 416)))
                     CaptureLayout(view, "race-control-fit-" + width + "x" + height + "-" + expanded);
             }
+            var adjustable = new RaceControlView { Width = 832, Height = 304 };
+            adjustable.SetViewModel(new RaceControlViewModel
+            {
+                IsVisible = true, IsExpanded = true, Title = "레이스 컨트롤",
+                DriverLine = "P1 DRIVER", Message = "황색기", StateLabel = "황색기"
+            }, false);
+            adjustable.Measure(new Size(832, 304)); adjustable.Arrange(new Rect(0, 0, 832, 304));
+            PumpDispatcher(); adjustable.UpdateLayout();
+            var title = Named<TextBlock>(adjustable, "TitleText");
+            double initialSize = title.FontSize;
+            adjustable.ApplyFontScale(1.5); adjustable.UpdateLayout();
+            AssertTrue(title.FontSize > initialSize);
+            AssertTrue(title.TransformToAncestor(adjustable).TransformBounds(new Rect(title.RenderSize)).Bottom < adjustable.ActualHeight);
+            CaptureLayout(adjustable, "race-control-font-150-percent");
         }
 
         private static void CaptureLayout(FrameworkElement view, string name, int settleMs = 1200)

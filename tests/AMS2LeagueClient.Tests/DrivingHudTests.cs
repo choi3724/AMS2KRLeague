@@ -171,8 +171,8 @@ namespace AMS2LeagueClient.Tests
             var invalid = new DrivingTelemetrySample(FixedTime(), 1, 3, double.NaN, -1, 1.1, double.PositiveInfinity, -1, 99);
             AssertTrue(invalid.Pedals.All(value => !value.HasValue));
             AssertEqual("— km/h", invalid.SpeedText); AssertEqual("—", invalid.GearText);
-            AssertEqual("-1", new DrivingTelemetrySample(FixedTime(), 1, 3, 0, 0, 0, 0, 0, -1).GearText);
-            AssertEqual("0", new DrivingTelemetrySample(FixedTime(), 1, 3, 0, 0, 0, 0, 0, 0).GearText);
+            AssertEqual("R", new DrivingTelemetrySample(FixedTime(), 1, 3, 0, 0, 0, 0, 0, -1).GearText);
+            AssertEqual("N", new DrivingTelemetrySample(FixedTime(), 1, 3, 0, 0, 0, 0, 0, 0).GearText);
             var history = new DrivingTelemetryHistory();
             var watch = Stopwatch.StartNew();
             for (int i = 0; i < 10000; i++)
@@ -258,6 +258,12 @@ namespace AMS2LeagueClient.Tests
                 }
                 PumpDispatcher();
                 AssertEqual("260 km/h", speedView.ValueText.Text); AssertEqual("4", gearView.ValueText.Text);
+                window.UpdateDrivingSample(new DrivingTelemetrySample(FixedTime().AddSeconds(5), 1, 3, 0, 0, 0, 0, 0, 0));
+                AssertEqual("N", gearView.ValueText.Text);
+                window.UpdateDrivingSample(new DrivingTelemetrySample(FixedTime().AddSeconds(5.1), 1, 3, 0, 0, 0, 0, 0, -1));
+                AssertEqual("R", gearView.ValueText.Text);
+                window.UpdateDrivingSample(new DrivingTelemetrySample(FixedTime().AddSeconds(5.2), 1, 3, 0, 0, 0, 0, 260 / 3.6, 4));
+                AssertEqual("4", gearView.ValueText.Text);
                 foreach (Window panel in new[] { pedals, gauges, speed, gear, dashboard })
                 {
                     AssertTrue(OverlayWindowInterop.ReadStyleState(new WindowInteropHelper(panel).Handle).ClickThrough);
@@ -265,7 +271,8 @@ namespace AMS2LeagueClient.Tests
                 }
                 var settings = new DrivingHudSettings { TowerDesign = "racing", TelemetryDesign = "racing", BrakeColor = "#FFAA00", ThrottleColor = "#00CCFF",
                     ClutchColor = "#FFFFFF", HandBrakeColor = "#FF55AA", SpeedFont = "Consolas", GearFont = "Arial",
-                    SpeedShadowColor = "#00AAFF", GearShadowColor = "#FF0066", SteeringRangeDegrees = 1080 };
+                    SpeedShadowColor = "#00AAFF", GearShadowColor = "#FF0066", SteeringRangeDegrees = 1080,
+                    RaceControlFontScale = 1.5 };
                 window.SaveDrivingHudSettings(settings); PumpDispatcher();
                 AssertEqual("Consolas", speedView.ValueText.FontFamily.Source);
                 AssertEqual("Arial", gearView.ValueText.FontFamily.Source);
@@ -310,6 +317,7 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual("#00AAFF", window.GetDrivingHudSettings().SpeedShadowColor);
                 AssertEqual("#FF0066", window.GetDrivingHudSettings().GearShadowColor);
                 AssertEqual(1080.0, window.GetDrivingHudSettings().SteeringRangeDegrees);
+                AssertEqual(1.5, window.GetDrivingHudSettings().RaceControlFontScale);
                 AssertEqual("racing", window.GetDrivingHudSettings().TowerDesign); AssertEqual("racing", window.GetDrivingHudSettings().TelemetryDesign);
                 AssertFalse(window.IsComponentEnabled(OverlayComponentKeys.Speed));
                 AssertFalse(window.IsComponentEnabled(OverlayComponentKeys.PedalGauge));
@@ -321,6 +329,7 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual("#00AAFF", window.GetDrivingHudSettings().SpeedShadowColor);
                 AssertEqual("#FF0066", window.GetDrivingHudSettings().GearShadowColor);
                 AssertEqual(1080.0, window.GetDrivingHudSettings().SteeringRangeDegrees);
+                AssertEqual(1.5, window.GetDrivingHudSettings().RaceControlFontScale);
                 AssertEqual("racing", window.GetDrivingHudSettings().TowerDesign); AssertEqual("racing", window.GetDrivingHudSettings().TelemetryDesign);
                 var dialog = new DrivingHudSettingsWindow(settings);
                 dialog.ShowActivated = false; dialog.Left = -5000; dialog.Top = -5000;
@@ -345,6 +354,10 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual((double)settings.HudFrameLimit, frameLimit.Value);
                 AssertEqual(30.0, frameLimit.Minimum); AssertEqual(240.0, frameLimit.Maximum);
                 AssertEqual(1.0, frameLimit.TickFrequency); AssertTrue(frameLimit.IsSnapToTickEnabled);
+                var raceFont = Descendants<Slider>(dialog).Single(slider =>
+                    System.Windows.Automation.AutomationProperties.GetName(slider) == "레이스 컨트롤 글자 크기");
+                AssertEqual(150.0, raceFont.Value);
+                AssertEqual(75.0, raceFont.Minimum); AssertEqual(200.0, raceFont.Maximum);
                 AssertTrue(dialog.ActualHeight <= SystemParameters.WorkArea.Height);
                 AssertEqual(6, Descendants<Button>(dialog).Count(button => button.Tag is string));
                 CaptureLayout((FrameworkElement)dialog.Content, "driving-settings-menu");

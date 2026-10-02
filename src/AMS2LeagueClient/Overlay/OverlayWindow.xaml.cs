@@ -249,6 +249,7 @@ namespace AMS2LeagueClient.Overlay
             _avanteView?.ApplySettings(settings); _avanteExpandedView?.ApplySettings(settings);
             _speedView?.ApplyFont(settings.SpeedFont);
             _gearView?.ApplyFont(settings.GearFont);
+            _raceControlView?.ApplyFontScale(settings.RaceControlFontScale);
             _speedView?.ApplyShadow(settings.SpeedShadowColor);
             _gearView?.ApplyShadow(settings.GearShadowColor);
             RefreshRetainedNSettings();

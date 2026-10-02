@@ -23,6 +23,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string HandBrakeColor { get; set; } = "#BE60FF";
         public string SpeedFont { get; set; } = DefaultFontName;
         public string GearFont { get; set; } = DefaultFontName;
+        public double RaceControlFontScale { get; set; } = 1;
         public string SpeedShadowColor { get; set; } = "#000000";
         public string GearShadowColor { get; set; } = "#000000";
 
@@ -41,6 +42,7 @@ namespace AMS2LeagueClient.Core.Presentation
             ClutchColor = Color(ClutchColor, "#3399FF"),
             HandBrakeColor = Color(HandBrakeColor, "#BE60FF"),
             SpeedFont = Font(SpeedFont), GearFont = Font(GearFont),
+            RaceControlFontScale = double.IsFinite(RaceControlFontScale) ? Math.Clamp(RaceControlFontScale, 0.75, 2) : 1,
             SpeedShadowColor = Color(SpeedShadowColor, "#000000"),
             GearShadowColor = Color(GearShadowColor, "#000000")
         };
@@ -83,7 +85,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public double? SteeringDegrees(double range) => Steering * range / 2;
         public string RpmText => Rpm?.ToString("0", CultureInfo.InvariantCulture) ?? "—";
         public string SpeedText => (SpeedKmh?.ToString("0", CultureInfo.InvariantCulture) ?? "—") + " km/h";
-        public string GearText => Gear?.ToString(CultureInfo.InvariantCulture) ?? "—";
+        public string GearText => Gear == 0 ? "N" : Gear == -1 ? "R"
+            : Gear?.ToString(CultureInfo.InvariantCulture) ?? "—";
 
         public static DrivingTelemetrySample? FromSnapshot(TelemetrySnapshot snapshot, int localIndex, int generation)
         {
