@@ -67,6 +67,7 @@ namespace AMS2LeagueClient.Runtime
             while (!token.IsCancellationRequested)
             {
                 string? downloadedInstaller = null;
+                string? targetVersion = null;
                 bool handedOff = false;
                 try
                 {
@@ -81,6 +82,7 @@ namespace AMS2LeagueClient.Runtime
                     if (update == null) _status("업데이트: 최신 버전입니다 (" + _version + ")");
                     else
                     {
+                        targetVersion = update.Version;
                         string attempt = Path.Combine(_directory, Guid.NewGuid().ToString("N"));
                         var progress = new UpdateProgress(percent => _status("업데이트: " + update.Version + " 다운로드 중 · " + percent + "%"));
                         string installer = downloadedInstaller = await client.DownloadAsync(update, attempt, progress, token).ConfigureAwait(false);
@@ -105,7 +107,20 @@ namespace AMS2LeagueClient.Runtime
                 catch (Exception exception)
                 {
                     _logger.Warning("AUTO_UPDATE_FAILED", "reason=" + exception.GetType().Name);
-                    _status("업데이트: 확인 또는 설치 준비 실패 · 6시간 후 재시도합니다. 오버레이는 계속 작동합니다.");
+                    bool desktopLogWritten = false;
+                    try
+                    {
+                        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                        string path = DesktopUpdateFailureLog.Write(desktop, _version, targetVersion, "check-download-prepare", exception);
+                        _logger.Info("AUTO_UPDATE_DESKTOP_LOG", "path=" + path);
+                        desktopLogWritten = true;
+                    }
+                    catch (Exception logException)
+                    {
+                        _logger.Warning("AUTO_UPDATE_DESKTOP_LOG_FAILED", "reason=" + logException.GetType().Name);
+                    }
+                    _status("업데이트: 확인 또는 설치 준비 실패 · 6시간 후 재시도합니다. 오버레이는 계속 작동합니다."
+                        + (desktopLogWritten ? " 바탕화면에 진단 로그를 남겼습니다." : ""));
                 }
                 finally
                 {
@@ -147,6 +162,7 @@ namespace AMS2LeagueClient.Runtime
                 InstallDirectory = _installDirectory,
                 Executable = executable,
                 RestartArguments = string.Join(" ", _arguments.Where(arg => !string.Equals(arg, "--after-update", StringComparison.OrdinalIgnoreCase)).Concat(new[] { "--after-update" }).Select(QuoteArgument)),
+                DesktopDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
                 ResultPath = Path.Combine(_directory, "last-result.json")
             }), new UTF8Encoding(true), token).ConfigureAwait(false);
             var start = new ProcessStartInfo

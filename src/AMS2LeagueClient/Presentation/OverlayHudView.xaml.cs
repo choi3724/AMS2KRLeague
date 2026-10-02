@@ -43,6 +43,7 @@ namespace AMS2LeagueClient.Presentation
 
         private ItemsControl RankingItems = null!;
         private bool? _racingDesign;
+        private DrivingHudSettings.TextAppearance _textAppearance = new DrivingHudSettings.TextAppearance();
         public OverlayHudView()
         {
             InitializeComponent();
@@ -57,6 +58,13 @@ namespace AMS2LeagueClient.Presentation
             TowerContent.ApplyTemplate();
             RankingItems = (ItemsControl)TowerContent.Template.FindName("RankingItems", TowerContent);
             RankingItems.ItemsSource = _rankingRows;
+            OverlayTextStyler.Apply(this, _textAppearance);
+        }
+
+        public void ApplyTypography(DrivingHudSettings.TextAppearance appearance)
+        {
+            _textAppearance = appearance;
+            OverlayTextStyler.Apply(this, appearance);
         }
 
         public void SetViewModel(OverlayViewModel viewModel)
@@ -193,6 +201,7 @@ namespace AMS2LeagueClient.Presentation
 
         private void RankingRow_Loaded(object sender, RoutedEventArgs eventArgs)
         {
+            if (sender is FrameworkElement textRow) OverlayTextStyler.Apply(textRow, _textAppearance);
             if (!(sender is FrameworkElement row) || (bool)row.GetValue(RowEnteredProperty)) return;
             row.SetValue(RowEnteredProperty, true);
             if (!(VisualTreeHelper.GetParent(row) is ContentPresenter presenter)) return;

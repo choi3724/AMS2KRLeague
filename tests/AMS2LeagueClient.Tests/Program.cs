@@ -75,6 +75,10 @@ namespace AMS2LeagueClient.Tests
                 application.Shutdown();
                 return 0;
             }
+            if (args.Contains("--typography-preview", StringComparer.Ordinal))
+            {
+                OverlayTypographyStaysIndependent(); application.Shutdown(); return 0;
+            }
             if (args.Contains("--avante-detail-preview", StringComparer.Ordinal))
             {
                 AvanteBarGaugesFollowSourceContours(); AvanteStatusPreservesDisplayedValues();
@@ -148,6 +152,7 @@ namespace AMS2LeagueClient.Tests
                 ,("Fast driving reads are isolated from recording", FastDrivingReadDoesNotFeedRecording),
                 ("Ahead and behind battles use the matching split and queue", BattlesAheadAndBehind),
                 ("Driving HUD renders independently and persists appearance", DrivingHudRenderingAndSettings),
+                ("Overlay typography changes inside fixed bounds and excludes N clusters", OverlayTypographyStaysIndependent),
                 ("Update helper confirms restart and reports early exit", UpdateHelperConfirmsRestart),
                 ("Automatic online log session boundaries", AutomaticModeTests.LogBoundaries),
                 ("Automatic mode rejects missing stale and replaced logs", AutomaticModeTests.LogFilesAndHistory),

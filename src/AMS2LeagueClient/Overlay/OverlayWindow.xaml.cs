@@ -240,16 +240,24 @@ namespace AMS2LeagueClient.Overlay
                 }
             }
             TimingHud?.SetRacingDesign(settings.TowerDesign == "racing");
+            TimingHud?.ApplyTypography(settings.TextFor(OverlayComponentKeys.TimingTower));
+            if (_relativeView != null) OverlayTextStyler.Apply(_relativeView, settings.TextFor(OverlayComponentKeys.RelativeDrivers));
+            if (_lapTimingView != null) OverlayTextStyler.Apply(_lapTimingView, settings.TextFor(OverlayComponentKeys.LapTiming));
+            if (_sessionView != null) OverlayTextStyler.Apply(_sessionView, settings.TextFor(OverlayComponentKeys.SessionInfo));
+            if (_eventView != null) OverlayTextStyler.Apply(_eventView, settings.TextFor(OverlayComponentKeys.EventCard));
+            if (_waitingView != null) OverlayTextStyler.Apply(_waitingView, settings.TextFor(OverlayComponentKeys.Waiting));
             Title = settings.TowerDesign == "racing" ? "AMS2 순위 타워 (개량)" : "AMS2 순위 타워 (기본)";
             if (_drivingWindows[0] != null) _drivingWindows[0]!.Title = settings.TelemetryDesign == "racing" ? "AMS2 텔레메트리 (개량)" : "AMS2 텔레메트리 (기본)";
             _legacyPedalView?.ApplySettings(settings);
             _pedalView?.ApplySettings(settings);
+            _pedalView?.ApplyTypography(settings.TextFor(OverlayComponentKeys.PedalTelemetry));
             _pedalGaugeView?.ApplySettings(settings);
+            _pedalGaugeView?.ApplyTypography(settings.TextFor(OverlayComponentKeys.PedalGauge));
             _dashboardView?.ApplySettings(settings);
             _avanteView?.ApplySettings(settings); _avanteExpandedView?.ApplySettings(settings);
-            _speedView?.ApplyFont(settings.SpeedFont);
-            _gearView?.ApplyFont(settings.GearFont);
-            _raceControlView?.ApplyFontScale(settings.RaceControlFontScale);
+            _speedView?.ApplyTypography(settings.TextFor(OverlayComponentKeys.Speed));
+            _gearView?.ApplyTypography(settings.TextFor(OverlayComponentKeys.Gear));
+            _raceControlView?.ApplyTypography(settings.TextFor(OverlayComponentKeys.RaceControl));
             _speedView?.ApplyShadow(settings.SpeedShadowColor);
             _gearView?.ApplyShadow(settings.GearShadowColor);
             RefreshRetainedNSettings();

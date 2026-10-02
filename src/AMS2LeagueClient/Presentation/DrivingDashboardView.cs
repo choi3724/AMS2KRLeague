@@ -30,6 +30,7 @@ namespace AMS2LeagueClient.Presentation
         private readonly FormattedText?[] _text = new FormattedText?[9];
         private Typeface _speedFont = Font(DrivingHudSettings.DefaultFontName);
         private Typeface _gearFont = Font(DrivingHudSettings.DefaultFontName);
+        private double _fontScale = 1;
         private double _dpi;
         private double _inputTarget;
         private bool _braking;
@@ -79,7 +80,14 @@ namespace AMS2LeagueClient.Presentation
         }
         public void ApplySettings(DrivingHudSettings settings)
         {
-            _speedFont = Font(settings.SpeedFont); _gearFont = Font(settings.GearFont);
+            // Old profiles shared the speed/gear font selections with this HUD.
+            // Once its own entry is saved, the dashboard typography is independent.
+            bool independent = settings.OverlayText?.ContainsKey(OverlayComponentKeys.DrivingDashboard) == true;
+            _speedFont = Font(independent ? DrivingHudSettings.DefaultFontName : settings.SpeedFont);
+            _gearFont = Font(independent ? DrivingHudSettings.DefaultFontName : settings.GearFont);
+            DrivingHudSettings.TextAppearance text = settings.TextFor(OverlayComponentKeys.DrivingDashboard);
+            if (text.Font.Length != 0) _speedFont = _gearFont = Font(text.Font);
+            _fontScale = text.Scale;
             Array.Clear(_text, 0, _text.Length); InvalidateVisual();
         }
         public void SetSession(double trackTemperature, string remainingLabel, string remaining)
@@ -199,7 +207,15 @@ namespace AMS2LeagueClient.Presentation
             if (_dpi != dpi) { Array.Clear(_text, 0, _text.Length); _dpi = dpi; }
             FormattedText? text = _text[slot];
             if (text == null || text.Text != value)
-                _text[slot] = text = new FormattedText(value, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, size, color, dpi);
+            {
+                double requestedSize = size * _fontScale;
+                text = new FormattedText(value, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font, requestedSize, color, dpi);
+                double maximumWidth = slot == 6 ? 105 : slot == 7 ? 145 : double.PositiveInfinity;
+                if (text.Width > maximumWidth)
+                    text = new FormattedText(value, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, font,
+                        requestedSize * maximumWidth / text.Width, color, dpi);
+                _text[slot] = text;
+            }
             drawing.DrawText(text, new Point(centered ? x - text.Width / 2 : x, centered ? y - text.Height / 2 : y));
         }
     }

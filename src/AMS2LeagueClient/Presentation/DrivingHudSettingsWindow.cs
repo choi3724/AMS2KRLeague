@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -9,12 +10,13 @@ namespace AMS2LeagueClient.Presentation
 {
     public sealed class DrivingHudSettingsWindow : Window
     {
+        private const string OriginalFontLabel = "기본 글꼴";
         private readonly Button[] _colors = new Button[6];
         private readonly Slider _steeringRange = new Slider { Minimum = 180, Maximum = 1440, TickFrequency = 90, IsSnapToTickEnabled = true, Width = 200 };
         private readonly ComboBox _speedFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
         private readonly ComboBox _gearFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
-        private readonly Slider _raceControlFontScale = new Slider { Minimum = 75, Maximum = 200,
-            SmallChange = 5, LargeChange = 10, TickFrequency = 5, IsSnapToTickEnabled = true, Width = 200 };
+        private readonly Dictionary<string, ComboBox> _overlayFonts = new Dictionary<string, ComboBox>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Slider> _overlayFontScales = new Dictionary<string, Slider>(StringComparer.OrdinalIgnoreCase);
         private readonly Slider _frameLimit = new Slider { Minimum = DrivingHudSettings.MinimumHudFrameLimit, Maximum = DrivingHudSettings.MaximumHudFrameLimit,
             SmallChange = 1, LargeChange = 10, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 200 };
         public DrivingHudSettings Settings { get; private set; }
@@ -47,24 +49,28 @@ namespace AMS2LeagueClient.Presentation
             panel.Children.Add(Row("핸들 전체 회전각", rangePanel));
             panel.Children.Add(new TextBlock { Text = "게임에서 사용하는 좌우 전체 회전 범위에 맞춰 주세요.",
                 FontSize = 11, Foreground = Brushes.LightGray, TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(new TextBlock { Text = "숫자 글꼴", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
-            string[] fonts = Fonts.SystemFontFamilies.Select(font => font.Source).Concat(new[] { DrivingHudSettings.DefaultFontName }).Distinct().OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase).ToArray();
-            _speedFont.ItemsSource = fonts; _gearFont.ItemsSource = fonts;
-            _speedFont.SelectedItem = fonts.Contains(Settings.SpeedFont) ? Settings.SpeedFont : DrivingHudSettings.DefaultFontName;
-            _gearFont.SelectedItem = fonts.Contains(Settings.GearFont) ? Settings.GearFont : DrivingHudSettings.DefaultFontName;
-            panel.Children.Add(FontRow("속도계", _speedFont, "123 km/h", 30));
-            panel.Children.Add(FontRow("기어", _gearFont, "3", 38));
-            panel.Children.Add(new TextBlock { Text = "레이스 컨트롤 글자 크기", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
-            _raceControlFontScale.Value = Settings.RaceControlFontScale * 100;
-            var raceControlFontValue = new TextBlock { Text = ((int)_raceControlFontScale.Value) + "%",
-                VerticalAlignment = VerticalAlignment.Center, MinWidth = 48 };
-            _raceControlFontScale.ValueChanged += (_, __) => raceControlFontValue.Text = ((int)_raceControlFontScale.Value) + "%";
-            System.Windows.Automation.AutomationProperties.SetName(_raceControlFontScale, "레이스 컨트롤 글자 크기");
-            var raceControlFontPanel = new StackPanel { Orientation = Orientation.Horizontal };
-            raceControlFontPanel.Children.Add(_raceControlFontScale); raceControlFontPanel.Children.Add(raceControlFontValue);
-            panel.Children.Add(Row("레이스 컨트롤", raceControlFontPanel));
-            panel.Children.Add(new TextBlock { Text = "작은 카드에서는 글자가 잘리지 않도록 자동으로 맞춥니다. 더 크게 보려면 레이아웃 편집에서 카드도 키워 주세요.",
+            panel.Children.Add(new TextBlock { Text = "오버레이별 글꼴·글자 크기", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
+            panel.Children.Add(new TextBlock { Text = "창 테두리 크기와 별도로 내부 글자만 조절합니다.",
                 FontSize = 11, Foreground = Brushes.LightGray, TextWrapping = TextWrapping.Wrap });
+            string[] fonts = new[] { OriginalFontLabel }.Concat(Fonts.SystemFontFamilies.Select(font => font.Source)
+                .Concat(new[] { DrivingHudSettings.DefaultFontName }).Distinct().OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)).ToArray();
+            foreach (string component in OverlayComponentKeys.TextConfigurable)
+            {
+                string label = TextOverlayLabel(component);
+                var choice = component == OverlayComponentKeys.Speed ? _speedFont
+                    : component == OverlayComponentKeys.Gear ? _gearFont : new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
+                var fontScaleSlider = new Slider { Minimum = 50, Maximum = 200, SmallChange = 5, LargeChange = 10,
+                    TickFrequency = 5, IsSnapToTickEnabled = true, Width = 200 };
+                DrivingHudSettings.TextAppearance currentText = Settings.TextFor(component);
+                choice.ItemsSource = fonts;
+                choice.SelectedItem = currentText.Font.Length == 0 ? OriginalFontLabel
+                    : fonts.Contains(currentText.Font) ? currentText.Font : OriginalFontLabel;
+                fontScaleSlider.Value = currentText.Scale * 100;
+                _overlayFonts[component] = choice;
+                _overlayFontScales[component] = fontScaleSlider;
+                panel.Children.Add(FontRow(label, choice, fontScaleSlider,
+                    component == OverlayComponentKeys.Gear ? "3" : component == OverlayComponentKeys.Speed ? "123 km/h" : "가 123", 28));
+            }
             panel.Children.Add(new TextBlock { Text = "글자 그림자 색상", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
             for (int i = 4; i < 6; i++)
             {
@@ -167,9 +173,16 @@ namespace AMS2LeagueClient.Presentation
                 Settings = new DrivingHudSettings { AvanteVehicles = Settings.AvanteVehicles, TowerDesign = Settings.TowerDesign, TelemetryDesign = Settings.TelemetryDesign, SteeringRangeDegrees = _steeringRange.Value, BrakeColor = (string)_colors[0].Tag, ThrottleColor = (string)_colors[1].Tag,
                     ClutchColor = (string)_colors[2].Tag, HandBrakeColor = (string)_colors[3].Tag,
                     SpeedShadowColor = (string)_colors[4].Tag, GearShadowColor = (string)_colors[5].Tag,
-                    SpeedFont = _speedFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName, GearFont = _gearFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName,
+                    SpeedFont = _speedFont.SelectedItem as string == OriginalFontLabel ? DrivingHudSettings.DefaultFontName : _speedFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName,
+                    GearFont = _gearFont.SelectedItem as string == OriginalFontLabel ? DrivingHudSettings.DefaultFontName : _gearFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName,
                     HudFrameLimit = (int)_frameLimit.Value,
-                    RaceControlFontScale = _raceControlFontScale.Value / 100 };
+                    RaceControlFontScale = _overlayFontScales[OverlayComponentKeys.RaceControl].Value / 100,
+                    OverlayText = _overlayFonts.ToDictionary(pair => pair.Key, pair => new DrivingHudSettings.TextAppearance
+                    {
+                        Font = pair.Value.SelectedItem as string == OriginalFontLabel ? ""
+                            : pair.Value.SelectedItem as string ?? "",
+                        Scale = _overlayFontScales[pair.Key].Value / 100
+                    }, StringComparer.OrdinalIgnoreCase) };
                 DialogResult = true;
             };
             buttons.Children.Add(save);
@@ -189,33 +202,57 @@ namespace AMS2LeagueClient.Presentation
             return row;
         }
 
-        private static Grid FontRow(string label, ComboBox selector, string sample, double size)
+        private static Grid FontRow(string label, ComboBox selector, Slider scale, string sample, double size)
         {
             var preview = new TextBlock
             {
-                Text = sample, FontSize = size, FontWeight = FontWeights.Bold,
+                Text = sample, FontSize = size * scale.Value / 100, FontWeight = FontWeights.Bold,
                 Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
             System.Windows.Automation.AutomationProperties.SetName(preview, label + " 글꼴 미리보기");
-            void UpdatePreview() => preview.FontFamily = DrivingNumberView.ResolveFont(selector.SelectedItem as string
-                ?? DrivingHudSettings.DefaultFontName);
+            void UpdatePreview() => preview.FontFamily = DrivingNumberView.ResolveFont(selector.SelectedItem as string == OriginalFontLabel
+                ? DrivingHudSettings.DefaultFontName : selector.SelectedItem as string ?? DrivingHudSettings.DefaultFontName);
             selector.SelectionChanged += (_, __) => UpdatePreview();
+            scale.ValueChanged += (_, __) => preview.FontSize = size * scale.Value / 100;
             UpdatePreview();
+            var scaleText = new TextBlock { Text = ((int)scale.Value) + "%", VerticalAlignment = VerticalAlignment.Center, MinWidth = 42 };
+            scale.ValueChanged += (_, __) => scaleText.Text = ((int)scale.Value) + "%";
+            var scaleRow = new StackPanel { Orientation = Orientation.Horizontal };
+            scaleRow.Children.Add(scale); scaleRow.Children.Add(scaleText);
+            System.Windows.Automation.AutomationProperties.SetName(scale, label + " 글자 크기");
             var sampleBorder = new Border
             {
-                Width = 240, Height = 52, Margin = new Thickness(0, 5, 0, 4),
+                Width = 240, Height = 62, Margin = new Thickness(0, 5, 0, 4), ClipToBounds = true,
                 Background = new SolidColorBrush(Color.FromRgb(3, 13, 23)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(79, 105, 126)),
                 BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(5), Child = preview
             };
             var group = new StackPanel();
             group.Children.Add(selector);
+            group.Children.Add(scaleRow);
             group.Children.Add(sampleBorder);
             var row = Row(label, group);
             System.Windows.Automation.AutomationProperties.SetName(selector, label + " 글꼴");
             return row;
         }
+
+        private static string TextOverlayLabel(string component) => component switch
+        {
+            OverlayComponentKeys.TimingTower => "순위 타워",
+            OverlayComponentKeys.RelativeDrivers => "전후방 거리",
+            OverlayComponentKeys.LapTiming => "현재·섹터 타임",
+            OverlayComponentKeys.SessionInfo => "세션 정보",
+            OverlayComponentKeys.EventCard => "이벤트 카드",
+            OverlayComponentKeys.RaceControl => "레이스 컨트롤",
+            OverlayComponentKeys.Waiting => "멀티 대기",
+            OverlayComponentKeys.PedalTelemetry => "텔레메트리 (개량형)",
+            OverlayComponentKeys.PedalGauge => "페달 게이지",
+            OverlayComponentKeys.Speed => "속도계",
+            OverlayComponentKeys.Gear => "기어",
+            OverlayComponentKeys.DrivingDashboard => "레이싱 계기판",
+            _ => component
+        };
 
         private void PickColor(Button button)
         {

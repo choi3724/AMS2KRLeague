@@ -42,12 +42,19 @@ namespace AMS2LeagueClient
         private bool _cleanupStarted;
         private Task? _cleanupTask;
         private bool _exitStarted;
+        private ClientInstanceGate? _instanceGate;
 
         protected override void OnStartup(StartupEventArgs eventArgs)
         {
             base.OnStartup(eventArgs);
             if (!_startRuntime) return;
             string[] args = eventArgs.Args;
+            _instanceGate = ClientInstanceGate.TryAcquire(typeof(App).Assembly.Location);
+            if (_instanceGate == null)
+            {
+                Shutdown(0);
+                return;
+            }
             ClientStartupPolicy startupPolicy = ClientStartupPolicy.FromArguments(args);
             _allowInteractiveErrors = startupPolicy.ShowStatusWindow;
             string userDataRoot = Path.Combine(
@@ -357,6 +364,8 @@ namespace AMS2LeagueClient
             // WPF shutdown path that does not flow through ExitClient.
             CleanupRuntime();
             DispatcherUnhandledException -= HandleDispatcherException;
+            _instanceGate?.Dispose();
+            _instanceGate = null;
             base.OnExit(eventArgs);
         }
 

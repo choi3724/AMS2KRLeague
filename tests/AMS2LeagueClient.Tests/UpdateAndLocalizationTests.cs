@@ -172,6 +172,8 @@ namespace AMS2LeagueClient.Tests
 
         private static void UpdateStartupAndArguments()
         {
+            UpdateSingleInstanceGate();
+            UpdateDesktopFailureLog();
             AssertTrue(GitHubAutoUpdater.ShouldEnable(Array.Empty<string>()));
             AssertTrue(GitHubAutoUpdater.ShouldEnable(new[] { "--background" }));
             foreach (string flag in new[] { "--demo", "--demo-events", "--capture-all", "--updates-disabled", "--auto-exit-seconds" }) AssertFalse(GitHubAutoUpdater.ShouldEnable(new[] { flag }));
@@ -183,12 +185,48 @@ namespace AMS2LeagueClient.Tests
             UpdateHelperRejectsTamperingAndCancellation();
         }
 
+        private static void UpdateDesktopFailureLog()
+        {
+            string desktop = Path.Combine(Path.GetTempPath(), "ams2-desktop-log-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(desktop);
+            try
+            {
+                string first = DesktopUpdateFailureLog.Write(desktop, "0.9.1", "0.9.2", "check-download-prepare",
+                    new IOException("download fixture failed"));
+                string second = DesktopUpdateFailureLog.Write(desktop, "0.9.1", null, "check-download-prepare",
+                    new IOException("metadata fixture failed"));
+                AssertFalse(string.Equals(first, second, StringComparison.OrdinalIgnoreCase));
+                AssertEqual(2, Directory.GetFiles(desktop, "AMS2-League-Overlay-Update-Failure-*.log").Length);
+                string content = File.ReadAllText(first);
+                AssertTrue(content.Contains("InstalledVersion: 0.9.1", StringComparison.Ordinal));
+                AssertTrue(content.Contains("TargetVersion: 0.9.2", StringComparison.Ordinal));
+                AssertTrue(content.Contains("download fixture failed", StringComparison.Ordinal));
+                AssertTrue(File.ReadAllText(second).Contains("TargetVersion: unknown", StringComparison.Ordinal));
+            }
+            finally { Directory.Delete(desktop, true); }
+        }
+
+        private static void UpdateSingleInstanceGate()
+        {
+            string firstPath = Path.Combine(Path.GetTempPath(), "ams2-client-one", "AMS2LeagueClient.dll");
+            string otherPath = Path.Combine(Path.GetTempPath(), "ams2-client-two", "AMS2LeagueClient.dll");
+            using (ClientInstanceGate.TryAcquire(firstPath) ?? throw new InvalidOperationException("First client gate failed."))
+            {
+                AssertTrue(ClientInstanceGate.TryAcquire(firstPath) == null);
+                AssertTrue(ClientInstanceGate.TryAcquire(firstPath.ToUpperInvariant()) == null);
+                using (ClientInstanceGate.TryAcquire(otherPath) ?? throw new InvalidOperationException("Other installation gate failed.")) { }
+            }
+            using (ClientInstanceGate.TryAcquire(firstPath) ?? throw new InvalidOperationException("Client gate was not released.")) { }
+        }
+
         private static void UpdateHelperRejectsTamperingAndCancellation()
         {
             string directory = Path.Combine(Path.GetTempPath(), "ams2-helper-tests-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             try
             {
+                string desktop = Path.Combine(directory, "Desktop");
+                Directory.CreateDirectory(desktop);
                 string script = Path.Combine(directory, "apply-update.ps1"), settings = Path.Combine(directory, "update.json");
                 using (Stream resource = typeof(GitHubAutoUpdater).Assembly.GetManifestResourceStream("AMS2LeagueClient.ApplyUpdate.ps1")!)
                 using (var reader = new StreamReader(resource)) File.WriteAllText(script, reader.ReadToEnd(), new UTF8Encoding(true));
@@ -198,7 +236,7 @@ namespace AMS2LeagueClient.Tests
                 {
                     File.WriteAllText(installer, "fixture");
                     using Process parent = Process.GetCurrentProcess();
-                    File.WriteAllText(settings, JsonSerializer.Serialize(new { ParentId = parent.Id, ParentStartTicks = parent.StartTime.ToUniversalTime().Ticks.ToString(), Installer = installer, Sha256 = tamper ? new string('0', 64) : Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(installer))), Size = new FileInfo(installer).Length, Version = "0.4.2", InstallDirectory = directory, Executable = executable, RestartArguments = "", ResultPath = result }), new UTF8Encoding(true));
+                    File.WriteAllText(settings, JsonSerializer.Serialize(new { ParentId = parent.Id, ParentStartTicks = parent.StartTime.ToUniversalTime().Ticks.ToString(), Installer = installer, Sha256 = tamper ? new string('0', 64) : Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(installer))), Size = new FileInfo(installer).Length, Version = "0.4.2", InstallDirectory = directory, Executable = executable, RestartArguments = "", DesktopDirectory = tamper ? Path.Combine(directory, "DesktopMissing") : desktop, ResultPath = result }), new UTF8Encoding(true));
                     var start = new ProcessStartInfo { FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"), UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
                     foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-SettingsPath", settings }) start.ArgumentList.Add(arg);
                     using Process helper = Process.Start(start)!;
@@ -212,7 +250,9 @@ namespace AMS2LeagueClient.Tests
                     AssertTrue(helper.WaitForExit(15000)); AssertEqual(1, helper.ExitCode);
                     using JsonDocument report = JsonDocument.Parse(File.ReadAllText(result));
                     AssertFalse(report.RootElement.GetProperty("success").GetBoolean());
-                    AssertEqual("업데이트: 설치 실패 또는 연기 · 업데이트 로그를 확인해 주세요. 6시간 후 다시 확인합니다.", report.RootElement.GetProperty("message").GetString());
+                    AssertEqual("업데이트: 설치 실패 또는 연기 · 업데이트 로그를 확인해 주세요. 6시간 후 다시 확인합니다."
+                        + (tamper ? "" : " 바탕화면에 진단 로그를 남겼습니다."), report.RootElement.GetProperty("message").GetString());
+                    AssertEqual(tamper ? 0 : 1, Directory.GetFiles(desktop, "AMS2-League-Overlay-Update-Failure-*.log").Length);
                     AssertFalse(File.Exists(Path.Combine(directory, "install.log")));
                     AssertEqual("must never run", File.ReadAllText(executable));
                 }

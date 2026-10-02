@@ -11,6 +11,8 @@ $restarted = $false
 $message = '업데이트: 설치하지 못했습니다. 기존 설치 파일을 다시 실행해 주세요.'
 $installerStream = $null
 $canDeleteInstaller = $false
+$failureDetail = $null
+$failureStage = 'install'
 try {
     try { $ownsLock = $updateLock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $ownsLock = $true }
     if (-not $ownsLock) { exit 2 }
@@ -40,8 +42,13 @@ try {
     # Only another instance using these installation files can block replacement.
     # The game and overlays installed in other directories remain untouched.
     foreach ($other in @(Get-Process -Name AMS2LeagueClient -ErrorAction SilentlyContinue)) {
-        if ([string]::IsNullOrWhiteSpace($other.Path) -or [IO.Path]::GetFullPath($other.Path) -ieq $executable) {
-            throw '같은 설치 폴더의 다른 오버레이가 실행되어 설치를 연기했습니다.'
+        $otherPath = $null
+        try { $otherPath = $other.Path } catch { $otherPath = $null }
+        if ([string]::IsNullOrWhiteSpace($otherPath)) {
+            throw ('실행 중인 오버레이의 경로를 확인할 수 없어 설치를 연기했습니다. PID=' + $other.Id)
+        }
+        if ([IO.Path]::GetFullPath($otherPath) -ieq $executable) {
+            throw ('같은 설치 폴더의 다른 오버레이가 실행되어 설치를 연기했습니다. PID=' + $other.Id + ' Path=' + $otherPath)
         }
     }
     $arguments = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /RESTARTEXITCODE=3010 /NOCLOSEAPPLICATIONS /NOFORCECLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR="' + $installRoot + '" /LOG="' + (Join-Path $taskDirectory 'install.log') + '"'
@@ -55,7 +62,8 @@ try {
     $message = '업데이트: ' + $settings.Version + ' 설치 완료'
 } catch {
     $message = '업데이트: 설치 실패 또는 연기 · 업데이트 로그를 확인해 주세요. 6시간 후 다시 확인합니다.'
-    try { [IO.File]::WriteAllText((Join-Path $taskDirectory 'failure.log'), $_.Exception.ToString(), [Text.UTF8Encoding]::new($false)) }
+    $failureDetail = $_.Exception.ToString()
+    try { [IO.File]::WriteAllText((Join-Path $taskDirectory 'failure.log'), $failureDetail, [Text.UTF8Encoding]::new($false)) }
     catch { Write-Warning 'Failed to write update diagnostic log.' }
 } finally {
     if ($null -ne $installerStream) { $installerStream.Dispose() }
@@ -82,8 +90,35 @@ try {
                 } catch {
                     $success = $false
                     $message = '업데이트: 자동 재실행 실패 · 프로그램을 직접 실행해 주세요.'
-                    try { [IO.File]::WriteAllText((Join-Path $taskDirectory 'restart-failure.log'), $_.Exception.ToString(), [Text.UTF8Encoding]::new($false)) }
+                    $failureStage = 'restart'
+                    $restartDetail = $_.Exception.ToString()
+                    $failureDetail = ($failureDetail + [Environment]::NewLine + $restartDetail).Trim()
+                    try { [IO.File]::WriteAllText((Join-Path $taskDirectory 'restart-failure.log'), $restartDetail, [Text.UTF8Encoding]::new($false)) }
                     catch { Write-Warning 'Failed to write restart diagnostic log.' }
+                }
+            }
+            if (-not $success -and -not [string]::IsNullOrWhiteSpace($failureDetail)) {
+                try {
+                    $desktopDirectory = if ($null -ne $settings.PSObject.Properties['DesktopDirectory']) { [string]$settings.DesktopDirectory } else { '' }
+                    if ([string]::IsNullOrWhiteSpace($desktopDirectory) -or -not [IO.Directory]::Exists($desktopDirectory)) {
+                        throw '바탕화면 폴더를 찾을 수 없습니다.'
+                    }
+                    $desktopName = 'AMS2-League-Overlay-Update-Failure-' + [DateTime]::Now.ToString('yyyyMMdd-HHmmssfff') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8) + '.log'
+                    $desktopPath = Join-Path $desktopDirectory $desktopName
+                    $desktopText = @(
+                        'AMS2 League Overlay update failure'
+                        ('TimeUtc: ' + [DateTime]::UtcNow.ToString('o'))
+                        ('TargetVersion: ' + $settings.Version)
+                        ('Stage: ' + $failureStage)
+                        ('InstallDirectory: ' + $settings.InstallDirectory)
+                        ('AttemptDirectory: ' + $taskDirectory)
+                        ''
+                        $failureDetail
+                    ) -join [Environment]::NewLine
+                    [IO.File]::WriteAllText($desktopPath, $desktopText, [Text.UTF8Encoding]::new($false))
+                    $message += ' 바탕화면에 진단 로그를 남겼습니다.'
+                } catch {
+                    Write-Warning ('Failed to write Desktop update diagnostic log: ' + $_.Exception.GetType().Name)
                 }
             }
             $result = @{ success = $success; restarted = $restarted; message = $message; version = $settings.Version; atUtc = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json

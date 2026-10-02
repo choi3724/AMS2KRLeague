@@ -27,8 +27,10 @@ namespace AMS2LeagueClient.Presentation
             float boost = vehicle.BoostAmount;
             bool hasBoost = float.IsFinite(boost) && boost >= 0 && boost <= 100
                 && (vehicle.BoostActive || boost > 0);
-            if (float.IsFinite(pressure) && pressure > 0 && pressure < 100)
-                return new AvantePowerReadout("터보", pressure.ToString("0.00", CultureInfo.InvariantCulture), "bar", mode,
+            // Archived AMS2 SHM samples use roughly 100,000 per bar; keep the header's 0..1+ scale too.
+            float bar = pressure > 10f ? pressure / 100000f : pressure;
+            if (float.IsFinite(pressure) && pressure > 0 && float.IsFinite(bar) && bar <= 5f)
+                return new AvantePowerReadout("터보", bar.ToString("0.00", CultureInfo.InvariantCulture), "bar", mode,
                     hasBoost ? "부스트 " + boost.ToString("0.#", CultureInfo.InvariantCulture) : "");
 
             if (hasBoost)
@@ -39,9 +41,15 @@ namespace AMS2LeagueClient.Presentation
             return new AvantePowerReadout("터보", "—", "bar", "");
         }
 
-        internal static string Torque(float? torque) => torque is float value && float.IsFinite(value)
-            && value >= -4000 && value <= 4000
-                ? value.ToString("0.#", CultureInfo.InvariantCulture) : "—";
+        internal static string Torque(float? torque)
+        {
+            if (torque is float value && float.IsFinite(value) && value >= -4000 && value <= 4000)
+            {
+                float rounded = MathF.Round(value, MidpointRounding.AwayFromZero);
+                return rounded == 0 ? "0" : rounded.ToString("0", CultureInfo.InvariantCulture);
+            }
+            return "—";
+        }
 
         private static string ErsModeText(int mode) => mode switch
         {

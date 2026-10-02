@@ -26,6 +26,7 @@ namespace AMS2LeagueClient.Presentation
                     shell.Timing.RankingRowCapacity = 5;
                     var tower = new OverlayHudView();
                     tower.SetRacingDesign(design == "racing"); tower.SetViewModel(shell.Timing);
+                    tower.ApplyTypography(settings.TextFor(component));
                     view = tower; width = OverlayUiMetrics.TowerWidth; height = tower.Height; break;
                 case OverlayComponentKeys.PedalTelemetry:
                     if (design == "legacy")
@@ -34,11 +35,13 @@ namespace AMS2LeagueClient.Presentation
                     }
                     else
                     {
-                        var telemetry = new PedalTelemetryView(); telemetry.ApplySettings(settings); telemetry.SetHistory(history); view = telemetry;
+                        var telemetry = new PedalTelemetryView(); telemetry.ApplySettings(settings);
+                        telemetry.ApplyTypography(settings.TextFor(component)); telemetry.SetHistory(history); view = telemetry;
                     }
                     width = OverlayUiMetrics.PedalWidth; height = OverlayUiMetrics.PedalHeight; break;
                 case OverlayComponentKeys.PedalGauge:
-                    var gauge = new PedalTelemetryView(true); gauge.ApplySettings(settings); gauge.SetHistory(history);
+                    var gauge = new PedalTelemetryView(true); gauge.ApplySettings(settings);
+                    gauge.ApplyTypography(settings.TextFor(component)); gauge.SetHistory(history);
                     view = gauge; width = OverlayUiMetrics.PedalGaugeWidth; height = OverlayUiMetrics.PedalHeight; break;
                 case OverlayComponentKeys.DrivingDashboard:
                     var dashboard = new DrivingDashboardView(); dashboard.ApplySettings(settings);
@@ -54,7 +57,7 @@ namespace AMS2LeagueClient.Presentation
                 case OverlayComponentKeys.Gear:
                     bool gear = component == OverlayComponentKeys.Gear;
                     var number = new DrivingNumberView(gear); number.SetSample(history.Current);
-                    number.ApplyFont(gear ? settings.GearFont : settings.SpeedFont);
+                    number.ApplyTypography(settings.TextFor(component));
                     number.ApplyShadow(gear ? settings.GearShadowColor : settings.SpeedShadowColor);
                     view = number; width = gear ? OverlayUiMetrics.GearSize : OverlayUiMetrics.SpeedWidth;
                     height = gear ? OverlayUiMetrics.GearSize : OverlayUiMetrics.SpeedHeight; break;
@@ -72,7 +75,7 @@ namespace AMS2LeagueClient.Presentation
                     view = eventCard; width = OverlayUiMetrics.EventWidth; height = OverlayUiMetrics.EventHeight; break;
                 case OverlayComponentKeys.RaceControl:
                     var control = new RaceControlView();
-                    control.ApplyFontScale(settings.RaceControlFontScale);
+                    control.ApplyTypography(settings.TextFor(component));
                     control.SetViewModel(new RaceControlViewModel { IsVisible = true, IsExpanded = true, Title = "레이스 컨트롤",
                         DriverLine = "플레이어", Message = "트랙 제한 · 랩타임 삭제", StateLabel = "황색기" }, false);
                     view = control; width = OverlayUiMetrics.RaceControlExpandedWidth; height = OverlayUiMetrics.RaceControlExpandedHeight; break;
@@ -85,6 +88,13 @@ namespace AMS2LeagueClient.Presentation
             }
             view.Width = width; view.Height = height;
             view.Measure(new Size(width, height)); view.Arrange(new Rect(0, 0, width, height)); view.UpdateLayout();
+            if (view is OverlayHudView laidOutTower)
+                laidOutTower.ApplyTypography(settings.TextFor(component));
+            if (component == OverlayComponentKeys.RelativeDrivers || component == OverlayComponentKeys.LapTiming
+                || component == OverlayComponentKeys.SessionInfo || component == OverlayComponentKeys.EventCard
+                || component == OverlayComponentKeys.Waiting)
+                OverlayTextStyler.Apply(view, settings.TextFor(component));
+            view.UpdateLayout();
             // Two pixels per logical unit keep the example readable on high-DPI displays.
             var bitmap = new RenderTargetBitmap((int)Math.Ceiling(width * 2), (int)Math.Ceiling(height * 2), 192, 192, PixelFormats.Pbgra32);
             bitmap.Render(view); bitmap.Freeze();

@@ -8,6 +8,13 @@ namespace AMS2LeagueClient.Core.Presentation
 {
     public sealed class DrivingHudSettings
     {
+        public sealed class TextAppearance
+        {
+            // Empty preserves each overlay's original typography.
+            public string Font { get; set; } = "";
+            public double Scale { get; set; } = 1;
+        }
+
         public Dictionary<string, AvanteRpmCalibration> AvanteVehicles { get; set; } = new Dictionary<string, AvanteRpmCalibration>(StringComparer.Ordinal);
         public const string DefaultFontName = "Pretendard";
         public string BrakeColor { get; set; } = "#FF3030";
@@ -24,6 +31,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string SpeedFont { get; set; } = DefaultFontName;
         public string GearFont { get; set; } = DefaultFontName;
         public double RaceControlFontScale { get; set; } = 1;
+        public Dictionary<string, TextAppearance> OverlayText { get; set; } = new Dictionary<string, TextAppearance>(StringComparer.OrdinalIgnoreCase);
         public string SpeedShadowColor { get; set; } = "#000000";
         public string GearShadowColor { get; set; } = "#000000";
 
@@ -43,9 +51,29 @@ namespace AMS2LeagueClient.Core.Presentation
             HandBrakeColor = Color(HandBrakeColor, "#BE60FF"),
             SpeedFont = Font(SpeedFont), GearFont = Font(GearFont),
             RaceControlFontScale = double.IsFinite(RaceControlFontScale) ? Math.Clamp(RaceControlFontScale, 0.75, 2) : 1,
+            OverlayText = (OverlayText ?? new Dictionary<string, TextAppearance>())
+                .Where(pair => Array.IndexOf(OverlayComponentKeys.TextConfigurable, pair.Key) >= 0 && pair.Value != null)
+                .ToDictionary(pair => pair.Key, pair => new TextAppearance
+                {
+                    Font = AppearanceFont(pair.Value.Font),
+                    Scale = double.IsFinite(pair.Value.Scale) ? Math.Clamp(pair.Value.Scale, 0.5, 2) : 1
+                }, StringComparer.OrdinalIgnoreCase),
             SpeedShadowColor = Color(SpeedShadowColor, "#000000"),
             GearShadowColor = Color(GearShadowColor, "#000000")
         };
+
+        public TextAppearance TextFor(string component)
+        {
+            if (OverlayText != null && OverlayText.TryGetValue(component, out TextAppearance? appearance) && appearance != null)
+                return new TextAppearance { Font = AppearanceFont(appearance.Font), Scale = double.IsFinite(appearance.Scale) ? Math.Clamp(appearance.Scale, 0.5, 2) : 1 };
+            return new TextAppearance
+            {
+                Font = component == OverlayComponentKeys.Speed ? Font(SpeedFont)
+                    : component == OverlayComponentKeys.Gear ? Font(GearFont) : "",
+                Scale = component == OverlayComponentKeys.RaceControl && double.IsFinite(RaceControlFontScale)
+                    ? Math.Clamp(RaceControlFontScale, 0.5, 2) : 1
+            };
+        }
 
         private static string Color(string value, string fallback)
             => value != null && value.Length == 7 && value[0] == '#'
@@ -53,6 +81,8 @@ namespace AMS2LeagueClient.Core.Presentation
         private static string Font(string value)
             => !string.IsNullOrWhiteSpace(value) && value.Length <= 128 && !value.Any(char.IsControl)
                 && value.IndexOfAny(new[] { '/', '\\', ':', '#' }) < 0 ? value.Trim() : DefaultFontName;
+        private static string AppearanceFont(string value)
+            => string.IsNullOrWhiteSpace(value) ? "" : Font(value);
     }
 
     public sealed class DrivingTelemetrySample

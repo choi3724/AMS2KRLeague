@@ -1,6 +1,6 @@
 # Future Telemetry Data Dictionary
 
-2026-10-02 화면 적용 메모: `mEngineTorque`는 float 값을 최대 소수 첫째 자리까지 표시하고 음수를 허용한다. 실제 차량의 음수 발생 조건은 미검증이다. `mTurboBoostPressure`의 명세에는 단위가 없으나, 사용자 선택에 따라 화면에는 원본 수치를 `bar`로 표시한다. 변환 비율의 실차 대조가 남아 있다. `mBoostAmount`는 단위가 확인되지 않아 수치만 표시한다. `mErsDeploymentMode`는 운용 모드이며 ERS 출력량이나 배터리 잔량이 아니다.
+2026-10-02 화면 적용 메모: `mEngineTorque`는 float 값을 화면에서 정수 Nm로 반올림하고 음수를 허용한다. 실제 차량의 음수 발생 조건은 미검증이다. `mTurboBoostPressure`의 명세에는 단위가 없으나, 보존된 AMS2 주행 기록의 원시값(약 100,000~200,000)을 근거로 화면에서는 100,000으로 나눈 값을 `bar`로 표시한다. 이 값은 절대 흡기 압력으로 추정되며, 변환 비율과 게이지 부스트 압력의 실차 대조가 남아 있다. `mBoostAmount`는 단위가 확인되지 않아 수치만 표시한다. `mErsDeploymentMode`는 운용 모드이며 ERS 출력량이나 배터리 잔량이 아니다.
 
 작성 기준: 2026-09-02 KST
 작업번호: `AMS2-P023-FUTURE-TELEMETRY`

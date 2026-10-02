@@ -21,18 +21,30 @@ namespace AMS2LeagueClient.Presentation
         private string _messageKey = string.Empty;
         private bool _presented;
         private double _fontScale = 1;
+        private FontFamily[] _originalFonts = Array.Empty<FontFamily>();
 
         public RaceControlView()
         {
             InitializeComponent();
+            _originalFonts = new[] { TitleText.FontFamily, DriverText.FontFamily, MessageText.FontFamily, StateLabelText.FontFamily };
             DataContextChanged += (sender, args) => FitTextToCard();
             SizeChanged += (sender, args) => FitTextToCard();
         }
 
         public void ApplyFontScale(double scale)
         {
-            _fontScale = double.IsFinite(scale) ? Math.Clamp(scale, 0.75, 2) : 1;
+            _fontScale = double.IsFinite(scale) ? Math.Clamp(scale, 0.5, 2) : 1;
             FitTextToCard();
+        }
+
+        public void ApplyTypography(DrivingHudSettings.TextAppearance appearance)
+        {
+            FontFamily? chosen = appearance.Font.Length == 0 ? null : DrivingNumberView.ResolveFont(appearance.Font);
+            TitleText.FontFamily = chosen ?? _originalFonts[0];
+            DriverText.FontFamily = chosen ?? _originalFonts[1];
+            MessageText.FontFamily = chosen ?? _originalFonts[2];
+            StateLabelText.FontFamily = chosen ?? _originalFonts[3];
+            ApplyFontScale(appearance.Scale);
         }
 
         private void FitTextToCard()

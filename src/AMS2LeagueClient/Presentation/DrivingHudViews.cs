@@ -49,6 +49,12 @@ namespace AMS2LeagueClient.Presentation
             if (_wheel != null) { _wheel.RotationRange = settings.Normalize().SteeringRangeDegrees; _wheel.InvalidateVisual(); }
         }
 
+        public void ApplyTypography(DrivingHudSettings.TextAppearance appearance)
+        {
+            _graph.ApplyTypography(appearance);
+            _wheel?.ApplyTypography(appearance);
+        }
+
         public void SetHistory(DrivingTelemetryHistory history)
         {
             _graph.SetHistory(history);
@@ -122,15 +128,25 @@ namespace AMS2LeagueClient.Presentation
                 if (_labelDpi != dpi) { _labels.Clear(); _labelDpi = dpi; }
                 if (!_labels.TryGetValue(value, out var label))
                 {
-                    var text = new FormattedText(value, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, 12, Brushes.White, dpi);
+                    var text = new FormattedText(value, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _typeface, 12 * _fontScale, Brushes.White, dpi);
                     var shape = RetainedGeometry.Compile(text.BuildGeometry(new Point()));
                     label = (shape, text.Width); _labels[value] = label;
                 }
-                dc.PushTransform(new TranslateTransform(barX + (barWidth - label.Width) / 2, y));
-                dc.DrawGeometry(brush, null, label.Shape); dc.Pop();
+                double fit = label.Width > 0 ? Math.Min(1, barWidth / label.Width) : 1;
+                dc.PushTransform(new TranslateTransform(barX + (barWidth - label.Width * fit) / 2, y));
+                dc.PushTransform(new ScaleTransform(fit, fit));
+                dc.DrawGeometry(brush, null, label.Shape); dc.Pop(); dc.Pop();
             }
-            private readonly Typeface _typeface = new Typeface(DrivingNumberView.ResolveFont(DrivingHudSettings.DefaultFontName),
+            private Typeface _typeface = new Typeface(DrivingNumberView.ResolveFont(DrivingHudSettings.DefaultFontName),
                 FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
+            private double _fontScale = 1;
+            public void ApplyTypography(DrivingHudSettings.TextAppearance appearance)
+            {
+                _typeface = new Typeface(DrivingNumberView.ResolveFont(appearance.Font.Length == 0
+                    ? DrivingHudSettings.DefaultFontName : appearance.Font), FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
+                _fontScale = appearance.Scale;
+                _labels.Clear(); _labelsDirty = true; DrawGaugeLabels();
+            }
             public void SetHistory(DrivingTelemetryHistory history)
             {
                 bool changed = !ReferenceEquals(_current, history.Current) || !ReferenceEquals(_history, history);
@@ -208,14 +224,16 @@ namespace AMS2LeagueClient.Presentation
     {
         private readonly bool _gear;
         private readonly TextBlock? _title;
+        private readonly Viewbox _numberBox;
         public TextBlock ValueText { get; }
         public DrivingNumberView(bool gear)
         {
             _gear = gear;
             FontFamily = ResolveFont(DrivingHudSettings.DefaultFontName);
             ValueText = new TextBlock { Text = gear ? "—" : "— km/h", FontSize = gear ? 64 : 36,
-                FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, TextAlignment = TextAlignment.Center };
-            var grid = new Grid();
+                FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, TextAlignment = TextAlignment.Center,
+                RenderTransformOrigin = new Point(0.5, 0.5) };
+            var grid = new Grid { ClipToBounds = true };
             if (gear)
             {
                 grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(22) });
@@ -224,10 +242,10 @@ namespace AMS2LeagueClient.Presentation
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
                 grid.Children.Add(_title);
             }
-            var box = new Viewbox { Stretch = Stretch.Uniform,
+            _numberBox = new Viewbox { Stretch = Stretch.Uniform,
                 Child = new Border { Padding = new Thickness(6), Child = ValueText }, Margin = new Thickness(4) };
-            if (gear) Grid.SetRow(box, 1);
-            grid.Children.Add(box);
+            if (gear) Grid.SetRow(_numberBox, 1);
+            grid.Children.Add(_numberBox);
             Content = new Border { BorderBrush = Brushes.White, BorderThickness = new Thickness(gear ? 2 : 0), Child = grid };
             AutomationProperties.SetName(this, gear ? "기어" : "속도");
             ApplyShadow("#000000");
@@ -237,6 +255,16 @@ namespace AMS2LeagueClient.Presentation
             => ValueText.Text = _gear ? sample?.GearText ?? "—" : sample?.SpeedText ?? "— km/h";
 
         public void ApplyFont(string name) => ValueText.FontFamily = ResolveFont(name);
+
+        public void ApplyTypography(DrivingHudSettings.TextAppearance appearance)
+        {
+            ApplyFont(appearance.Font.Length == 0 ? DrivingHudSettings.DefaultFontName : appearance.Font);
+            // The Viewbox provides the text's fit boundary. Shrinking the intrinsic
+            // font size remains visible; enlargement stops when it reaches that boundary.
+            _numberBox.StretchDirection = appearance.Scale == 1 ? StretchDirection.Both : StretchDirection.DownOnly;
+            ValueText.FontSize = (_gear ? 64 : 36) * appearance.Scale;
+            if (_title != null) { _title.FontFamily = ValueText.FontFamily; _title.FontSize = Math.Min(19, 14 * appearance.Scale); }
+        }
 
         public void ApplyShadow(string color)
         {

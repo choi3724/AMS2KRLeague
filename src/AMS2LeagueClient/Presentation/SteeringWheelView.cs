@@ -20,7 +20,15 @@ namespace AMS2LeagueClient.Presentation
         private double _textDpi;
         private static BitmapImage GetWheel()
         { if (SharedWheel.TryGetTarget(out var image)) return image; image = LoadWheel(); SharedWheel.SetTarget(image); return image; }
-        private readonly Typeface _font = new Typeface(new FontFamily("Bahnschrift"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        private Typeface _font = new Typeface(new FontFamily("Bahnschrift"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        private double _fontScale = 1;
+        public void ApplyTypography(DrivingHudSettings.TextAppearance appearance)
+        {
+            _font = new Typeface(appearance.Font.Length == 0 ? new FontFamily("Bahnschrift")
+                : DrivingNumberView.ResolveFont(appearance.Font), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+            _fontScale = appearance.Scale;
+            _text = null; InvalidateVisual();
+        }
         public double RotationRange { get; set; } = 900;
         public SteeringWheelView()
         {
@@ -53,7 +61,7 @@ namespace AMS2LeagueClient.Presentation
             double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
             if (_text == null || dpi != _textDpi)
             { _textDpi = dpi; _text = new FormattedText(angle.HasValue ? angle.Value.ToString("0", CultureInfo.InvariantCulture) + "°" : "—°",
-                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _font, 20, Brushes.White, dpi); }
+                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _font, 20 * _fontScale, Brushes.White, dpi); }
             var text = _text;
             const double gap = 2;
             double radius = Math.Max(0, Math.Min(ActualWidth - 10, ActualHeight - text.Height - gap) / 2);

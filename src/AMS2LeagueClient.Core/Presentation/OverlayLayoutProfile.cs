@@ -36,6 +36,13 @@ namespace AMS2LeagueClient.Core.Presentation
             AvanteCluster,
             AvanteClusterExpanded
         };
+        // The N clusters keep their artwork-specific typography.
+        public static readonly string[] TextConfigurable =
+        {
+            TimingTower, RelativeDrivers, LapTiming, SessionInfo, EventCard,
+            RaceControl, Waiting, PedalTelemetry, PedalGauge, Speed, Gear,
+            DrivingDashboard
+        };
     }
 
     public sealed class NormalizedOverlayBounds

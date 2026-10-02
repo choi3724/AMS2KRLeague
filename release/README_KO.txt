@@ -1,4 +1,4 @@
-﻿AMS2 League Overlay 0.9.1
+﻿AMS2 League Overlay 0.9.2
 ============================================
 
 빠른 시작
@@ -46,6 +46,7 @@ VR 표시 (시험 지원)
 데이터와 로그 위치
 %LOCALAPPDATA%\AMS2KRLeague
 %LOCALAPPDATA%\AMS2KRLeague\logs
+업데이트 실패 시: 바탕화면의 AMS2-League-Overlay-Update-Failure-*.log
 
 제거
 - 설치판: Windows 설정 → 앱 → AMS2 League Overlay 제거

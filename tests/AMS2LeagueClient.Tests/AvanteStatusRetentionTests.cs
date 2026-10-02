@@ -87,6 +87,10 @@ namespace AMS2LeagueClient.Tests
             }
             Set("TurboBoostPressure", 1.42f); Set("BoostAmount", 56.5f); Set("BoostActive", true); Set("ErsDeploymentModeRaw", 4);
             AssertEqual(("터보", "1.42", "bar", "부스트 56.5 · ERS 공격"), Power());
+            Set("TurboBoostPressure", 197044.094f);
+            AssertEqual(("터보", "1.97", "bar", "부스트 56.5 · ERS 공격"), Power());
+            Set("TurboBoostPressure", 14585.82f);
+            AssertEqual(("터보", "0.15", "bar", "부스트 56.5 · ERS 공격"), Power());
             Set("TurboBoostPressure", -1f);
             AssertEqual(("부스트량", "56.5", "", "ERS 모드: 공격"), Power());
             Set("BoostAmount", 0f); Set("BoostActive", false);
@@ -95,8 +99,11 @@ namespace AMS2LeagueClient.Tests
             AssertEqual(("터보", "0.00", "bar", ""), Power());
             Set("TurboBoostPressure", -1f);
             AssertEqual(("터보", "—", "bar", ""), Power());
-            AssertEqual("498.5", torqueMethod.Invoke(null, new object?[] { (float?)498.5f }));
-            AssertEqual("-12.5", torqueMethod.Invoke(null, new object?[] { (float?)(-12.5f) }));
+            AssertEqual("499", torqueMethod.Invoke(null, new object?[] { (float?)498.5f }));
+            AssertEqual("498", torqueMethod.Invoke(null, new object?[] { (float?)498.4f }));
+            AssertEqual("-13", torqueMethod.Invoke(null, new object?[] { (float?)(-12.5f) }));
+            AssertEqual("-12", torqueMethod.Invoke(null, new object?[] { (float?)(-12.4f) }));
+            AssertEqual("0", torqueMethod.Invoke(null, new object?[] { (float?)(-0.4f) }));
             AssertEqual("—", torqueMethod.Invoke(null, new object?[] { (float?)float.NaN }));
 
             var view = new AvanteClusterView(true) { Width = 1024, Height = 375 };
@@ -106,9 +113,9 @@ namespace AMS2LeagueClient.Tests
                 Directory.CreateDirectory(_layoutCaptureDirectory);
                 return Path.Combine(_layoutCaptureDirectory, name + ".png");
             }
-            ApplyStatus(view, StatusSnapshot(0, torque: -12.5f, pressure: 1.25f, boost: 56.5f, boostActive: true, ersMode: 4));
+            ApplyStatus(view, StatusSnapshot(0, torque: -12.5f, pressure: 125000f, boost: 56.5f, boostActive: true, ersMode: 4));
             byte[] first = StatusPixels(view, Capture("avante-turbo-boost-ers-negative-torque")); int builds = StatusRebuilds(view);
-            ApplyStatus(view, StatusSnapshot(1, torque: -12.5f, pressure: 1.50f, boost: 56.5f, boostActive: true, ersMode: 4));
+            ApplyStatus(view, StatusSnapshot(1, torque: -12.5f, pressure: 150000f, boost: 56.5f, boostActive: true, ersMode: 4));
             AssertTrue(StatusRebuilds(view) > builds);
             AssertFalse(first.SequenceEqual(StatusPixels(view)));
             ApplyStatus(view, StatusSnapshot(2, pressure: -1, boost: 22.5f, boostActive: true));

@@ -335,8 +335,10 @@ namespace AMS2LeagueClient.Tests
                 dialog.ShowActivated = false; dialog.Left = -5000; dialog.Top = -5000;
                 dialog.WindowStartupLocation = WindowStartupLocation.Manual;
                 dialog.Show(); PumpDispatcher();
-                // Two existing font selectors plus the user-requested RPM maximum mode.
-                AssertEqual(2, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) != "최대 눈금 결정"));
+                // N clusters retain their artwork typography; every other component has its own selector.
+                AssertEqual(OverlayComponentKeys.TextConfigurable.Length,
+                    Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box).EndsWith(" 글꼴", StringComparison.Ordinal)));
+                AssertFalse(Descendants<ComboBox>(dialog).Any(box => System.Windows.Automation.AutomationProperties.GetName(box).StartsWith("N 계기판", StringComparison.Ordinal)));
                 AssertEqual(1, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) == "최대 눈금 결정"));
                 foreach ((string label, string font, string sample) in new[]
                     { ("속도계", "Arial", "123 km/h"), ("기어", "Consolas", "3") })
@@ -357,7 +359,7 @@ namespace AMS2LeagueClient.Tests
                 var raceFont = Descendants<Slider>(dialog).Single(slider =>
                     System.Windows.Automation.AutomationProperties.GetName(slider) == "레이스 컨트롤 글자 크기");
                 AssertEqual(150.0, raceFont.Value);
-                AssertEqual(75.0, raceFont.Minimum); AssertEqual(200.0, raceFont.Maximum);
+                AssertEqual(50.0, raceFont.Minimum); AssertEqual(200.0, raceFont.Maximum);
                 AssertTrue(dialog.ActualHeight <= SystemParameters.WorkArea.Height);
                 AssertEqual(6, Descendants<Button>(dialog).Count(button => button.Tag is string));
                 CaptureLayout((FrameworkElement)dialog.Content, "driving-settings-menu");
@@ -383,11 +385,14 @@ namespace AMS2LeagueClient.Tests
             Directory.CreateDirectory(directory);
             try
             {
+                string desktop = Path.Combine(directory, "Desktop");
+                Directory.CreateDirectory(desktop);
                 string source = Path.Combine(directory, "fixture.cs"), executable = Path.Combine(directory, "AMS2LeagueClient.exe");
                 File.WriteAllText(source, @"using System; using System.IO; using System.Reflection; using System.Threading;
 [assembly: AssemblyInformationalVersion(""0.4.4"")]
 class Probe { static int Main(string[] args) {
  if (args.Length > 0 && args[0] == ""--restart"") { File.WriteAllText(Path.ChangeExtension(Assembly.GetExecutingAssembly().Location, "".started""), ""started""); Thread.Sleep(4500); }
+ if (args.Length > 0 && args[0] == ""--block"") { Thread.Sleep(12000); }
  return 0;
 } }");
                 var compiler = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe")) { UseShellExecute = false, CreateNoWindow = true };
@@ -405,7 +410,7 @@ class Probe { static int Main(string[] args) {
                     using Process parent = Process.Start(parentStart)!;
                     File.WriteAllText(config, JsonSerializer.Serialize(new { ParentId = parent.Id, ParentStartTicks = parent.StartTime.ToUniversalTime().Ticks.ToString(),
                         Installer = installer, Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(installer))), Size = new FileInfo(installer).Length,
-                        Version = "0.4.4", InstallDirectory = directory, Executable = executable, RestartArguments = earlyExit ? "--exit" : "--restart", ResultPath = result }), new UTF8Encoding(true));
+                        Version = "0.4.4", InstallDirectory = directory, Executable = executable, RestartArguments = earlyExit ? "--exit" : "--restart", DesktopDirectory = desktop, ResultPath = result }), new UTF8Encoding(true));
                     File.Delete(Path.Combine(directory, "ready"));
                     var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
                     foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-SettingsPath", config }) start.ArgumentList.Add(arg);
@@ -423,6 +428,7 @@ class Probe { static int Main(string[] args) {
                         AssertEqual(earlyExit ? 1 : 0, helper.ExitCode);
                         if (earlyExit) AssertTrue(File.Exists(Path.Combine(directory, "restart-failure.log")));
                         else AssertTrue(File.Exists(Path.ChangeExtension(executable, ".started")));
+                        AssertEqual(earlyExit ? 1 : 0, Directory.GetFiles(desktop, "AMS2-League-Overlay-Update-Failure-*.log").Length);
                         Console.WriteLine("PROOF update-restart earlyExit=" + earlyExit + " success=" + !earlyExit);
                         foreach (Process probe in Process.GetProcessesByName("AMS2LeagueClient"))
                             using (probe)
@@ -431,6 +437,47 @@ class Probe { static int Main(string[] args) {
                     }
                     finally { if (!parent.HasExited) parent.Kill(); if (!helper.HasExited) helper.Kill(); }
                 }
+
+                // A surviving copy of the same installed executable must prevent replacement
+                // and identify the exact process in failure.log.
+                string blockInstaller = Path.Combine(directory, "Setup.exe");
+                string blockConfig = Path.Combine(directory, "update.json");
+                string blockResult = Path.Combine(directory, "result.json");
+                File.Copy(executable, blockInstaller, true);
+                var blockStart = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
+                blockStart.ArgumentList.Add("--block");
+                using Process blocker = Process.Start(blockStart)!;
+                var parentStartForBlock = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
+                foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 30" }) parentStartForBlock.ArgumentList.Add(arg);
+                using Process parentForBlock = Process.Start(parentStartForBlock)!;
+                var helperStartForBlock = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true };
+                foreach (string arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-SettingsPath", blockConfig }) helperStartForBlock.ArgumentList.Add(arg);
+                try
+                {
+                    File.WriteAllText(blockConfig, JsonSerializer.Serialize(new { ParentId = parentForBlock.Id,
+                        ParentStartTicks = parentForBlock.StartTime.ToUniversalTime().Ticks.ToString(), Installer = blockInstaller,
+                        Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(blockInstaller))), Size = new FileInfo(blockInstaller).Length,
+                        Version = "0.4.4", InstallDirectory = directory, Executable = executable, RestartArguments = "--exit", DesktopDirectory = desktop, ResultPath = blockResult }), new UTF8Encoding(true));
+                    File.Delete(Path.Combine(directory, "ready"));
+                    File.Delete(Path.Combine(directory, "failure.log"));
+                    using Process helperForBlock = Process.Start(helperStartForBlock)!;
+                    try
+                    {
+                        var wait = Stopwatch.StartNew();
+                        while (!File.Exists(Path.Combine(directory, "ready")) && !helperForBlock.HasExited && wait.ElapsedMilliseconds < 10000) Thread.Sleep(50);
+                        AssertTrue(File.Exists(Path.Combine(directory, "ready")));
+                        parentForBlock.Kill(); parentForBlock.WaitForExit();
+                        AssertTrue(helperForBlock.WaitForExit(15000));
+                        AssertEqual(1, helperForBlock.ExitCode);
+                        AssertTrue(File.ReadAllText(Path.Combine(directory, "failure.log")).Contains("PID=" + blocker.Id, StringComparison.Ordinal));
+                        string[] desktopLogs = Directory.GetFiles(desktop, "AMS2-League-Overlay-Update-Failure-*.log");
+                        AssertEqual(2, desktopLogs.Length);
+                        AssertTrue(desktopLogs.Any(path => File.ReadAllText(path).Contains("PID=" + blocker.Id, StringComparison.Ordinal)));
+                        AssertFalse(File.Exists(Path.Combine(directory, "install.log")));
+                    }
+                    finally { if (!helperForBlock.HasExited) helperForBlock.Kill(); }
+                }
+                finally { if (!parentForBlock.HasExited) parentForBlock.Kill(); if (!blocker.HasExited) blocker.Kill(); blocker.WaitForExit(); }
             }
             finally { Directory.Delete(directory, true); }
         }
