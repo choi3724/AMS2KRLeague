@@ -131,8 +131,8 @@ namespace AMS2LeagueClient
                                 key => _overlay.IsComponentEnabled(key),
                                 StringComparer.OrdinalIgnoreCase));
                             _statusWindow.SetLayoutEditState(true, _overlay.IsLayoutPreview
-                                ? "가상 데이터 미리보기입니다. 위치·크기를 조절한 뒤 저장 후 잠금을 누르세요."
-                                : "각 패널의 상단을 드래그하고 우측 하단 손잡이로 크기를 조절하세요.");
+                                ? "가상 데이터 미리보기입니다. 드래그로 위치·크기를 조절하고, 우클릭으로 해당 설정을 여세요."
+                                : "각 패널을 드래그하거나 크기를 조절하세요. 우클릭하면 해당 설정이 열립니다.");
                         }
                         else
                         {
@@ -144,7 +144,7 @@ namespace AMS2LeagueClient
                         overlay.BeginLayoutPreview(waiting, OverlayWindowInterop.GetLayoutPreviewArea(
                             new System.Windows.Interop.WindowInteropHelper(_statusWindow).Handle));
                         _statusWindow.SetLayoutEditState(true,
-                            "가상 데이터 미리보기입니다. 위치·크기를 조절한 뒤 저장 후 잠금을 누르세요.");
+                            "가상 데이터 미리보기입니다. 드래그로 위치·크기를 조절하고, 우클릭으로 해당 설정을 여세요.");
                         _statusWindow.Activate();
                     }
                     _statusWindow.GameplayPreviewRequested += (sender, previewArgs) => StartLayoutPreview(false);
@@ -179,6 +179,58 @@ namespace AMS2LeagueClient
                             _logger?.Warning("DRIVING_HUD_SETTINGS", "reason=" + exception.GetType().Name);
                             MessageBox.Show(_statusWindow, "설정을 저장하지 못했습니다. 저장 폴더의 권한과 여유 공간을 확인해 주세요.",
                                 "계기판 설정", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    };
+                    overlay.ComponentSettingsRequested += (sender, componentArgs) =>
+                    {
+                        if (_statusWindow == null || !overlay.IsLayoutEditing) return;
+                        if (componentArgs.Component == OverlayComponentKeys.AvanteCluster
+                            || componentArgs.Component == OverlayComponentKeys.AvanteClusterExpanded)
+                        {
+                            DrivingHudSettings originalSettings = overlay.GetDrivingHudSettings();
+                            IReadOnlyList<string> originalOrder = overlay.GetLayerOrder();
+                            var environment = new DrivingHudSettingsWindow(originalSettings,
+                                overlay.AvanteVehicleName, overlay.AvanteEngineMaximum, overlay.AvanteProfileVehicleName,
+                                componentArgs.Component, originalOrder, overlay.GetVisibleLayerComponents()) { Owner = _statusWindow };
+                            environment.LayerOrderChanged += (_, __) =>
+                            { overlay.PreviewLayerOrder(environment.LayerOrder); environment.Activate(); };
+                            if (environment.ShowDialog() != true)
+                            {
+                                overlay.PreviewLayerOrder(originalOrder);
+                                return;
+                            }
+                            try { overlay.SaveComponentSettings(environment.Settings, environment.LayerOrder); _statusWindow.SetDesignLabels(environment.Settings); }
+                            catch (Exception exception)
+                            {
+                                overlay.PreviewDrivingHudSettings(originalSettings);
+                                overlay.PreviewLayerOrder(originalOrder);
+                                _logger?.Warning("DRIVING_HUD_SETTINGS", "reason=" + exception.GetType().Name);
+                                MessageBox.Show(_statusWindow, "설정을 저장하지 못했습니다. 저장 폴더의 권한과 여유 공간을 확인해 주세요.",
+                                    "환경설정", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            }
+                            return;
+                        }
+                        DrivingHudSettings original = overlay.GetDrivingHudSettings();
+                        IReadOnlyList<string> previousOrder = overlay.GetLayerOrder();
+                        var dialog = new OverlayComponentSettingsWindow(componentArgs.Component, original, previousOrder,
+                            overlay.GetVisibleLayerComponents()) { Owner = _statusWindow };
+                        dialog.SettingsChanged += (_, __) => overlay.PreviewDrivingHudSettings(dialog.Settings);
+                        dialog.LayerOrderChanged += (_, __) => { overlay.PreviewLayerOrder(dialog.LayerOrder); dialog.Activate(); };
+                        bool saved = dialog.ShowDialog() == true;
+                        if (!saved)
+                        {
+                            overlay.PreviewDrivingHudSettings(original);
+                            overlay.PreviewLayerOrder(previousOrder);
+                            return;
+                        }
+                        try { overlay.SaveComponentSettings(dialog.Settings, dialog.LayerOrder); _statusWindow.SetDesignLabels(dialog.Settings); }
+                        catch (Exception exception)
+                        {
+                            overlay.PreviewDrivingHudSettings(original);
+                            overlay.PreviewLayerOrder(previousOrder);
+                            _logger?.Warning("OVERLAY_COMPONENT_SETTINGS", "reason=" + exception.GetType().Name);
+                            MessageBox.Show(_statusWindow, "설정을 저장하지 못했습니다. 저장 폴더의 권한과 여유 공간을 확인해 주세요.",
+                                "오버레이 설정", MessageBoxButton.OK, MessageBoxImage.Warning);
                         }
                     };
                     _statusWindow.LayoutResetRequested += (sender, layoutArgs) =>

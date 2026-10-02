@@ -244,10 +244,15 @@ namespace AMS2LeagueClient.Overlay
             ShowWindow(handle, ShowNoActivate);
         }
 
-        public static void SetPhysicalBounds(IntPtr handle, int x, int y, int width, int height)
+        public static void SetPhysicalBounds(IntPtr handle, int x, int y, int width, int height, bool preserveZOrder = false)
         {
-            SetWindowPos(handle, TopMost, x, y, width, height, SetWindowNoActivate | SetWindowShow);
+            SetWindowPos(handle, preserveZOrder ? IntPtr.Zero : TopMost, x, y, width, height,
+                SetWindowNoActivate | SetWindowShow | (preserveZOrder ? SetWindowNoZOrder : 0));
         }
+
+        public static bool PlaceTopmost(IntPtr handle)
+            => handle != IntPtr.Zero && SetWindowPos(handle, TopMost, 0, 0, 0, 0,
+                SetWindowNoMove | SetWindowNoSize | SetWindowNoActivate);
 
         private static IntPtr WindowProcedure(IntPtr handle, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
         {

@@ -10,77 +10,27 @@ namespace AMS2LeagueClient.Presentation
 {
     public sealed class DrivingHudSettingsWindow : Window
     {
-        private const string OriginalFontLabel = "기본 글꼴";
-        private readonly Button[] _colors = new Button[6];
-        private readonly Slider _steeringRange = new Slider { Minimum = 180, Maximum = 1440, TickFrequency = 90, IsSnapToTickEnabled = true, Width = 200 };
-        private readonly ComboBox _speedFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
-        private readonly ComboBox _gearFont = new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
-        private readonly Dictionary<string, ComboBox> _overlayFonts = new Dictionary<string, ComboBox>(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, Slider> _overlayFontScales = new Dictionary<string, Slider>(StringComparer.OrdinalIgnoreCase);
+        private readonly OverlayLayerControls? _layers;
         private readonly Slider _frameLimit = new Slider { Minimum = DrivingHudSettings.MinimumHudFrameLimit, Maximum = DrivingHudSettings.MaximumHudFrameLimit,
             SmallChange = 1, LargeChange = 10, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 200 };
         public DrivingHudSettings Settings { get; private set; }
+        public IReadOnlyList<string> LayerOrder => _layers?.Order ?? OverlayComponentKeys.All;
+        public event EventHandler? LayerOrderChanged;
 
-        public DrivingHudSettingsWindow(DrivingHudSettings current, string vehicleName = "", double? engineMaximum = null, string profileVehicleName = "")
+        public DrivingHudSettingsWindow(DrivingHudSettings current, string vehicleName = "", double? engineMaximum = null,
+            string profileVehicleName = "", string? layerComponent = null, IReadOnlyList<string>? layerOrder = null,
+            IReadOnlyList<string>? visibleComponents = null)
         {
             Settings = current.Normalize();
-            Title = "색상·글꼴·핸들 설정";
+            Title = "환경설정";
             FontFamily = DrivingNumberView.ResolveFont(DrivingHudSettings.DefaultFontName);
             Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/AMS2LeagueClient;component/Assets/AppIcon.ico"));
             Width = 520; MaxHeight = SystemParameters.WorkArea.Height; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            Topmost = layerComponent != null;
             Background = new SolidColorBrush(Color.FromRgb(15, 26, 39)); Foreground = Brushes.White;
             var panel = new StackPanel();
-            panel.Children.Add(new TextBlock { Text = "텔레메트리 그래프와 입력 막대 색상", FontSize = 17, Margin = new Thickness(0, 0, 0, 14) });
-            string[] labels = { "브레이크", "악셀", "클러치", "핸드브레이크" };
-            string[] colors = { Settings.BrakeColor, Settings.ThrottleColor, Settings.ClutchColor, Settings.HandBrakeColor };
-            for (int i = 0; i < 4; i++)
-            {
-                var button = new Button { MinWidth = 240, Height = 30 };
-                SetColor(button, colors[i]); _colors[i] = button;
-                button.Click += (sender, args) => PickColor((Button)sender);
-                panel.Children.Add(Row(labels[i], button));
-            }
-            _steeringRange.Value = Settings.SteeringRangeDegrees;
-            var rangeValue = new TextBlock { Text = Settings.SteeringRangeDegrees.ToString("0") + "°", VerticalAlignment = VerticalAlignment.Center };
-            _steeringRange.ValueChanged += (_, __) => rangeValue.Text = _steeringRange.Value.ToString("0") + "°";
-            var rangePanel = new StackPanel { Orientation = Orientation.Horizontal };
-            rangePanel.Children.Add(_steeringRange); rangePanel.Children.Add(rangeValue);
-            panel.Children.Add(Row("핸들 전체 회전각", rangePanel));
-            panel.Children.Add(new TextBlock { Text = "게임에서 사용하는 좌우 전체 회전 범위에 맞춰 주세요.",
-                FontSize = 11, Foreground = Brushes.LightGray, TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(new TextBlock { Text = "오버레이별 글꼴·글자 크기", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
-            panel.Children.Add(new TextBlock { Text = "창 테두리 크기와 별도로 내부 글자만 조절합니다.",
-                FontSize = 11, Foreground = Brushes.LightGray, TextWrapping = TextWrapping.Wrap });
-            string[] fonts = new[] { OriginalFontLabel }.Concat(Fonts.SystemFontFamilies.Select(font => font.Source)
-                .Concat(new[] { DrivingHudSettings.DefaultFontName }).Distinct().OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)).ToArray();
-            foreach (string component in OverlayComponentKeys.TextConfigurable)
-            {
-                string label = TextOverlayLabel(component);
-                var choice = component == OverlayComponentKeys.Speed ? _speedFont
-                    : component == OverlayComponentKeys.Gear ? _gearFont : new ComboBox { MinWidth = 240, MaxDropDownHeight = 300 };
-                var fontScaleSlider = new Slider { Minimum = 50, Maximum = 200, SmallChange = 5, LargeChange = 10,
-                    TickFrequency = 5, IsSnapToTickEnabled = true, Width = 200 };
-                DrivingHudSettings.TextAppearance currentText = Settings.TextFor(component);
-                choice.ItemsSource = fonts;
-                choice.SelectedItem = currentText.Font.Length == 0 ? OriginalFontLabel
-                    : fonts.Contains(currentText.Font) ? currentText.Font : OriginalFontLabel;
-                fontScaleSlider.Value = currentText.Scale * 100;
-                _overlayFonts[component] = choice;
-                _overlayFontScales[component] = fontScaleSlider;
-                panel.Children.Add(FontRow(label, choice, fontScaleSlider,
-                    component == OverlayComponentKeys.Gear ? "3" : component == OverlayComponentKeys.Speed ? "123 km/h" : "가 123", 28));
-            }
-            panel.Children.Add(new TextBlock { Text = "글자 그림자 색상", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
-            for (int i = 4; i < 6; i++)
-            {
-                var button = new Button { MinWidth = 240, Height = 30 };
-                SetColor(button, i == 4 ? Settings.SpeedShadowColor : Settings.GearShadowColor);
-                _colors[i] = button;
-                button.Click += (sender, args) => PickColor((Button)sender);
-                panel.Children.Add(Row(i == 4 ? "속도계 그림자" : "기어 그림자", button));
-            }
-            panel.Children.Add(new TextBlock { Text = "HUD 프레임 제한", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
+            panel.Children.Add(new TextBlock { Text = "HUD 프레임 제한", FontSize = 17, Margin = new Thickness(0, 0, 0, 10) });
             _frameLimit.Value = Settings.HudFrameLimit;
             var frameLimitValue = new TextBlock { Text = Settings.HudFrameLimit + " FPS", VerticalAlignment = VerticalAlignment.Center, MinWidth = 64 };
             _frameLimit.ValueChanged += (_, __) => frameLimitValue.Text = ((int)_frameLimit.Value) + " FPS";
@@ -156,6 +106,12 @@ namespace AMS2LeagueClient.Presentation
             yellowBox.TextChanged += (_, __) => validation.Text = "";
             redBox.TextChanged += (_, __) => validation.Text = "";
             maximumMode.SelectionChanged += (_, __) => validation.Text = "";
+            if (layerComponent != null)
+            {
+                _layers = new OverlayLayerControls(layerComponent, layerOrder ?? OverlayComponentKeys.All, visibleComponents);
+                _layers.Changed += (_, __) => LayerOrderChanged?.Invoke(this, EventArgs.Empty);
+                panel.Children.Add(_layers.View);
+            }
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             var save = new Button { Content = "저장", IsDefault = true, Width = 90, Height = 32, Margin = new Thickness(5) };
             save.Click += (sender, args) =>
@@ -170,19 +126,7 @@ namespace AMS2LeagueClient.Presentation
                     Settings.AvanteVehicles[vehicleName] = new AvanteRpmCalibration { Maximum = maximumMode.SelectedIndex == 0 ? manualMaximum : maximum, YellowStart = yellow, RedStart = red, AutomaticMaximum = maximumMode.SelectedIndex == 0 };
                 }
                 else if (custom.IsEnabled) Settings.AvanteVehicles.Remove(vehicleName);
-                Settings = new DrivingHudSettings { AvanteVehicles = Settings.AvanteVehicles, TowerDesign = Settings.TowerDesign, TelemetryDesign = Settings.TelemetryDesign, SteeringRangeDegrees = _steeringRange.Value, BrakeColor = (string)_colors[0].Tag, ThrottleColor = (string)_colors[1].Tag,
-                    ClutchColor = (string)_colors[2].Tag, HandBrakeColor = (string)_colors[3].Tag,
-                    SpeedShadowColor = (string)_colors[4].Tag, GearShadowColor = (string)_colors[5].Tag,
-                    SpeedFont = _speedFont.SelectedItem as string == OriginalFontLabel ? DrivingHudSettings.DefaultFontName : _speedFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName,
-                    GearFont = _gearFont.SelectedItem as string == OriginalFontLabel ? DrivingHudSettings.DefaultFontName : _gearFont.SelectedItem as string ?? DrivingHudSettings.DefaultFontName,
-                    HudFrameLimit = (int)_frameLimit.Value,
-                    RaceControlFontScale = _overlayFontScales[OverlayComponentKeys.RaceControl].Value / 100,
-                    OverlayText = _overlayFonts.ToDictionary(pair => pair.Key, pair => new DrivingHudSettings.TextAppearance
-                    {
-                        Font = pair.Value.SelectedItem as string == OriginalFontLabel ? ""
-                            : pair.Value.SelectedItem as string ?? "",
-                        Scale = _overlayFontScales[pair.Key].Value / 100
-                    }, StringComparer.OrdinalIgnoreCase) };
+                Settings.HudFrameLimit = (int)_frameLimit.Value;
                 DialogResult = true;
             };
             buttons.Children.Add(save);
@@ -202,80 +146,5 @@ namespace AMS2LeagueClient.Presentation
             return row;
         }
 
-        private static Grid FontRow(string label, ComboBox selector, Slider scale, string sample, double size)
-        {
-            var preview = new TextBlock
-            {
-                Text = sample, FontSize = size * scale.Value / 100, FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            System.Windows.Automation.AutomationProperties.SetName(preview, label + " 글꼴 미리보기");
-            void UpdatePreview() => preview.FontFamily = DrivingNumberView.ResolveFont(selector.SelectedItem as string == OriginalFontLabel
-                ? DrivingHudSettings.DefaultFontName : selector.SelectedItem as string ?? DrivingHudSettings.DefaultFontName);
-            selector.SelectionChanged += (_, __) => UpdatePreview();
-            scale.ValueChanged += (_, __) => preview.FontSize = size * scale.Value / 100;
-            UpdatePreview();
-            var scaleText = new TextBlock { Text = ((int)scale.Value) + "%", VerticalAlignment = VerticalAlignment.Center, MinWidth = 42 };
-            scale.ValueChanged += (_, __) => scaleText.Text = ((int)scale.Value) + "%";
-            var scaleRow = new StackPanel { Orientation = Orientation.Horizontal };
-            scaleRow.Children.Add(scale); scaleRow.Children.Add(scaleText);
-            System.Windows.Automation.AutomationProperties.SetName(scale, label + " 글자 크기");
-            var sampleBorder = new Border
-            {
-                Width = 240, Height = 62, Margin = new Thickness(0, 5, 0, 4), ClipToBounds = true,
-                Background = new SolidColorBrush(Color.FromRgb(3, 13, 23)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(79, 105, 126)),
-                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(5), Child = preview
-            };
-            var group = new StackPanel();
-            group.Children.Add(selector);
-            group.Children.Add(scaleRow);
-            group.Children.Add(sampleBorder);
-            var row = Row(label, group);
-            System.Windows.Automation.AutomationProperties.SetName(selector, label + " 글꼴");
-            return row;
-        }
-
-        private static string TextOverlayLabel(string component) => component switch
-        {
-            OverlayComponentKeys.TimingTower => "순위 타워",
-            OverlayComponentKeys.RelativeDrivers => "전후방 거리",
-            OverlayComponentKeys.LapTiming => "현재·섹터 타임",
-            OverlayComponentKeys.SessionInfo => "세션 정보",
-            OverlayComponentKeys.EventCard => "이벤트 카드",
-            OverlayComponentKeys.RaceControl => "레이스 컨트롤",
-            OverlayComponentKeys.Waiting => "멀티 대기",
-            OverlayComponentKeys.PedalTelemetry => "텔레메트리 (개량형)",
-            OverlayComponentKeys.PedalGauge => "페달 게이지",
-            OverlayComponentKeys.Speed => "속도계",
-            OverlayComponentKeys.Gear => "기어",
-            OverlayComponentKeys.DrivingDashboard => "레이싱 계기판",
-            _ => component
-        };
-
-        private void PickColor(Button button)
-        {
-            Color old = (Color)ColorConverter.ConvertFromString((string)button.Tag);
-            using var picker = new System.Windows.Forms.ColorDialog { FullOpen = true,
-                Color = System.Drawing.Color.FromArgb(old.R, old.G, old.B) };
-            // The native modal owner keeps the picker above this settings window.
-            var owner = new System.Windows.Forms.NativeWindow();
-            owner.AssignHandle(new System.Windows.Interop.WindowInteropHelper(this).Handle);
-            try
-            {
-                if (picker.ShowDialog(owner) == System.Windows.Forms.DialogResult.OK)
-                    SetColor(button, "#" + picker.Color.R.ToString("X2") + picker.Color.G.ToString("X2") + picker.Color.B.ToString("X2"));
-            }
-            finally { owner.ReleaseHandle(); }
-        }
-
-        private static void SetColor(Button button, string hex)
-        {
-            Color color = (Color)ColorConverter.ConvertFromString(hex);
-            button.Tag = hex; button.Content = hex + " · 색상 변경";
-            button.Background = new SolidColorBrush(color);
-            button.Foreground = color.R * 0.299 + color.G * 0.587 + color.B * 0.114 > 150 ? Brushes.Black : Brushes.White;
-        }
     }
 }

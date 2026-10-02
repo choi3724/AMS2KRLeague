@@ -14,15 +14,13 @@ if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$') {
     throw "Invalid release version: $Version"
 }
 if ([string]::IsNullOrWhiteSpace($NotesPath)) {
-    $NotesPath = Join-Path $projectRoot 'release/RELEASE_NOTES_KO.md'
+    $NotesPath = Join-Path $projectRoot "release/RELEASE_NOTES_${Version}_KO.md"
 }
 $tag = "v$Version"
 $artifacts = Join-Path $projectRoot 'artifacts'
 $assets = @(
     (Join-Path $artifacts "AMS2-League-Overlay-$Version-Setup.exe"),
-    (Join-Path $artifacts "AMS2-League-Overlay-$Version-win-x64.zip"),
-    (Join-Path $artifacts "SHA256SUMS-$Version.txt"),
-    (Join-Path $artifacts "release-manifest-$Version.json")
+    (Join-Path $artifacts "AMS2-League-Overlay-$Version-win-x64.zip")
 )
 foreach ($path in @($NotesPath) + $assets) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {

@@ -162,6 +162,8 @@ namespace AMS2LeagueClient.Tests
                 ("Viewed root penalty reaches both tower designs", ViewedPenaltyReachesTower),
                 ("Tower shrinks and restores with participant count", TowerShrinksAndRestoresWithParticipants),
                 ("Empty panels remain editable with preview", EmptyPanelsRemainEditableWithPreview),
+                ("Game-free edit right-click opens a live per-overlay settings page", GameFreeSettingsPreviewAndRollback),
+                ("Overlay layers move visibly and persist across gameplay reload", OverlayLayerOrderPersistsAndRenders),
                 ("Offline layout preview lifecycle", OfflineLayoutPreviewLifecycle),
                 ("Offline layout controls", OfflineLayoutControls),
                 ("VR settings defaults bounds colours and transforms", VrSettingsAndTransforms),

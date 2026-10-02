@@ -101,6 +101,7 @@ namespace AMS2LeagueClient.Overlay
                     if (_closing || !ReferenceEquals(_threadedN[slot], hud)) return;
                     _threadedNPresenting[slot] = true;
                     _drivingWindows[slot + 5]?.SetExternalPresentation(true);
+                    ApplyLayerOrder(true);
                     ThreadedNStatus?.Invoke("active slot=" + slot);
                 })));
             _threadedN[slot] = hud;

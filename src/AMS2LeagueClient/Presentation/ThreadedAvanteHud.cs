@@ -68,6 +68,7 @@ namespace AMS2LeagueClient.Presentation
 
         internal long Frames => Interlocked.Read(ref _frames);
         internal long SkippedFrames => Interlocked.Read(ref _skipped);
+        internal IntPtr SurfaceHandle => Volatile.Read(ref _surface)?.Handle ?? IntPtr.Zero;
         private long _frames, _skipped;
 
         internal ThreadedAvanteHud(bool expanded, DrivingHudSettings settings, TelemetrySnapshot? session,

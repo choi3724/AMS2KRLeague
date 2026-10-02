@@ -1,9 +1,9 @@
 ﻿param(
     [string]$DotnetExecutable = 'dotnet',
     [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$')]
-    [string]$Version = '0.9.2',
+    [string]$Version = '0.9.3',
     [ValidatePattern('^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$')]
-    [string]$DisplayVersion = '0.9.2',
+    [string]$DisplayVersion = '0.9.3',
     [string]$IsccExecutable = ''
 )
 
@@ -67,7 +67,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Copy-Item -LiteralPath (Join-Path $projectRoot 'release\README_KO.txt') -Destination (Join-Path $publishRoot 'README_KO.txt')
-Copy-Item -LiteralPath (Join-Path $projectRoot 'release\RELEASE_NOTES_KO.md') -Destination (Join-Path $publishRoot 'RELEASE_NOTES_KO.md')
+Copy-Item -LiteralPath (Join-Path $projectRoot "release\RELEASE_NOTES_${DisplayVersion}_KO.md") -Destination (Join-Path $publishRoot 'RELEASE_NOTES_KO.md')
 Get-ChildItem -LiteralPath $publishRoot -Recurse -File -Filter '*.pdb' | Remove-Item -Force
 
 & $auditScript -PackagePath $publishRoot

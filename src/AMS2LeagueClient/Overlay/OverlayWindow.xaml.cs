@@ -98,6 +98,7 @@ namespace AMS2LeagueClient.Overlay
             _threadedNRequested = useThreadedN && !_useGlass;
             if (_useGlass) AllowsTransparency = false;
             SizeChanged += (sender, args) => ResizeTimingPreview();
+            Activated += (_, __) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ApplyLayerOrder(true)));
             string resolvedLayoutPath = layoutPath ?? DefaultLayoutPath;
             _layoutStore = new OverlayLayoutStore(resolvedLayoutPath);
             _layoutProfile = _layoutStore.Load();
@@ -200,6 +201,8 @@ namespace AMS2LeagueClient.Overlay
             else if (window == null)
             {
                 window = create();
+                window.ComponentSettingsRequested += (_, args) => ComponentSettingsRequested?.Invoke(this, args);
+                window.Activated += (_, __) => Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ApplyLayerOrder(true)));
                 window.SetEditMode(_layoutEditing);
                 window.IsVisibleChanged += (_, args) => RefreshDrivingViews();
             }
@@ -209,6 +212,15 @@ namespace AMS2LeagueClient.Overlay
         public string AvanteProfileVehicleName { get; private set; } = "";
         public double? AvanteEngineMaximum { get; private set; }
         public DrivingHudSettings GetDrivingHudSettings() => (_layoutProfile.DrivingHud ?? new DrivingHudSettings()).Normalize();
+
+        public event EventHandler<OverlayComponentSettingsEventArgs>? ComponentSettingsRequested;
+
+        /// <summary>Apply an unsaved settings snapshot to every visible surface in edit mode.</summary>
+        public void PreviewDrivingHudSettings(DrivingHudSettings settings)
+        {
+            _layoutProfile.DrivingHud = settings.Normalize();
+            ApplyDrivingAppearance();
+        }
 
         public void SaveDrivingHudSettings(DrivingHudSettings settings)
         {
@@ -805,6 +817,7 @@ namespace AMS2LeagueClient.Overlay
             {
                 _raceControlWindow?.HideOverlay();
             }
+            ApplyLayerOrder();
         }
 
         private void ShowWaitingSurface(GameWindowSnapshot gameWindow, bool editing)
@@ -824,6 +837,7 @@ namespace AMS2LeagueClient.Overlay
                 _waitingWindow?.ShowAt(gameWindow, Resolve(OverlayComponentKeys.Waiting, defaults.Waiting, gameWindow));
             else
                 _waitingWindow?.HideOverlay();
+            ApplyLayerOrder();
         }
 
         private void MigrateAvanteCanvas(GameWindowSnapshot viewport)
@@ -888,7 +902,8 @@ namespace AMS2LeagueClient.Overlay
                     gameWindow.Left + bounds.X,
                     gameWindow.Top + bounds.Y,
                     bounds.Width,
-                    bounds.Height);
+                    bounds.Height,
+                    preserveZOrder: wasVisible);
             }
             if (!wasVisible && !_layoutEditing) OverlayWindowInterop.ShowWithoutActivation(_handle);
         }
@@ -962,6 +977,14 @@ namespace AMS2LeagueClient.Overlay
             if (_layoutEditing && eventArgs.LeftButton == MouseButtonState.Pressed) DragMove();
         }
 
+        protected override void OnPreviewMouseRightButtonUp(MouseButtonEventArgs eventArgs)
+        {
+            base.OnPreviewMouseRightButtonUp(eventArgs);
+            if (!_layoutEditing) return;
+            ComponentSettingsRequested?.Invoke(this, new OverlayComponentSettingsEventArgs(OverlayComponentKeys.TimingTower));
+            eventArgs.Handled = true;
+        }
+
         private void HideGameplayWindows()
         {
             ReleaseRetainedN();
@@ -992,6 +1015,12 @@ namespace AMS2LeagueClient.Overlay
             => Math.Max(1, (int)Math.Round(logicalPixels * scale));
     }
 
+    public sealed class OverlayComponentSettingsEventArgs : EventArgs
+    {
+        public OverlayComponentSettingsEventArgs(string component) => Component = component;
+        public string Component { get; }
+    }
+
     internal sealed class AuxiliaryOverlayWindow : Window
     {
         private readonly Grid _editChrome;
@@ -1001,6 +1030,8 @@ namespace AMS2LeagueClient.Overlay
         private IntPtr _handle;
         private string _lastBoundsKey = string.Empty;
         private bool _editing;
+
+        public event EventHandler<OverlayComponentSettingsEventArgs>? ComponentSettingsRequested;
 
         public AuxiliaryOverlayWindow(string componentKey, string label, FrameworkElement content, double designWidth, double designHeight, bool useGlass = false,
             bool useSoftwareRendering = false)
@@ -1099,7 +1130,8 @@ namespace AMS2LeagueClient.Overlay
                     gameWindow.Left + bounds.X,
                     gameWindow.Top + bounds.Y,
                     bounds.Width,
-                    bounds.Height);
+                    bounds.Height,
+                    preserveZOrder: wasVisible);
             }
             if (!wasVisible && !_editing) OverlayWindowInterop.ShowWithoutActivation(_handle);
         }
@@ -1112,6 +1144,14 @@ namespace AMS2LeagueClient.Overlay
             Focusable = enabled;
             ShowActivated = enabled;
             OverlayWindowInterop.SetEditMode(_handle, enabled);
+        }
+
+        protected override void OnPreviewMouseRightButtonUp(MouseButtonEventArgs eventArgs)
+        {
+            base.OnPreviewMouseRightButtonUp(eventArgs);
+            if (!_editing) return;
+            ComponentSettingsRequested?.Invoke(this, new OverlayComponentSettingsEventArgs(ComponentKey));
+            eventArgs.Handled = true;
         }
 
         public OverlayBounds ReadPhysicalBounds()

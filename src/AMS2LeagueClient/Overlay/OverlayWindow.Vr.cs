@@ -140,7 +140,7 @@ namespace AMS2LeagueClient.Overlay
             using (DrawingContext context = drawing.RenderOpen())
             {
                 context.PushClip(new RectangleGeometry(new Rect(0, 0, width, height)));
-                foreach (Window window in HudWindows())
+                foreach (Window window in HudWindowsInLayerOrder())
                 {
                     if (!window.IsVisible || !(window.Content is Grid root) || root.Children.Count == 0) continue;
                     // The first child is the HUD, the second is desktop edit chrome.

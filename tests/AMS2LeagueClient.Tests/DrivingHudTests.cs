@@ -335,33 +335,62 @@ namespace AMS2LeagueClient.Tests
                 dialog.ShowActivated = false; dialog.Left = -5000; dialog.Top = -5000;
                 dialog.WindowStartupLocation = WindowStartupLocation.Manual;
                 dialog.Show(); PumpDispatcher();
-                // N clusters retain their artwork typography; every other component has its own selector.
-                AssertEqual(OverlayComponentKeys.TextConfigurable.Length,
-                    Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box).EndsWith(" 글꼴", StringComparison.Ordinal)));
+                // Environment settings now contains only the frame cap and N RPM calibration.
+                AssertEqual(0, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box).EndsWith(" 글꼴", StringComparison.Ordinal)));
                 AssertFalse(Descendants<ComboBox>(dialog).Any(box => System.Windows.Automation.AutomationProperties.GetName(box).StartsWith("N 계기판", StringComparison.Ordinal)));
                 AssertEqual(1, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) == "최대 눈금 결정"));
                 foreach ((string label, string font, string sample) in new[]
                     { ("속도계", "Arial", "123 km/h"), ("기어", "Consolas", "3") })
                 {
-                    ComboBox selector = Descendants<ComboBox>(dialog).Single(box =>
+                    string component = label == "속도계" ? OverlayComponentKeys.Speed : OverlayComponentKeys.Gear;
+                    var componentDialog = new OverlayComponentSettingsWindow(component, settings);
+                    componentDialog.ShowActivated = false; componentDialog.Left = -5000; componentDialog.Top = -5000;
+                    componentDialog.WindowStartupLocation = WindowStartupLocation.Manual;
+                    componentDialog.Show(); PumpDispatcher();
+                    ComboBox selector = Descendants<ComboBox>(componentDialog).Single(box =>
                         System.Windows.Automation.AutomationProperties.GetName(box) == label + " 글꼴");
-                    TextBlock preview = Descendants<TextBlock>(dialog).Single(block =>
+                    TextBlock preview = Descendants<TextBlock>(componentDialog).Single(block =>
                         System.Windows.Automation.AutomationProperties.GetName(block) == label + " 글꼴 미리보기");
                     AssertEqual(sample, preview.Text);
                     selector.SelectedItem = font;
                     AssertEqual(font, preview.FontFamily.Source);
+                    AssertEqual(font, componentDialog.Settings.TextFor(component).Font);
+                    componentDialog.Close();
                 }
                 // HUD frame limit: 30..240 FPS in 1 FPS steps.
                 var frameLimit = Descendants<Slider>(dialog).Single(slider => System.Windows.Automation.AutomationProperties.GetName(slider) == "최대 FPS");
                 AssertEqual((double)settings.HudFrameLimit, frameLimit.Value);
                 AssertEqual(30.0, frameLimit.Minimum); AssertEqual(240.0, frameLimit.Maximum);
                 AssertEqual(1.0, frameLimit.TickFrequency); AssertTrue(frameLimit.IsSnapToTickEnabled);
-                var raceFont = Descendants<Slider>(dialog).Single(slider =>
+                var raceDialog = new OverlayComponentSettingsWindow(OverlayComponentKeys.RaceControl, settings);
+                raceDialog.ShowActivated = false; raceDialog.Left = -5000; raceDialog.Top = -5000;
+                raceDialog.WindowStartupLocation = WindowStartupLocation.Manual;
+                raceDialog.Show(); PumpDispatcher();
+                var raceFont = Descendants<Slider>(raceDialog).Single(slider =>
                     System.Windows.Automation.AutomationProperties.GetName(slider) == "레이스 컨트롤 글자 크기");
                 AssertEqual(150.0, raceFont.Value);
                 AssertEqual(50.0, raceFont.Minimum); AssertEqual(200.0, raceFont.Maximum);
                 AssertTrue(dialog.ActualHeight <= SystemParameters.WorkArea.Height);
-                AssertEqual(6, Descendants<Button>(dialog).Count(button => button.Tag is string));
+                AssertEqual(0, Descendants<Button>(dialog).Count(button => button.Tag is string));
+                raceDialog.Close();
+                foreach (string component in OverlayComponentKeys.TextConfigurable)
+                {
+                    var page = new OverlayComponentSettingsWindow(component, settings)
+                        { ShowActivated = false, Left = -5000, Top = -5000, WindowStartupLocation = WindowStartupLocation.Manual };
+                    page.Show(); PumpDispatcher();
+                    AssertEqual(1, Descendants<ComboBox>(page).Count(box =>
+                        System.Windows.Automation.AutomationProperties.GetName(box).EndsWith(" 글꼴", StringComparison.Ordinal)));
+                    AssertEqual(1, Descendants<Slider>(page).Count(slider =>
+                        System.Windows.Automation.AutomationProperties.GetName(slider).EndsWith(" 글자 크기", StringComparison.Ordinal)));
+                    int colors = component == OverlayComponentKeys.PedalTelemetry || component == OverlayComponentKeys.PedalGauge ? 4
+                        : component == OverlayComponentKeys.Speed || component == OverlayComponentKeys.Gear ? 1 : 0;
+                    AssertEqual(colors, Descendants<Button>(page).Count(button => button.Tag is string));
+                    AssertEqual(component == OverlayComponentKeys.PedalTelemetry,
+                        Descendants<Slider>(page).Any(slider => System.Windows.Automation.AutomationProperties.GetName(slider) == "핸들 전체 회전각"));
+                    if (component == OverlayComponentKeys.PedalTelemetry || component == OverlayComponentKeys.Speed)
+                        CaptureLayout((FrameworkElement)page.Content, "component-settings-" + component);
+                    page.Close();
+                }
                 CaptureLayout((FrameworkElement)dialog.Content, "driving-settings-menu");
                 dialog.Close();
                 var status = new ClientStatusWindow(new ClientStatusViewModel()) { Width = 860, Height = 820 };

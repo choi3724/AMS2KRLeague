@@ -1,4 +1,21 @@
-﻿# REQ-RELEASE-092 — 0.9.2 업데이트 실패 로그와 Git 그래프 반영 (2026-10-02)
+# REQ-RELEASE-093 — 0.9.3 commit and GitHub release (2026-10-02)
+
+Request: Commit the per-overlay settings and layer-order work, update the application version to 0.9.3, build and publish a GitHub release. Public notes contain only feature additions and bug fixes. Upload the installer and portable ZIP only; do not upload checksum or hash manifest files.
+
+Status: PARTIAL. Windows Release build and package audits passed, Client 199/199 and Activity 111/111. The portable 0.9.3 executable completed the 19-file capture smoke test, and the 0.9.2-to-0.9.3 portable update/automatic restart test passed with its user file preserved. GitHub release: https://github.com/choi3724/AMS2KRLeague/releases/tag/v0.9.3 (installer and ZIP only). Actual AMS2 gameplay, VR headset, and native threaded N visuals remain unverified.
+
+# REQ-OVERLAY-LAYER-104 — Overlay stacking controls (2026-10-02)
+
+Request: In layout edit mode, let the user move an individual overlay backward, forward, to the very back, or to the very front, like PowerPoint object ordering. The order should preview immediately, save with the layout, survive window moves and application restart, and apply to desktop and VR composition. A canceled settings page must restore the original order. Existing layout files must receive the historical default order. Include both N cluster variants in the controls.
+
+Status: PARTIAL. Automated Win32 WPF tests verified immediate HWND ordering, cancel rollback, persisted order after reload, live window repositioning, N settings controls, and legacy layout defaults. The actual AMS2 game, VR headset, and threaded native N surface are not yet visually verified. Evidence: `work/validation-20261002-layer-final/`.
+# REQ-OVERLAY-EDIT-SETTINGS-103 — 게임 없는 UI 편집에서 오버레이별 설정 (2026-10-02)
+
+사용자 요청: 게임 없이 주행·대기 UI 편집 중 각 오버레이를 우클릭하면 해당 설정 페이지를 연다. 디자인, 글꼴과 내부 글자 크기, 입력 막대 색상과 핸들 회전각, 속도·기어 그림자 색상은 관련 오버레이의 페이지에서 조절한다. 값을 변경하는 동안 실제 편집 미리보기에 즉시 반영하고, 취소하면 열기 전 모습으로 복구하며 저장할 때만 디스크에 기록한다. 기존 ‘색상·글꼴·핸들 설정’은 ‘환경설정’으로 바꾸고 프레임 제한과 N 계기판 RPM 보정만 남긴다. 일반형·확장형 N 계기판의 글꼴 설정은 추가하지 않는다. 위치·크기 편집과 클릭 통과 동작은 유지한다.
+
+상태: PARTIAL. Windows 빌드 경고·오류 0, Client 198/198, Activity 111/111. 게임 없는 주행·대기 편집 화면의 우클릭 경로, 실제 WPF 글자·디자인 변경과 취소 복구, 저장 전 디스크 미기록, 12개 설정 페이지 구성을 자동 검증했다. 텔레메트리·속도계·환경설정 창 캡처를 확인했다. 근거: `work/validation-20261002-rightclick-final/`, `work/validation-20261002-rightclick-ui/`. 실제 AMS2 주행·VR·사용자 모니터의 체감 화면은 미검증이다.
+
+# REQ-RELEASE-092 — 0.9.2 업데이트 실패 로그와 Git 그래프 반영 (2026-10-02)
 
 사용자 요청: 자동 업데이트가 실패하거나 설치가 연기되면 진단 로그를 해당 사용자의 바탕화면에도 남긴다. 설치 전 다운로드·준비 실패, 설치 도우미 실패, 재실행 실패를 포함한다. 기존 내부 업데이트 로그와 6시간 재시도 정책은 유지하고 성공 시에는 실패 로그를 만들지 않는다. 바탕화면 쓰기 실패가 업데이트 복구를 추가로 막지 않아야 한다.
 

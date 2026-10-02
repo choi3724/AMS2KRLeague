@@ -83,9 +83,12 @@ namespace AMS2LeagueClient.Core.Presentation
             = new Dictionary<string, NormalizedOverlayBounds>(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, bool> EnabledComponents { get; set; }
             = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        // Back-to-front. Legacy layout JSON without this field keeps the previous HUD order.
+        public List<string> LayerOrder { get; set; } = new List<string>(OverlayComponentKeys.All);
 
         public void SetDrivingPanelDefaults()
         {
+            LayerOrder = OverlayLayerOrder.Normalize(LayerOrder);
             EnabledComponents ??= new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             EnabledComponents.TryAdd(OverlayComponentKeys.DrivingDashboard, false);
             EnabledComponents.TryAdd(OverlayComponentKeys.PedalGauge, false);

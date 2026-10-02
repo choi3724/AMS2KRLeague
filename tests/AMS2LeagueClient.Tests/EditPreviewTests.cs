@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using AMS2LeagueClient.Core.Events;
 using AMS2LeagueClient.Core.Presentation;
+using AMS2LeagueClient.Core.Process;
 using AMS2LeagueClient.Overlay;
 using AMS2LeagueClient.Presentation;
 using AMS2LeagueClient.Runtime;
@@ -18,6 +19,81 @@ namespace AMS2LeagueClient.Tests
 {
     internal static partial class Program
     {
+        private static void GameFreeSettingsPreviewAndRollback()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "ams2-settings-preview-" + Guid.NewGuid() + ".json");
+            var overlay = new OverlayWindow(false, path);
+            try
+            {
+                overlay.BeginLayoutPreview(false, new GameWindowSnapshot(IntPtr.Zero, -5000, -5000, 1280, 720, 96, true, false, 0));
+                PumpDispatcher();
+                Window race = Application.Current.Windows.Cast<Window>().Single(w => w.Title == "AMS2 레이스 컨트롤");
+                var view = FindDescendant<RaceControlView>(race)!;
+                var title = Descendants<TextBlock>(view).Single(text => text.Name == "TitleText");
+                double baseline = title.FontSize;
+                string? requested = null;
+                overlay.ComponentSettingsRequested += (_, args) => requested = args.Component;
+                var mouse = new MouseButtonEventArgs(InputManager.Current.PrimaryMouseDevice, Environment.TickCount, MouseButton.Right)
+                    { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent };
+                race.RaiseEvent(mouse);
+                AssertEqual(OverlayComponentKeys.RaceControl, requested);
+                requested = null;
+                overlay.RaiseEvent(new MouseButtonEventArgs(InputManager.Current.PrimaryMouseDevice, Environment.TickCount, MouseButton.Right)
+                    { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
+                AssertEqual(OverlayComponentKeys.TimingTower, requested);
+
+                DrivingHudSettings original = overlay.GetDrivingHudSettings();
+                var dialog = new OverlayComponentSettingsWindow(OverlayComponentKeys.RaceControl, original)
+                    { ShowActivated = false, Left = -5000, Top = -5000, WindowStartupLocation = WindowStartupLocation.Manual };
+                int changes = 0;
+                dialog.SettingsChanged += (_, __) => { changes++; overlay.PreviewDrivingHudSettings(dialog.Settings); };
+                dialog.Show(); PumpDispatcher();
+                Slider scale = Descendants<Slider>(dialog).Single(item =>
+                    System.Windows.Automation.AutomationProperties.GetName(item) == "레이스 컨트롤 글자 크기");
+                scale.Value = 150;
+                PumpDispatcher();
+                AssertTrue(changes > 0);
+                AssertTrue(title.FontSize > baseline);
+                AssertEqual(1.5, overlay.GetDrivingHudSettings().TextFor(OverlayComponentKeys.RaceControl).Scale);
+                AssertFalse(File.Exists(path)); // An in-progress preview is never saved.
+                dialog.Close();
+                overlay.PreviewDrivingHudSettings(original);
+                PumpDispatcher();
+                AssertEqual(baseline, title.FontSize);
+                AssertEqual(1.0, overlay.GetDrivingHudSettings().TextFor(OverlayComponentKeys.RaceControl).Scale);
+
+                var towerDialog = new OverlayComponentSettingsWindow(OverlayComponentKeys.TimingTower, original)
+                    { ShowActivated = false, Left = -5000, Top = -5000, WindowStartupLocation = WindowStartupLocation.Manual };
+                towerDialog.SettingsChanged += (_, __) => overlay.PreviewDrivingHudSettings(towerDialog.Settings);
+                towerDialog.Show(); PumpDispatcher();
+                ComboBox towerDesign = Descendants<ComboBox>(towerDialog).Single(item =>
+                    System.Windows.Automation.AutomationProperties.GetName(item) == "디자인");
+                towerDesign.SelectedIndex = 1;
+                AssertEqual("AMS2 순위 타워 (개량)", overlay.Title);
+                towerDialog.Close();
+                overlay.PreviewDrivingHudSettings(original);
+                AssertEqual("AMS2 순위 타워 (기본)", overlay.Title);
+
+                var saved = overlay.GetDrivingHudSettings();
+                saved.OverlayText[OverlayComponentKeys.RaceControl] = new DrivingHudSettings.TextAppearance { Scale = 1.5 };
+                overlay.SaveDrivingHudSettings(saved);
+                AssertTrue(File.Exists(path));
+                overlay.EndLayoutEdit(true);
+                requested = null;
+                race.RaiseEvent(new MouseButtonEventArgs(InputManager.Current.PrimaryMouseDevice, Environment.TickCount, MouseButton.Right)
+                    { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
+                AssertTrue(requested == null);
+                overlay.BeginLayoutPreview(true);
+                PumpDispatcher();
+                Window waiting = Application.Current.Windows.Cast<Window>().Single(w => w.Title == "AMS2 멀티 대기 화면");
+                waiting.RaiseEvent(new MouseButtonEventArgs(InputManager.Current.PrimaryMouseDevice, Environment.TickCount, MouseButton.Right)
+                    { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
+                AssertEqual(OverlayComponentKeys.Waiting, requested);
+                Console.WriteLine("PROOF game-free right-click racing/waiting surfaces routed; live text/design changed and cancel restored; save persisted; locked click ignored");
+            }
+            finally { overlay.EndLayoutEdit(false); overlay.Close(); if (File.Exists(path)) File.Delete(path); }
+        }
+
         private static void EmptyPanelsRemainEditableWithPreview()
         {
             string layout = Path.Combine(Path.GetTempPath(), "ams2-edit-preview-" + Guid.NewGuid() + ".json");
