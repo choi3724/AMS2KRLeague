@@ -92,7 +92,7 @@ namespace AMS2LeagueClient.Overlay
                 error => Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
                 {
                     if (_closing || !ReferenceEquals(_threadedN[slot], hud)) return;
-                    ThreadedNStatus?.Invoke("failed slot=" + slot + " " + error.GetType().Name + " " + error.Message);
+                    ThreadedNStatus?.Invoke("failed slot=" + slot + " " + error);
                     _threadedNFailed = true;
                     ReleaseThreadedN();
                 })),

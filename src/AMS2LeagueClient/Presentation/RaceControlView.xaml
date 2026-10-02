@@ -8,7 +8,7 @@
             </Border>
             <!-- The card stretches freely; only text fits uniformly if its
                  wrapped natural height exceeds the available content area. -->
-            <Viewbox x:Name="ContentFit" Stretch="Uniform" StretchDirection="DownOnly" Margin="0,4">
+            <Viewbox x:Name="ContentFit" Stretch="Uniform" StretchDirection="DownOnly" VerticalAlignment="Top" Margin="0,4">
             <Grid x:Name="Body" Width="385">
                 <Grid.RenderTransform><TranslateTransform /></Grid.RenderTransform>
                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>

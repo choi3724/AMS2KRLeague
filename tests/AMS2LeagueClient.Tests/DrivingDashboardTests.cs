@@ -70,8 +70,12 @@ namespace AMS2LeagueClient.Tests
             var dashboardHost = new Window { Content = dashboard, Width = 360, Height = 160, Left = -5000, Top = -5000, ShowActivated = false };
             try
             {
-                dashboard.SetSession(27, "14:03");
+                dashboard.SetSession(27, "남은 시간", "14:03");
+                AssertEqual("남은 시간 14:03", dashboard.RemainingText);
                 dashboardHost.Show(); PumpDispatcher(); CaptureLayout(dashboard, "combined-dashboard");
+                dashboard.SetSession(27, "남은 랩", "7 / 10");
+                AssertEqual("남은 랩 7 / 10", dashboard.RemainingText);
+                CaptureLayout(dashboard, "combined-dashboard-laps");
                 var shift = new DrivingTelemetrySample(sample.CapturedAt.AddMilliseconds(50), 1, 3, .2, 0, 0, 0, 65, 3, false, 0, 6466, 8000);
                 dashboard.SetSample(shift, "P12");
                 AssertEqual(4, dashboard.LitRpmLights);

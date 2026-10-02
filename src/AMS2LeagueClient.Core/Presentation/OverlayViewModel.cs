@@ -22,6 +22,7 @@ namespace AMS2LeagueClient.Core.Presentation
         public string Class { get; set; } = "—";
         public string Lap { get; set; } = "L—";
         public string CurrentTime { get; set; } = "—";
+        public string TowerTimeText { get; set; } = "—";
         public bool IsPlayer { get; set; }
         public string Background { get; set; } = OverlayUiPalette.NormalRowBackground;
         public string Accent { get; set; } = "Transparent";
@@ -43,7 +44,9 @@ namespace AMS2LeagueClient.Core.Presentation
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             bool timeChanged = CurrentTime != source.CurrentTime;
+            bool towerTimeChanged = TowerTimeText != source.TowerTimeText;
             CurrentTime = source.CurrentTime;
+            TowerTimeText = source.TowerTimeText;
             if (ParticipantIndex == source.ParticipantIndex
                 && Position == source.Position
                 && Name == source.Name
@@ -62,6 +65,7 @@ namespace AMS2LeagueClient.Core.Presentation
                 && StatusColor == source.StatusColor && PenaltyText == source.PenaltyText)
             {
                 if (timeChanged) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentTime)));
+                if (towerTimeChanged) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TowerTimeText)));
                 return;
             }
 
@@ -71,6 +75,7 @@ namespace AMS2LeagueClient.Core.Presentation
             Class = source.Class;
             Lap = source.Lap;
             CurrentTime = source.CurrentTime;
+            TowerTimeText = source.TowerTimeText;
             IsPlayer = source.IsPlayer;
             Background = source.Background;
             Accent = source.Accent;
@@ -162,6 +167,8 @@ namespace AMS2LeagueClient.Core.Presentation
         public string ClassPositionText { get; set; } = "C— / —";
         public string CurrentLapHeaderText { get; set; } = "랩 —";
         public string RankingRangeText { get; set; } = "순위";
+        public string RankingTimeHeaderText { get; set; } = "최고 랩";
+        public bool IsRaceTowerGap { get; set; }
         public int RankingRowCapacity { get; set; } = MaxRankingRows;
         public IReadOnlyList<RankingRowViewModel> AllRankingRows { get; set; } = Array.Empty<RankingRowViewModel>();
         public IReadOnlyList<RankingRowViewModel> RankingRows { get; set; } = Array.Empty<RankingRowViewModel>();
@@ -315,6 +322,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 ClassPositionText = FormatClassPosition(league, local),
                 CurrentLapHeaderText = "랩 " + displayLap,
                 RankingRangeText = range,
+                RankingTimeHeaderText = snapshot.KnownSessionState == Telemetry.SessionState.Race ? "1위 최고랩 차" : "최고 랩",
+                IsRaceTowerGap = snapshot.KnownSessionState == Telemetry.SessionState.Race,
                 RankingRowCapacity = rankingRowCapacity,
                 AllRankingRows = allRankingRows,
                 RankingRows = rankingRows,
@@ -398,12 +407,14 @@ namespace AMS2LeagueClient.Core.Presentation
             int? fastestIndex,
             IReadOnlyCollection<int>? outLapParticipants)
         {
+            ParticipantSnapshot? leader = league.Participants.FirstOrDefault(item => item.LeaguePosition == 1)?.Source;
             return league.Participants
                 .Select(item =>
                 {
                     ParticipantRowDisplayState displayState = ParticipantRowStateResolver.Resolve(item.Source);
                     bool dimmed = ParticipantRowStateResolver.ShouldDim(displayState);
                     bool player = item.Source.Index == localIndex;
+                    string lapText = TowerLapText(snapshot, item.Source, outLapParticipants);
                     ClassBadgeStyle classBadge = ClassBadgePalette.Resolve(item.Source.VehicleClass);
                     string terminal = item.Source.KnownRaceState switch
                     {
@@ -419,8 +430,10 @@ namespace AMS2LeagueClient.Core.Presentation
                         Name = string.IsNullOrWhiteSpace(item.Source.Name) ? "—" : item.Source.Name,
                         Class = CompactClass(item.Source.VehicleClass),
                         Lap = "L" + (item.Source.CurrentLap > 0 ? item.Source.CurrentLap : item.Source.LapsCompleted + 1),
-                        // Keep the binding name, but the tower is now participant best-lap only.
-                        CurrentTime = TowerLapText(snapshot, item.Source, outLapParticipants),
+                        CurrentTime = lapText,
+                        TowerTimeText = snapshot.KnownSessionState == Telemetry.SessionState.Race
+                            ? TowerBestLapGapText(snapshot, item.Source, leader, lapText)
+                            : lapText,
                         IsPlayer = player,
                         DisplayState = displayState,
                         IsDimmed = dimmed,
@@ -442,6 +455,27 @@ namespace AMS2LeagueClient.Core.Presentation
                     };
                 })
                 .ToArray();
+        }
+
+        private static string TowerBestLapGapText(TelemetrySnapshot snapshot, ParticipantSnapshot driver,
+            ParticipantSnapshot? leader, string lapText)
+        {
+            if (!IsPositiveFinite(driver.BestLapTime) ||
+                (snapshot.KnownSessionState == Telemetry.SessionState.Race && driver.IsActive
+                    && driver.KnownRaceState == RaceState.Racing && driver.LapsCompleted < 2))
+                return lapText;
+            if (leader == null || !IsPositiveFinite(leader.BestLapTime)
+                || (snapshot.KnownSessionState == Telemetry.SessionState.Race && leader.IsActive
+                    && leader.KnownRaceState == RaceState.Racing && leader.LapsCompleted < 2)) return "—";
+            if (driver.Index == leader.Index) return "0.000";
+            double difference = driver.BestLapTime - leader.BestLapTime;
+            long milliseconds = (long)Math.Round(Math.Abs(difference) * 1000, MidpointRounding.AwayFromZero);
+            if (milliseconds == 0) return "0.000";
+            string magnitude = milliseconds < 60000
+                ? (milliseconds / 1000.0).ToString("0.000", CultureInfo.InvariantCulture)
+                : (milliseconds / 60000).ToString(CultureInfo.InvariantCulture) + ":"
+                    + ((milliseconds % 60000) / 1000.0).ToString("00.000", CultureInfo.InvariantCulture);
+            return (difference < 0 ? "-" : "+") + magnitude;
         }
 
         private static string TowerLapText(TelemetrySnapshot snapshot, ParticipantSnapshot driver, IReadOnlyCollection<int>? outLapParticipants)

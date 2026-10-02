@@ -14,7 +14,11 @@
         <ControlTemplate x:Key="LegacyTowerTemplate" TargetType="ContentControl">
 <Border CornerRadius="8" Background="{StaticResource MainPanelBackgroundBrush}" BorderBrush="#8A4DE3B1" BorderThickness="1" Padding="8,7">
         <StackPanel>
-            <TextBlock Text="페널티" Height="22" Width="114" HorizontalAlignment="Right" TextAlignment="Center" Foreground="#FFD166" FontSize="14.5" FontWeight="SemiBold" />
+            <Grid Height="22" HorizontalAlignment="Right">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="104"/><ColumnDefinition Width="64"/><ColumnDefinition Width="112"/></Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding RankingTimeHeaderText}" Visibility="{Binding IsRaceTowerGap, Converter={StaticResource BooleanToVisibilityConverter}}" Foreground="#DEE7EB" FontSize="12" TextAlignment="Center" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="페널티" Foreground="#FFD166" FontSize="14.5" FontWeight="SemiBold" TextAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
             <!-- ClipToBounds keeps the broadcast-style row slide-in inside the tower panel. -->
             <ItemsControl x:Name="RankingItems" ClipToBounds="True">
                 <ItemsControl.ItemTemplate>
@@ -46,10 +50,10 @@
                                         <TextBlock Foreground="{Binding LegacyTimeForeground}" FontWeight="Bold" TextAlignment="Right">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}">
-                                                    <Setter Property="Text" Value="{Binding CurrentTime}"/>
+                                                    <Setter Property="Text" Value="{Binding TowerTimeText}"/>
                                                     <Setter Property="FontSize" Value="{x:Static core:OverlayUiMetrics.FontTiming}"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding CurrentTime}" Value="랩 타임 주행 중">
+                                                        <DataTrigger Binding="{Binding TowerTimeText}" Value="랩 타임 주행 중">
                                                             <Setter Property="Text" Value="랩 타임&#x0a;주행 중"/>
                                                             <Setter Property="FontSize" Value="{x:Static core:OverlayUiMetrics.FontSmall}"/>
                                                         </DataTrigger>
@@ -101,7 +105,7 @@
                     <TextBlock Text="{Binding RemainingTimeText}" Foreground="White" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="클래스" Foreground="#DEE7EB" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
-                <TextBlock Grid.Column="3" Text="최고 랩" Foreground="#DEE7EB" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="{Binding RankingTimeHeaderText}" Foreground="#DEE7EB" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
                 <TextBlock Grid.Column="2" Text="상태" Foreground="#DEE7EB" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
                 <TextBlock Grid.Column="4" Text="페널티" Foreground="#FFD166" FontSize="12" VerticalAlignment="Center" TextAlignment="Center"/>
             </Grid>
@@ -147,10 +151,10 @@
                                         <TextBlock Foreground="{Binding TimeForeground}" FontWeight="Bold" TextAlignment="Right">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock" BasedOn="{StaticResource HudNumericText}">
-                                                    <Setter Property="Text" Value="{Binding CurrentTime}"/>
+                                                    <Setter Property="Text" Value="{Binding TowerTimeText}"/>
                                                     <Setter Property="FontSize" Value="{x:Static core:OverlayUiMetrics.FontTiming}"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding CurrentTime}" Value="랩 타임 주행 중">
+                                                        <DataTrigger Binding="{Binding TowerTimeText}" Value="랩 타임 주행 중">
                                                             <Setter Property="Text" Value="랩 타임&#x0a;주행 중"/>
                                                             <Setter Property="FontSize" Value="{x:Static core:OverlayUiMetrics.FontSmall}"/>
                                                         </DataTrigger>

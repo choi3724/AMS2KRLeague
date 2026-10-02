@@ -57,7 +57,8 @@ namespace AMS2LeagueClient.Presentation
         private HwndSource? _host;
         private Border? _root;
         private AvanteClusterView? _view;
-        private readonly ScaleTransform _scale = new ScaleTransform(1, 1);
+        // Mutable WPF transforms belong to the HUD Dispatcher, not the constructing UI thread.
+        private ScaleTransform _scale = null!;
         private LayeredSurface? _surface;
         private RenderTargetBitmap? _bitmap;
         private Placement _placement = Placement.Hidden;
@@ -121,6 +122,7 @@ namespace AMS2LeagueClient.Presentation
             dispatcher.UnhandledException += (sender, args) => { args.Handled = true; Fail(args.Exception); };
             try
             {
+                _scale = new ScaleTransform(1, 1);
                 _view = new AvanteClusterView(_expanded) { LayoutTransform = _scale };
                 _view.ApplySettings(settings);
                 if (session != null) _view.SetSession(session);
@@ -227,7 +229,12 @@ namespace AMS2LeagueClient.Presentation
         {
             SetCapturing(false);
             _surface?.Dispose(); _surface = null;
-            if (_host != null) { _host.RootVisual = null; _host.Dispose(); _host = null; }
+            if (_host != null)
+            {
+                // Dispatcher shutdown can dispose its HwndSource before this worker cleans up.
+                if (!_host.IsDisposed) { _host.RootVisual = null; _host.Dispose(); }
+                _host = null;
+            }
         }
 
         public void Dispose()

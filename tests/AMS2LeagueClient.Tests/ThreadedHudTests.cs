@@ -61,7 +61,8 @@ namespace AMS2LeagueClient.Tests
                     PumpDispatcher();
                     Thread.Sleep(10);
                 }
-                AssertTrue(status.Any(s => s.StartsWith("active slot=0", StringComparison.Ordinal)));
+                if (!status.Any(s => s.StartsWith("active slot=0", StringComparison.Ordinal)))
+                    throw new InvalidOperationException("Threaded N never presented; statuses=" + string.Join("|", status));
                 AssertFalse(status.Any(s => s.StartsWith("failed", StringComparison.Ordinal)));
                 object hud = slots.GetValue(0)!;
                 AssertNotNull(hud);

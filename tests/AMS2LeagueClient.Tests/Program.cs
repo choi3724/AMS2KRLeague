@@ -38,6 +38,9 @@ namespace AMS2LeagueClient.Tests
         {
             if (args.Contains("--generated-avante-scales", StringComparer.Ordinal))
                 AppContext.SetSwitch("AMS2KRLeague.Avante.UseGeneratedScales", true);
+            // The production app configures WPF timeline metadata before creating any windows.
+            typeof(AMS2LeagueClient.App).Assembly.GetType("AMS2LeagueClient.Presentation.HudMotion")!
+                .GetMethod("ConfigureFrameRate")!.Invoke(null, new object?[] { DrivingHudSettings.DefaultHudFrameLimit });
             var application = new AMS2LeagueClient.App(startRuntime: false);
             application.InitializeComponent();
             int exportScaleArgument = Array.IndexOf(args, "--export-avante-scales");
@@ -267,12 +270,13 @@ namespace AMS2LeagueClient.Tests
                 ,("Resize preview immediately matches saved tower", ResizePreviewMatchesSavedTower)
                 ,("Auxiliary panels fill independently resized bounds", AuxiliaryPanelsFillResizedBounds)
                 ,("Ongoing flags do not replay entrance", OngoingFlagsDoNotReplayEntrance)
-                ,("Timing tick only notifies current time binding", TimingTickOnlyNotifiesTime)
-                ,("Broadcast motion requests high refresh", BroadcastMotionRequestsHighRefresh)
+                ,("Timing tick only notifies time bindings", TimingTickOnlyNotifiesTime)
+                ,("Broadcast motion uses the default HUD frame limit", BroadcastMotionRequestsHighRefresh)
                 ,("Race control reflows without clipping or glyph distortion", RaceControlReflowsWithoutClipping)
                 ,("Participant lap clocks start independently at observed lines", ParticipantLapClocksStartIndependently)
                 ,("Participant lap clocks reject stale identity and terminal states", ParticipantLapClocksRejectInvalidContinuity)
                 ,("Tower best lap ignores sector loss and observed clocks", TowerTimingFallsBackForMissingSectors)
+                ,("Tower labels participant best-lap difference to P1", TowerShowsLeaderBestLapDifference)
                 ,("Tower best lap uses only the participant best source", OpponentTimingUsesCurrentLapSectors)
                 ,("Opening lap shows out-lap label per driver only in the tower", OpeningLapLabelInTower)
                 ,("Race control shows current green flag without history", RaceControlShowsCurrentGreenWithoutHistory)
@@ -1304,14 +1308,16 @@ namespace AMS2LeagueClient.Tests
             AssertTrue(OverlayUiMetrics.TowerHeight + OverlayUiMetrics.ComponentGap + OverlayUiMetrics.RelativeHeight <= 722);
 
             var view = new OverlayHudView();
-            view.SetViewModel(DemoSnapshotFactory.CreateShell(false).Timing);
+            OverlayViewModel model = DemoSnapshotFactory.CreateShell(false).Timing;
+            view.SetViewModel(model);
             var size = new Size(OverlayUiMetrics.TowerWidth, OverlayUiMetrics.TowerHeight);
             view.Measure(size);
             view.Arrange(new Rect(size));
             view.UpdateLayout();
 
             TextBlock classText = Descendants<TextBlock>(view).First(item => item.Text == "GT3");
-            TextBlock timeText = Descendants<TextBlock>(view).First(item => item.Text == "1:40.973");
+            TextBlock timeText = Descendants<TextBlock>(view).First(item =>
+                item.Text == model.RankingRows.Single(row => row.IsPlayer).TowerTimeText);
             AssertEqual(OverlayUiMetrics.FontClass, classText.FontSize);
             AssertEqual(OverlayUiMetrics.FontTiming, timeText.FontSize);
             AssertTrue(classText.ActualHeight <= 36);
@@ -1556,7 +1562,8 @@ namespace AMS2LeagueClient.Tests
             => timing.RankingRows.Single(row => row.IsPlayer);
 
         private static RankingRowViewModel Row(int participantIndex, string position, string name, string currentTime)
-            => new RankingRowViewModel { ParticipantIndex = participantIndex, Position = position, Name = name, CurrentTime = currentTime };
+            => new RankingRowViewModel { ParticipantIndex = participantIndex, Position = position, Name = name,
+                CurrentTime = currentTime, TowerTimeText = currentTime };
 
         private static ParticipantSnapshot ParticipantForStyle(bool active, RaceState raceState, PitMode pitMode)
             => new ParticipantSnapshot(
@@ -1607,7 +1614,8 @@ namespace AMS2LeagueClient.Tests
         private static void TimingTowerRemovesRedundantHeaders()
         {
             var view = new OverlayHudView();
-            view.SetViewModel(DemoSnapshotFactory.CreateShell(false).Timing);
+            OverlayViewModel model = DemoSnapshotFactory.CreateShell(false).Timing;
+            view.SetViewModel(model);
             view.Measure(new Size(OverlayUiMetrics.TowerWidth, OverlayUiMetrics.TowerHeight));
             view.Arrange(new Rect(0, 0, OverlayUiMetrics.TowerWidth, OverlayUiMetrics.TowerHeight));
             view.UpdateLayout();
@@ -1615,7 +1623,7 @@ namespace AMS2LeagueClient.Tests
             AssertFalse(text.Contains("AMS2 LEAGUE · TIMING", StringComparer.Ordinal));
             AssertFalse(text.Contains("리그 순위", StringComparer.Ordinal));
             AssertTrue(text.Contains("GT3", StringComparer.Ordinal));
-            AssertTrue(text.Contains("1:40.973", StringComparer.Ordinal));
+            AssertTrue(text.Contains(model.RankingRows.Single(row => row.IsPlayer).TowerTimeText, StringComparer.Ordinal));
         }
 
         private static void OverlayEditModeRestoresClickThrough()
@@ -3040,18 +3048,19 @@ namespace AMS2LeagueClient.Tests
             row.PropertyChanged += (sender, args) => notifications.Add(args.PropertyName);
             for (int tick = 1; tick <= 120; tick++)
                 row.UpdateFrom(Row(1, "P1", "ALPHA", "0:20." + tick.ToString("000")));
-            AssertEqual(120, notifications.Count);
-            AssertTrue(notifications.All(name => name == nameof(RankingRowViewModel.CurrentTime)));
+            AssertEqual(240, notifications.Count);
+            AssertEqual(120, notifications.Count(name => name == nameof(RankingRowViewModel.CurrentTime)));
+            AssertEqual(120, notifications.Count(name => name == nameof(RankingRowViewModel.TowerTimeText)));
             row.UpdateFrom(Row(1, "P1", "ALPHA", "0:20.120"));
-            AssertEqual(120, notifications.Count);
+            AssertEqual(240, notifications.Count);
             row.UpdateFrom(Row(1, "P2", "ALPHA", "0:20.121"));
             AssertEqual(string.Empty, notifications.Last());
         }
 
         private static void BroadcastMotionRequestsHighRefresh()
         {
-            AssertEqual((int?)144, Timeline.GetDesiredFrameRate(new DoubleAnimation()));
-            AssertEqual((int?)144, Timeline.GetDesiredFrameRate(new DoubleAnimationUsingKeyFrames()));
+            AssertEqual((int?)DrivingHudSettings.DefaultHudFrameLimit, Timeline.GetDesiredFrameRate(new DoubleAnimation()));
+            AssertEqual((int?)DrivingHudSettings.DefaultHudFrameLimit, Timeline.GetDesiredFrameRate(new DoubleAnimationUsingKeyFrames()));
         }
 
         private static TelemetrySnapshot LapClockFrame(double seconds, float a, float b,
@@ -3153,6 +3162,71 @@ namespace AMS2LeagueClient.Tests
             timing = Build(new Dictionary<int, float> { [0] = 6.4f, [1] = 4.1f });
             AssertEqual("1:10.125", timing.RankingRows.Single(row => row.ParticipantIndex == 0).CurrentTime);
             AssertEqual("1:13.500", timing.RankingRows.Single(row => row.ParticipantIndex == 1).CurrentTime);
+        }
+
+        private static void TowerShowsLeaderBestLapDifference()
+        {
+            var fixture = new RawFixtureBuilder(4).SetSession(SessionState.Race)
+                .SetParticipantLapTimes(0, 70.125f, 70.125f)
+                .SetParticipantLapTimes(1, 73.5f, 73.5f)
+                .SetParticipantLapTimes(2, 69.625f, 69.625f)
+                .SetParticipantLapTimes(3, -1, -1);
+            OverlayViewModel model = BuildTiming(fixture);
+            foreach (SessionState session in new[] { SessionState.Practice, SessionState.Qualify,
+                SessionState.Race, SessionState.Test, SessionState.TimeAttack })
+            {
+                model = BuildTiming(fixture.SetSession(session));
+                string Gap(int index) => model.AllRankingRows.Single(row => row.ParticipantIndex == index).TowerTimeText;
+                if (session == SessionState.Race)
+                {
+                    AssertEqual("1위 최고랩 차", model.RankingTimeHeaderText);
+                    AssertTrue(model.IsRaceTowerGap);
+                    AssertEqual("0.000", Gap(0));
+                    AssertEqual("+3.375", Gap(1));
+                    AssertEqual("-0.500", Gap(2));
+                }
+                else
+                {
+                    AssertEqual("최고 랩", model.RankingTimeHeaderText);
+                    AssertFalse(model.IsRaceTowerGap);
+                    AssertEqual("1:10.125", Gap(0));
+                    AssertEqual("1:13.500", Gap(1));
+                    AssertEqual("1:09.625", Gap(2));
+                }
+                AssertEqual(session == SessionState.Race ? "레이스 중"
+                    : session == SessionState.TimeAttack ? "--" : "랩 타임 주행 중", Gap(3));
+            }
+            AssertEqual("+1:00.000", BuildTiming(fixture.SetSession(SessionState.Race)
+                .SetParticipantLapTimes(1, 130.125f, 130.125f)).AllRankingRows
+                .Single(row => row.ParticipantIndex == 1).TowerTimeText);
+            fixture.SetParticipantLapTimes(1, 73.5f, 73.5f);
+            foreach (bool racing in new[] { false, true })
+            {
+                var tower = new OverlayHudView();
+                var host = new Window { Content = tower, Width = 668, Height = 660,
+                    Left = -5000, Top = -5000, ShowActivated = false };
+                try
+                {
+                    model = BuildTiming(fixture.SetSession(SessionState.Race));
+                    tower.SetRacingDesign(racing);
+                    tower.SetViewModel(model);
+                    host.Show(); PumpDispatcher(); tower.UpdateLayout();
+                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "1위 최고랩 차"));
+                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "+3.375"));
+                    tower.Height = OverlayUiMetrics.TowerHeight;
+                    CaptureLayout(tower, racing ? "leader-best-gap-racing" : "leader-best-gap-legacy");
+                    tower.SetViewModel(BuildTiming(fixture.SetSession(SessionState.Practice)));
+                    PumpDispatcher(); tower.UpdateLayout();
+                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "1:13.500"));
+                    AssertEqual(racing, Descendants<TextBlock>(tower).Any(text =>
+                        text.Text == "최고 랩" && text.Visibility == Visibility.Visible));
+                    tower.Height = OverlayUiMetrics.TowerHeight;
+                    CaptureLayout(tower, racing ? "practice-best-lap-racing" : "practice-best-lap-legacy");
+                }
+                finally { host.Close(); }
+            }
+            model = BuildTiming(fixture.SetSession(SessionState.Race).SetParticipantLapTimes(0, -1, -1));
+            AssertEqual("—", model.AllRankingRows.Single(row => row.ParticipantIndex == 1).TowerTimeText);
         }
 
         private static void OpponentTimingUsesCurrentLapSectors()
@@ -3694,7 +3768,7 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual(Visibility.Collapsed, Named<TextBlock>(view, "StateLabelText").Visibility);
                 AssertEqual(update.ActiveEvent!.Title, Named<TextBlock>(view, "TitleText").Text);
                 AssertEqual(update.ActiveEvent.Message, Named<TextBlock>(view, "MessageText").Text);
-                if (width == 416) AssertEqual(24.0, Named<TextBlock>(view, "MessageText").FontSize);
+                if (width == 416) AssertEqual(17.0, Named<TextBlock>(view, "MessageText").FontSize);
                 CaptureLayout(view, "green-current-only-" + width + "x" + height);
             }
             AssertTrue(update.History.Any(item => item.Type == RaceControlEventType.Yellow)); // raw history was not removed
@@ -3722,6 +3796,11 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual((double)width, view.Width);
                 AssertEqual((double)height, view.Height);
                 Grid body = Named<Grid>(view, "Body");
+                if (width == 288 && height == 66 && !expanded)
+                {
+                    AssertTrue(Named<TextBlock>(view, "TitleText").FontSize <= 17);
+                    AssertTrue(Named<TextBlock>(view, "StateLabelText").FontSize <= 12.5);
+                }
                 GeneralTransform transform = body.TransformToAncestor(view);
                 Point zero = transform.Transform(new Point());
                 Point unitX = transform.Transform(new Point(1, 0));
@@ -3738,7 +3817,7 @@ namespace AMS2LeagueClient.Tests
                         if (parent is UIElement element && element.Visibility != Visibility.Visible) hidden = true;
                     if (hidden) continue;
                     Rect bounds = text.TransformToAncestor(view).TransformBounds(new Rect(text.RenderSize));
-                    if (bounds.Right > width + 0.5 || bounds.Bottom > height + 0.5)
+                    if (bounds.Left < -0.5 || bounds.Top < -0.5 || bounds.Right > width + 0.5 || bounds.Bottom > height + 0.5)
                         throw new InvalidOperationException($"{width}x{height} expanded={expanded} {text.Name}: {bounds}");
                     AssertEqual(TextTrimming.None, text.TextTrimming);
                     var measured = new TextBlock

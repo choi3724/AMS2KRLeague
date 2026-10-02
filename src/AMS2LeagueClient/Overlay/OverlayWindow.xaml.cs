@@ -281,7 +281,8 @@ namespace AMS2LeagueClient.Overlay
             if (!_retainedNActive && !IsThreadedNPresenting(6) && IsDrivingVisible(6)) _avanteExpandedView?.SetSession(snapshot);
             UpdateRetainedNSession(snapshot);
             PublishThreadedNSession(snapshot);
-            if (IsDrivingVisible(4)) _dashboardView?.SetSession(_lastTrackTemperature, _viewModel.Timing.RemainingTimeText);
+            if (IsDrivingVisible(4)) _dashboardView?.SetSession(_lastTrackTemperature,
+                _viewModel.Session.PrimaryLabel, _viewModel.Session.PrimaryValue);
         }
 
         public void UpdateDrivingTelemetry(TelemetrySnapshot snapshot, int localIndex, int generation)
@@ -312,7 +313,8 @@ namespace AMS2LeagueClient.Overlay
             else if (!animatePreview) { _drivingPreviewTimer.Stop(); _drivingPreview = null; }
             if (IsDrivingVisible(4))
                 _dashboardView?.SetSession(_layoutEditing && _drivingHistory.Current == null ? 27 : _lastTrackTemperature,
-                    _layoutEditing && _drivingHistory.Current == null ? "14:03" : _viewModel.Timing.RemainingTimeText);
+                    _layoutEditing && _drivingHistory.Current == null ? "남은 시간" : _viewModel.Session.PrimaryLabel,
+                    _layoutEditing && _drivingHistory.Current == null ? "14:03" : _viewModel.Session.PrimaryValue);
             DrivingTelemetryHistory shown = _layoutEditing && _drivingHistory.Current == null ? _drivingPreview ?? _drivingHistory : _drivingHistory;
             if (IsDrivingVisible(0) && ReferenceEquals(_telemetryHost?.Content, _legacyPedalView)) _legacyPedalView?.SetHistory(shown);
             if (IsDrivingVisible(0) && ReferenceEquals(_telemetryHost?.Content, _pedalView)) _pedalView?.SetHistory(shown);

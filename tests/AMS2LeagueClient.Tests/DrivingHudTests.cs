@@ -329,6 +329,17 @@ namespace AMS2LeagueClient.Tests
                 // Two existing font selectors plus the user-requested RPM maximum mode.
                 AssertEqual(2, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) != "최대 눈금 결정"));
                 AssertEqual(1, Descendants<ComboBox>(dialog).Count(box => System.Windows.Automation.AutomationProperties.GetName(box) == "최대 눈금 결정"));
+                foreach ((string label, string font, string sample) in new[]
+                    { ("속도계", "Arial", "123 km/h"), ("기어", "Consolas", "3") })
+                {
+                    ComboBox selector = Descendants<ComboBox>(dialog).Single(box =>
+                        System.Windows.Automation.AutomationProperties.GetName(box) == label + " 글꼴");
+                    TextBlock preview = Descendants<TextBlock>(dialog).Single(block =>
+                        System.Windows.Automation.AutomationProperties.GetName(block) == label + " 글꼴 미리보기");
+                    AssertEqual(sample, preview.Text);
+                    selector.SelectedItem = font;
+                    AssertEqual(font, preview.FontFamily.Source);
+                }
                 // HUD frame limit: 30..240 FPS in 1 FPS steps.
                 var frameLimit = Descendants<Slider>(dialog).Single(slider => System.Windows.Automation.AutomationProperties.GetName(slider) == "최대 FPS");
                 AssertEqual((double)settings.HudFrameLimit, frameLimit.Value);

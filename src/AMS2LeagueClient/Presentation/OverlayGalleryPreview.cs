@@ -42,7 +42,7 @@ namespace AMS2LeagueClient.Presentation
                     view = gauge; width = OverlayUiMetrics.PedalGaugeWidth; height = OverlayUiMetrics.PedalHeight; break;
                 case OverlayComponentKeys.DrivingDashboard:
                     var dashboard = new DrivingDashboardView(); dashboard.ApplySettings(settings);
-                    dashboard.SetSample(history.Current, "P12"); dashboard.SetSession(27, "14:03");
+                    dashboard.SetSample(history.Current, "P12"); dashboard.SetSession(27, "남은 시간", "14:03");
                     view = dashboard; width = OverlayUiMetrics.DashboardWidth; height = OverlayUiMetrics.DashboardHeight; break;
                 case OverlayComponentKeys.AvanteCluster:
                 case OverlayComponentKeys.AvanteClusterExpanded:

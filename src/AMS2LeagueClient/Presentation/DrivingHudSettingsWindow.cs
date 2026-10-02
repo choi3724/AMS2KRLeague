@@ -50,7 +50,8 @@ namespace AMS2LeagueClient.Presentation
             _speedFont.ItemsSource = fonts; _gearFont.ItemsSource = fonts;
             _speedFont.SelectedItem = fonts.Contains(Settings.SpeedFont) ? Settings.SpeedFont : DrivingHudSettings.DefaultFontName;
             _gearFont.SelectedItem = fonts.Contains(Settings.GearFont) ? Settings.GearFont : DrivingHudSettings.DefaultFontName;
-            panel.Children.Add(Row("속도계", _speedFont)); panel.Children.Add(Row("기어", _gearFont));
+            panel.Children.Add(FontRow("속도계", _speedFont, "123 km/h", 30));
+            panel.Children.Add(FontRow("기어", _gearFont, "3", 38));
             panel.Children.Add(new TextBlock { Text = "글자 그림자 색상", FontSize = 17, Margin = new Thickness(0, 18, 0, 10) });
             for (int i = 4; i < 6; i++)
             {
@@ -171,6 +172,34 @@ namespace AMS2LeagueClient.Presentation
             row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
             Grid.SetColumn(control, 1); row.Children.Add(control);
             System.Windows.Automation.AutomationProperties.SetName(control, label);
+            return row;
+        }
+
+        private static Grid FontRow(string label, ComboBox selector, string sample, double size)
+        {
+            var preview = new TextBlock
+            {
+                Text = sample, FontSize = size, FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            System.Windows.Automation.AutomationProperties.SetName(preview, label + " 글꼴 미리보기");
+            void UpdatePreview() => preview.FontFamily = DrivingNumberView.ResolveFont(selector.SelectedItem as string
+                ?? DrivingHudSettings.DefaultFontName);
+            selector.SelectionChanged += (_, __) => UpdatePreview();
+            UpdatePreview();
+            var sampleBorder = new Border
+            {
+                Width = 240, Height = 52, Margin = new Thickness(0, 5, 0, 4),
+                Background = new SolidColorBrush(Color.FromRgb(3, 13, 23)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(79, 105, 126)),
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(5), Child = preview
+            };
+            var group = new StackPanel();
+            group.Children.Add(selector);
+            group.Children.Add(sampleBorder);
+            var row = Row(label, group);
+            System.Windows.Automation.AutomationProperties.SetName(selector, label + " 글꼴");
             return row;
         }
 

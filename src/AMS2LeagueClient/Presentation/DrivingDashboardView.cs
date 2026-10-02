@@ -34,7 +34,8 @@ namespace AMS2LeagueClient.Presentation
         private double _inputTarget;
         private bool _braking;
         private string _temperature = "노면 —";
-        private string _remaining = "남은 —";
+        private string _remaining = "남은 시간 —";
+        public string RemainingText => _remaining;
                 public static readonly DependencyProperty InputLevelProperty = MotionProperty("InputLevel", 0);
         public ScaleTransform GearMotion => _gearMotion;
         public double GearScale => _gearMotion.ScaleX;
@@ -81,12 +82,13 @@ namespace AMS2LeagueClient.Presentation
             _speedFont = Font(settings.SpeedFont); _gearFont = Font(settings.GearFont);
             Array.Clear(_text, 0, _text.Length); InvalidateVisual();
         }
-        public void SetSession(double trackTemperature, string remaining)
+        public void SetSession(double trackTemperature, string remainingLabel, string remaining)
         {
             string previousTemperature = _temperature, previousRemaining = _remaining;
             _temperature = double.IsFinite(trackTemperature) && trackTemperature >= -60 && trackTemperature <= 100
                 ? "노면 " + trackTemperature.ToString("0", CultureInfo.InvariantCulture) + "°C" : "노면 —";
-            _remaining = "남은 " + (string.IsNullOrWhiteSpace(remaining) ? "—" : remaining);
+            _remaining = (remainingLabel == "남은 랩" ? "남은 랩" : "남은 시간") + " "
+                + (string.IsNullOrWhiteSpace(remaining) ? "—" : remaining);
             if (previousTemperature != _temperature || previousRemaining != _remaining) InvalidateVisual();
         }
         public void SetSample(DrivingTelemetrySample? sample, string position)
@@ -96,7 +98,7 @@ namespace AMS2LeagueClient.Presentation
                 && sample.CapturedAt >= _sample.CapturedAt && (sample.CapturedAt - _sample.CapturedAt).TotalSeconds <= 1;
             bool shifted = continuous && sample!.Gear.HasValue && _sample!.Gear.HasValue && sample.Gear != _sample.Gear;
             _sample = sample;
-            if (sample == null) { _temperature = "노면 —"; _remaining = "남은 —"; }
+            if (sample == null) { _temperature = "노면 —"; _remaining = "남은 시간 —"; }
             PositionText = string.IsNullOrWhiteSpace(position) ? "P—" : position;
             bool priorBraking = _braking;
             _braking = (sample?.Pedals[0] ?? 0) > .01;

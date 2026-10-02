@@ -70,7 +70,7 @@ namespace AMS2LeagueClient.Presentation
             string rankingKey = viewModel.RankingRangeText + RecordSeparator + string.Join(
                 UnitSeparator,
                 viewModel.RankingRows.Select(row => row.ParticipantIndex + "|" + row.Position + "|" + row.Name + "|"
-                    + row.Class + "|" + row.CurrentTime + "|" + row.Status + "|" + row.IsPlayer + "|" + row.DisplayState
+                    + row.Class + "|" + row.CurrentTime + "|" + row.TowerTimeText + "|" + row.Status + "|" + row.IsPlayer + "|" + row.DisplayState
                     + "|" + row.ClassBackground + "|" + row.Foreground + "|" + row.TimeForeground
                     + "|" + row.PenaltyText + "|" + row.StatusColor));
             if (rankingKey == _rankingKey)

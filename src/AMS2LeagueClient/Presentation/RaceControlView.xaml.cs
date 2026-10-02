@@ -52,12 +52,15 @@ namespace AMS2LeagueClient.Presentation
             ExpandedContent.Margin = wide ? new Thickness(10, 0, 0, 0) : new Thickness(0, 4, 0, 0);
             double designWidth = expanded ? OverlayUiMetrics.RaceControlExpandedWidth : OverlayUiMetrics.RaceControlCompactWidth;
             double designHeight = expanded ? OverlayUiMetrics.RaceControlExpandedHeight : OverlayUiMetrics.RaceControlCompactHeight;
-            double scale = Math.Clamp(Math.Sqrt(ActualWidth * ActualHeight / (designWidth * designHeight)), 0.5, 3);
+            // Fit to the shorter available dimension. Area-based scaling made a
+            // wide, shallow card enlarge its text before the Viewbox shrank it.
+            double scale = Math.Clamp(Math.Min(ActualWidth / designWidth, ActualHeight / designHeight), 0.65, 1.5);
             Body.Width = Math.Max(1, ActualWidth - Panel.Padding.Left - Panel.Padding.Right
                 - Panel.BorderThickness.Left - Panel.BorderThickness.Right);
-            TitleText.FontSize = MessageText.FontSize = OverlayUiMetrics.FontValue * scale;
-            DriverText.FontSize = OverlayUiMetrics.FontEmphasis * scale;
-            StateLabelText.FontSize = OverlayUiMetrics.FontBody * scale;
+            TitleText.FontSize = (expanded ? 19 : 17) * scale;
+            MessageText.FontSize = 17 * scale;
+            DriverText.FontSize = 15 * scale;
+            StateLabelText.FontSize = 12.5 * scale;
             StateLabelText.MaxWidth = Body.Width * (inline ? (expanded ? 0.3 : 0.45) : 1);
         }
 
