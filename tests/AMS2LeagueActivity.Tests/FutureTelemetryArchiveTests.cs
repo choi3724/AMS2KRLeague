@@ -34,6 +34,8 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Private driver upload defaults to LOCAL_PENDING_OWNER while public upload remains available", PrivateUploadDefaultsToDenied);
             yield return new TestCase("Archive fault ledger distinguishes serialization disk and finalize failures", ArchiveFailureStagesAreDistinct);
             yield return new TestCase("Expired invalid compact chunk does not block healthy streams", ExpiredCompactFailureIsIsolated);
+            yield return new TestCase("Out-of-range speed row is preserved and isolated without blocking finalize", InvalidSpeedRowIsIsolated);
+            yield return new TestCase("Incident speed anomaly preserves its raw row and healthy incident samples", InvalidIncidentSpeedRowIsIsolated);
             yield return new TestCase("Partial compact write retries identical bytes without losing dictionary", PartialCompactWriteRetriesIdentically);
             yield return new TestCase("Long-track partial write retries identical V2 bytes", () => PartialCompactWriteRetriesIdentically(true));
             yield return new TestCase("Archive failure diagnostics are sanitized and rate limited", FailureDiagnosticsAreBounded);
@@ -689,6 +691,104 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal(identity.AttemptId, source.AttemptId);
             AssertEx.Equal((double?)-123, source.Data.Rows[0][Array.IndexOf(source.Data.Fields, "lapDistanceMeters")]);
             AssertEx.False(Directory.GetFiles(Path.GetDirectoryName(preserved)!, "*.upload.json").Any());
+        }
+
+        private static void InvalidSpeedRowIsIsolated()
+        {
+            using var directory = new TemporaryDirectory("speed-row-isolation");
+            TelemetryArchiveIdentity identity = FixedIdentity("speed-row-isolation");
+            var store = new CompactTelemetryChunkStore(directory.Root, identity);
+            var archive = new LocalDurableTelemetryArchive(directory.Root, identity, null, store.Commit, null);
+            TelemetryFrameSample anomalous = Frame(0, 2, true);
+            anomalous.Participants[0].SpeedMetersPerSecond = 700;
+            AssertEx.True(archive.TryCaptureFrame(anomalous));
+            AssertEx.True(archive.TryCaptureFrame(Frame(100, 2, true)));
+            archive.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            AssertEx.True(archive.CompletionReport.FinalizeAcknowledged);
+            AssertEx.Equal(1L, archive.CompletionReport.Streams
+                .Single(value => value.StreamType == TelemetryStreamType.PARTICIPANT_REPLAY).SerializationFailures);
+            string evidence = AssertEx.Single(Directory.GetFiles(directory.Root,
+                "*.source.json.gz", SearchOption.AllDirectories));
+            using var raw = File.OpenRead(evidence);
+            TelemetryChunkEnvelope source = TelemetryChunkSerializer.Deserialize(TelemetryChunkSerializer.Gunzip(raw));
+            int speedIndex = Array.IndexOf(source.Data.Fields, "speedMetersPerSecond");
+            AssertEx.True(source.Data.Rows.Any(row => row[speedIndex] == 700));
+            string diagnostic = AssertEx.Single(Directory.GetFiles(directory.Root,
+                "*.evidence.json", SearchOption.AllDirectories));
+            using var detail = JsonDocument.Parse(File.ReadAllBytes(diagnostic));
+            AssertEx.Equal(700.0, detail.RootElement.GetProperty("rejectedRows")[0].GetProperty("observed").GetDouble());
+            AssertEx.Equal(6_554L, detail.RootElement.GetProperty("quantizedMaximum").GetInt64());
+            CompactTelemetryEnvelope[] committed = Directory.GetFiles(directory.Root,
+                "*.a2ct.gz", SearchOption.AllDirectories).Select(path => {
+                    using var file = File.OpenRead(path);
+                    return CompactTelemetryCodec.Decode(TelemetryChunkSerializer.Gunzip(file));
+                }).Where(value => value.Block.SchemaId == CompactTelemetrySchemaId.ParticipantReplayV1
+                    || value.Block.SchemaId == CompactTelemetrySchemaId.ParticipantReplayV2).ToArray();
+            AssertEx.True(committed.Any(value => value.Block.Samples.Count > 0));
+            AssertEx.True(committed.Any(value => {
+                var fields = CompactTelemetrySchemaRegistry.Get(value.Block.SchemaId).Fields;
+                int speedOrdinal = fields.Single(field => field.Name == "speedMetersPerSecond").Ordinal;
+                int positionOrdinal = fields.Single(field => field.Name == "racePosition").Ordinal;
+                return value.Block.Samples.Any(sample => !sample.Values[speedOrdinal].HasValue
+                    && sample.Values[positionOrdinal].HasValue);
+            }), "The rejected speed value should be absent while race position remains.");
+            AssertEx.True(committed.All(value => {
+                int ordinal = CompactTelemetrySchemaRegistry.Get(value.Block.SchemaId).Fields
+                    .Single(field => field.Name == "speedMetersPerSecond").Ordinal;
+                return value.Block.Samples.All(sample => !sample.Values[ordinal].HasValue
+                    || sample.Values[ordinal]!.Value < 655);
+            }));
+            TelemetryChunkCommitOutcome retry = new CompactTelemetryChunkStore(directory.Root, identity).Commit(source);
+            AssertEx.Equal(1, retry.IsolatedAnomalousSamples);
+            AssertEx.Equal(TelemetryChunkCommitDisposition.DUPLICATE, retry.Disposition);
+            AssertEx.Equal(1, Directory.GetFiles(directory.Root, "*.source.json.gz", SearchOption.AllDirectories).Length);
+        }
+
+        private static void InvalidIncidentSpeedRowIsIsolated()
+        {
+            using var directory = new TemporaryDirectory("incident-speed-isolation");
+            var options = new TelemetryArchiveOptions
+            {
+                IncidentPreRollMs = 100, IncidentPostRollMs = 100, IncidentRingDurationMs = 200
+            };
+            TelemetryArchiveIdentity identity = FixedIdentity("incident-speed-isolation");
+            var store = new CompactTelemetryChunkStore(directory.Root, identity, options);
+            var archive = new LocalDurableTelemetryArchive(directory.Root, identity, options, store.Commit, null);
+            TelemetryFrameSample before = Frame(0, 2, false);
+            before.Participants[0].SpeedMetersPerSecond = 700;
+            archive.TryCaptureFrame(before);
+            TelemetryFrameSample trigger = Frame(100, 2, false);
+            trigger.IncidentCandidate = new IncidentCandidateSample
+            {
+                CandidateId = "speed-proof", TriggerCode = "RAW_FLAG", RelatedParticipantRefs = new[] { 1 }
+            };
+            archive.TryCaptureFrame(trigger);
+            archive.TryCaptureFrame(Frame(200, 2, false));
+            archive.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            AssertEx.True(archive.CompletionReport.FinalizeAcknowledged);
+            AssertEx.True(archive.CompletionReport.Streams.Single(value =>
+                value.StreamType == TelemetryStreamType.INCIDENT_TRACE).SerializationFailures > 0);
+            string evidence = AssertEx.Single(Directory.GetFiles(directory.Root,
+                "*.source.json.gz", SearchOption.AllDirectories)
+                .Where(path => path.Contains("INCIDENT_TRACE", StringComparison.Ordinal)));
+            using var raw = File.OpenRead(evidence);
+            TelemetryChunkEnvelope source = TelemetryChunkSerializer.Deserialize(TelemetryChunkSerializer.Gunzip(raw));
+            int speedIndex = Array.IndexOf(source.Data.Fields, "speedMetersPerSecond");
+            AssertEx.True(source.Data.Rows.Any(row => row[speedIndex] == 700));
+            CompactTelemetryEnvelope[] incidentBlocks = Directory.GetFiles(directory.Root,
+                "*.a2ct.gz", SearchOption.AllDirectories)
+                .Where(path => path.Contains("incident", StringComparison.OrdinalIgnoreCase))
+                .Select(path => {
+                    using var encoded = File.OpenRead(path);
+                    return CompactTelemetryCodec.Decode(TelemetryChunkSerializer.Gunzip(encoded));
+                }).ToArray();
+            AssertEx.True(incidentBlocks.Any(decoded => {
+                var fields = CompactTelemetrySchemaRegistry.Get(decoded.Block.SchemaId).Fields;
+                int speedOrdinal = fields.Single(field => field.Name == "speedMetersPerSecond").Ordinal;
+                int lapOrdinal = fields.Single(field => field.Name == "lap").Ordinal;
+                return decoded.Block.Samples.Any(sample => !sample.Values[speedOrdinal].HasValue
+                    && sample.Values[lapOrdinal].HasValue);
+            }), "The incident keeps its lap fact without the invalid speed.");
         }
 
         private static void FailureDiagnosticsAreBounded()

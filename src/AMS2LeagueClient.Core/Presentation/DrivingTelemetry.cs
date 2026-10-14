@@ -13,7 +13,19 @@ namespace AMS2LeagueClient.Core.Presentation
             // Empty preserves each overlay's original typography.
             public string Font { get; set; } = "";
             public double Scale { get; set; } = 1;
+            public Dictionary<string, double> ElementScales { get; set; } = new Dictionary<string, double>(StringComparer.Ordinal);
+            public double TowerRowHeight { get; set; } = 36;
+            public Dictionary<string, double> TowerColumnScales { get; set; } = new Dictionary<string, double>(StringComparer.Ordinal);
         }
+
+        public static readonly string[] TowerFontRoles =
+        {
+            "header", "position", "driver", "class", "time", "status", "pitPenalty", "numericPenalty", "diagnostic"
+        };
+        public static readonly string[] TowerColumnRoles =
+        {
+            "position", "driver", "class", "time", "status", "pitPenalty", "numericPenalty"
+        };
 
         public Dictionary<string, AvanteRpmCalibration> AvanteVehicles { get; set; } = new Dictionary<string, AvanteRpmCalibration>(StringComparer.Ordinal);
         public const string DefaultFontName = "Pretendard";
@@ -56,7 +68,10 @@ namespace AMS2LeagueClient.Core.Presentation
                 .ToDictionary(pair => pair.Key, pair => new TextAppearance
                 {
                     Font = AppearanceFont(pair.Value.Font),
-                    Scale = double.IsFinite(pair.Value.Scale) ? Math.Clamp(pair.Value.Scale, 0.5, 2) : 1
+                    Scale = double.IsFinite(pair.Value.Scale) ? Math.Clamp(pair.Value.Scale, 0.5, 2) : 1,
+                    ElementScales = NormalizeTowerFontScales(pair.Key, pair.Value.ElementScales),
+                    TowerRowHeight = NormalizeTowerRowHeight(pair.Key, pair.Value.TowerRowHeight),
+                    TowerColumnScales = NormalizeTowerColumnScales(pair.Key, pair.Value.TowerColumnScales)
                 }, StringComparer.OrdinalIgnoreCase),
             SpeedShadowColor = Color(SpeedShadowColor, "#000000"),
             GearShadowColor = Color(GearShadowColor, "#000000")
@@ -65,7 +80,11 @@ namespace AMS2LeagueClient.Core.Presentation
         public TextAppearance TextFor(string component)
         {
             if (OverlayText != null && OverlayText.TryGetValue(component, out TextAppearance? appearance) && appearance != null)
-                return new TextAppearance { Font = AppearanceFont(appearance.Font), Scale = double.IsFinite(appearance.Scale) ? Math.Clamp(appearance.Scale, 0.5, 2) : 1 };
+                return new TextAppearance { Font = AppearanceFont(appearance.Font),
+                    Scale = double.IsFinite(appearance.Scale) ? Math.Clamp(appearance.Scale, 0.5, 2) : 1,
+                    ElementScales = NormalizeTowerFontScales(component, appearance.ElementScales),
+                    TowerRowHeight = NormalizeTowerRowHeight(component, appearance.TowerRowHeight),
+                    TowerColumnScales = NormalizeTowerColumnScales(component, appearance.TowerColumnScales) };
             return new TextAppearance
             {
                 Font = component == OverlayComponentKeys.Speed ? Font(SpeedFont)
@@ -83,6 +102,22 @@ namespace AMS2LeagueClient.Core.Presentation
                 && value.IndexOfAny(new[] { '/', '\\', ':', '#' }) < 0 ? value.Trim() : DefaultFontName;
         private static string AppearanceFont(string value)
             => string.IsNullOrWhiteSpace(value) ? "" : Font(value);
+
+        private static Dictionary<string, double> NormalizeTowerFontScales(string component, Dictionary<string, double>? scales)
+            => component == OverlayComponentKeys.TimingTower && scales != null
+                ? scales.Where(pair => Array.IndexOf(TowerFontRoles, pair.Key) >= 0 && double.IsFinite(pair.Value))
+                    .ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0.5, 2), StringComparer.Ordinal)
+                : new Dictionary<string, double>(StringComparer.Ordinal);
+
+        private static double NormalizeTowerRowHeight(string component, double value)
+            => component == OverlayComponentKeys.TimingTower && double.IsFinite(value)
+                ? Math.Clamp(value, 28, 64) : 36;
+
+        private static Dictionary<string, double> NormalizeTowerColumnScales(string component, Dictionary<string, double>? scales)
+            => component == OverlayComponentKeys.TimingTower && scales != null
+                ? scales.Where(pair => Array.IndexOf(TowerColumnRoles, pair.Key) >= 0 && double.IsFinite(pair.Value))
+                    .ToDictionary(pair => pair.Key, pair => Math.Clamp(pair.Value, 0.5, 2), StringComparer.Ordinal)
+                : new Dictionary<string, double>(StringComparer.Ordinal);
     }
 
     public sealed class DrivingTelemetrySample

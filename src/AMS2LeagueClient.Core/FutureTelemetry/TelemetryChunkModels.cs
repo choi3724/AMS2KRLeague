@@ -107,6 +107,9 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         public string CompressedSha256 { get; set; } = string.Empty;
         public long UncompressedBytes { get; set; }
         public long CompressedBytes { get; set; }
+        // Rejected speed measurements have a durable raw evidence sidecar and
+        // count as known loss; other fields in their samples remain intact.
+        public int IsolatedAnomalousSamples { get; set; }
     }
 
     public sealed class TelemetryArchiveRecoveryIssue

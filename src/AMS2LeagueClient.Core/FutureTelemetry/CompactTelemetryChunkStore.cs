@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using AMS2LeagueClient.Core.CompactTelemetry;
 
 namespace AMS2LeagueClient.Core.FutureTelemetry
@@ -67,6 +68,13 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
         public TelemetryChunkCommitOutcome Commit(TelemetryChunkEnvelope source)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
+            // Preserve the complete P023 input before isolating speed values that
+            // cannot be represented by the immutable compact domain. A corrupted
+            // vehicle speed must not poison the row's valid lap/position facts or the
+            // attempt's final ACK.
+            var isolation = IsolateInvalidSpeedValues(source);
+            source = isolation.Source;
+            int isolated = isolation.Count;
             var outcomes = new List<TelemetryChunkCommitOutcome>();
             if (source.StreamType == TelemetryStreamType.SESSION_METADATA)
             {
@@ -92,10 +100,88 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
 
             if (outcomes.Count == 0)
             {
+                if (isolated > 0)
+                {
+                    _pendingArtifacts.Remove(key);
+                    return new TelemetryChunkCommitOutcome
+                    {
+                        Disposition = TelemetryChunkCommitDisposition.STORED,
+                        ChunkPath = isolation.EvidencePath,
+                        PayloadSha256 = isolation.SourceHash,
+                        CompressedSha256 = isolation.CompressedHash,
+                        UncompressedBytes = isolation.SourceBytes,
+                        CompressedBytes = isolation.CompressedBytes,
+                        IsolatedAnomalousSamples = isolated
+                    };
+                }
                 throw new InvalidDataException("Telemetry source chunk produced no durable output.");
             }
             _pendingArtifacts.Remove(key);
-            return Aggregate(outcomes);
+            TelemetryChunkCommitOutcome committed = Aggregate(outcomes);
+            committed.IsolatedAnomalousSamples = isolated;
+            return committed;
+        }
+
+        private (TelemetryChunkEnvelope Source, int Count, string EvidencePath, string SourceHash,
+            string CompressedHash, long SourceBytes, long CompressedBytes)
+            IsolateInvalidSpeedValues(TelemetryChunkEnvelope source)
+        {
+            CompactTelemetrySchemaId schemaId = source.StreamType switch
+            {
+                TelemetryStreamType.PARTICIPANT_REPLAY => CompactTelemetrySchemaId.ParticipantReplayV1,
+                TelemetryStreamType.INCIDENT_TRACE => CompactTelemetrySchemaId.IncidentV1,
+                TelemetryStreamType.DRIVER_TELEMETRY => CompactTelemetrySchemaId.DriverFastV1,
+                _ => 0
+            };
+            int speedIndex = Array.IndexOf(source.Data.Fields, "speedMetersPerSecond");
+            if (schemaId == 0 || speedIndex < 0) return (source, 0, "", "", "", 0, 0);
+            CompactTelemetryField speed = CompactTelemetrySchemaRegistry.Get(schemaId).Fields
+                .Single(field => field.Name == "speedMetersPerSecond");
+            var rejected = new List<(int Index, double Value)>();
+            for (int index = 0; index < source.Data.Rows.Count; index++)
+            {
+                double? value = source.Data.Rows[index][speedIndex];
+                if (!value.HasValue) continue;
+                try { speed.Quantize(value.Value); }
+                catch (CompactTelemetryFormatException) { rejected.Add((index, value.Value)); }
+            }
+            if (rejected.Count == 0) return (source, 0, "", "", "", 0, 0);
+
+            byte[] original = TelemetryChunkSerializer.Serialize(source);
+            string sourceHash = TelemetryChunkSerializer.Sha256(original);
+            byte[] compressed = TelemetryChunkSerializer.Gzip(original);
+            string compressedHash = TelemetryChunkSerializer.Sha256(compressed);
+            string directory = Path.Combine(_sessionRoot, "anomalous-samples", source.StreamType.ToString());
+            string stem = source.ChunkIndex.ToString("D8", CultureInfo.InvariantCulture) + "-" + sourceHash;
+            string evidencePath = Path.Combine(directory, stem + ".source.json.gz");
+            if (!File.Exists(evidencePath)) AtomicWrite(evidencePath, compressed);
+            else
+            {
+                using var existing = File.OpenRead(evidencePath);
+                if (TelemetryChunkSerializer.Sha256(TelemetryChunkSerializer.Gunzip(existing)) != sourceHash)
+                    throw new InvalidDataException("ANOMALOUS_SAMPLE_EVIDENCE_CONFLICT");
+            }
+            string diagnosticPath = Path.Combine(directory, stem + ".evidence.json");
+            byte[] diagnostic = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                schema = "ams2-anomalous-speed-evidence-v1", sessionId = source.SessionId,
+                attemptId = source.AttemptId, streamType = source.StreamType.ToString(),
+                chunkIndex = source.ChunkIndex, sourceHash,
+                field = speed.Name, scale = speed.Scale,
+                quantizedMinimum = speed.QuantizedMinimum, quantizedMaximum = speed.QuantizedMaximum,
+                rejectedRows = rejected.Select(value => new { rowIndex = value.Index, observed = value.Value }).ToArray()
+            });
+            if (!File.Exists(diagnosticPath)) AtomicWrite(diagnosticPath, diagnostic);
+            else if (!File.ReadAllBytes(diagnosticPath).SequenceEqual(diagnostic))
+                throw new InvalidDataException("ANOMALOUS_SAMPLE_DIAGNOSTIC_CONFLICT");
+
+            TelemetryChunkEnvelope retained = TelemetryChunkSerializer.Deserialize(original);
+            foreach (var bad in rejected) retained.Data.Rows[bad.Index][speedIndex] = null;
+            // The missing measurement is explicit in both the compact presence
+            // bitmap and the durable loss ledger. Every other field stays intact.
+            retained.Quality.DroppedSamples = checked(retained.Quality.DroppedSamples + rejected.Count);
+            return (retained, rejected.Count, evidencePath, sourceHash, compressedHash,
+                original.Length, compressed.Length);
         }
 
         /// <summary>

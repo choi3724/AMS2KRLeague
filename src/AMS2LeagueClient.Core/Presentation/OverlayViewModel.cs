@@ -37,6 +37,7 @@ namespace AMS2LeagueClient.Core.Presentation
         // Keep the machine code for transitions; localize only the rendered label.
         public string StatusLabel => StateText.TowerStatus(Status);
         public string PenaltyText { get; set; } = "—";
+        public string TimeOrGridPenaltyText { get; set; } = "—";
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -62,7 +63,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 && DisplayState == source.DisplayState
                 && IsDimmed == source.IsDimmed
                 && Status == source.Status
-                && StatusColor == source.StatusColor && PenaltyText == source.PenaltyText)
+                && StatusColor == source.StatusColor && PenaltyText == source.PenaltyText
+                && TimeOrGridPenaltyText == source.TimeOrGridPenaltyText)
             {
                 if (timeChanged) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentTime)));
                 if (towerTimeChanged) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TowerTimeText)));
@@ -88,6 +90,7 @@ namespace AMS2LeagueClient.Core.Presentation
             Status = source.Status;
             StatusColor = source.StatusColor;
             PenaltyText = source.PenaltyText;
+            TimeOrGridPenaltyText = source.TimeOrGridPenaltyText;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
         }
     }
@@ -205,7 +208,8 @@ namespace AMS2LeagueClient.Core.Presentation
             int rankingRowCapacity = MaxRankingRows,
             IReadOnlyDictionary<int, float>? participantLapTimes = null, // Legacy probe argument; best laps never use observed clocks.
             IReadOnlyCollection<int>? outLapParticipants = null,
-            IReadOnlyDictionary<int, string>? leaderTimeGaps = null)
+            IReadOnlyDictionary<int, string>? leaderTimeGaps = null,
+            IReadOnlyDictionary<int, string>? timeOrGridPenalties = null)
         {
             rankingRowCapacity = LeftTowerLayoutMetrics.ClampRankingRows(rankingRowCapacity);
             OverlayTextCatalog catalog = text ?? OverlayTextCatalog.Korean;
@@ -245,7 +249,8 @@ namespace AMS2LeagueClient.Core.Presentation
                 broadcastStates,
                 league.FastestLapParticipant?.Source.Index,
                 outLapParticipants,
-                leaderTimeGaps);
+                leaderTimeGaps,
+                timeOrGridPenalties);
             IReadOnlyList<RankingRowViewModel> rankingRows = SelectRankingRows(allRankingRows, rankingRowCapacity);
             bool playerPinnedAfterLeaders = league.Local?.LeaguePosition > rankingRowCapacity;
             float displayedEventTimeRemaining = eventTimeRemainingOverride ?? snapshot.EventTimeRemaining;
@@ -408,7 +413,8 @@ namespace AMS2LeagueClient.Core.Presentation
             IReadOnlyDictionary<int, ParticipantBroadcastState>? broadcastStates,
             int? fastestIndex,
             IReadOnlyCollection<int>? outLapParticipants,
-            IReadOnlyDictionary<int, string>? leaderTimeGaps)
+            IReadOnlyDictionary<int, string>? leaderTimeGaps,
+            IReadOnlyDictionary<int, string>? timeOrGridPenalties)
         {
             return league.Participants
                 .Select(item =>
@@ -453,6 +459,9 @@ namespace AMS2LeagueClient.Core.Presentation
                             : snapshot.KnownSessionState != Telemetry.SessionState.Race
                                 && visibleFastestIndex == item.Source.Index ? "#E765F4" : OverlayUiPalette.ActiveTime,
                         PenaltyText = StateText.Penalty(item.Source, snapshot),
+                        TimeOrGridPenaltyText = timeOrGridPenalties != null
+                            && timeOrGridPenalties.TryGetValue(item.Source.Index, out string? adjudicated)
+                            && !string.IsNullOrWhiteSpace(adjudicated) ? adjudicated : "—",
                         Status = terminal.Length > 0 ? terminal : StatusOf(item.Source.Index, broadcastStates, visibleFastestIndex),
                         StatusColor = terminal.Length > 0 ? (dimmed ? "#FF7777" : "#91A5B8")
                             : StatusColorOf(item.Source.Index, broadcastStates, visibleFastestIndex)
@@ -533,7 +542,7 @@ namespace AMS2LeagueClient.Core.Presentation
         {
             if (string.IsNullOrWhiteSpace(value)) return "—";
             string compact = value.Replace("_Gen", " G", StringComparison.OrdinalIgnoreCase).Replace('_', ' ');
-            return compact.Length <= 8 ? compact : compact.Substring(0, 8);
+            return compact;
         }
 
         private static float PreferParticipantTime(float participantTime, float viewedParticipantTime)

@@ -603,6 +603,7 @@ namespace AMS2LeagueClient.Core.FutureTelemetry
                     return;
                 }
                 Interlocked.Add(ref _cadenceLossByStream[(int)key.Stream], envelope.Quality.MissingSamples);
+                Interlocked.Add(ref _serializationLossByStream[(int)key.Stream], outcome.IsolatedAnomalousSamples);
                 Interlocked.Increment(ref _durableCommitAcksByStream[(int)key.Stream]);
                 Interlocked.Increment(ref _committedChunks);
             }

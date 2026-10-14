@@ -18,6 +18,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         private ActiveTimeAttack? _timeAttack;
         private ScheduledLeagueEvent? _scheduledEvent;
         private string? _raceCaptureChainKey;
+        private bool _waitingForRaceGrid;
 
         public ActivityCaptureEngine(
             string installationId,
@@ -36,6 +37,13 @@ namespace AMS2LeagueClient.Core.ActivityCapture
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var update = new ActivityCaptureUpdate();
+            if (snapshot.KnownSessionState == SessionState.Qualify) _waitingForRaceGrid = true;
+            if (_waitingForRaceGrid && snapshot.KnownSessionState == SessionState.Race)
+            {
+                if (snapshot.RaceStateRaw == (uint)RaceState.NotStarted
+                    || snapshot.RaceStateRaw == (uint)RaceState.Racing) _waitingForRaceGrid = false;
+                else return update; // AMS2 still exposes the qualifying FINISHED rows.
+            }
 
             if (snapshot.KnownGameState == GameState.InGameRestarting)
             {
@@ -109,7 +117,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
                 update.Events.Add("ACTIVITY_TRANSITION_RESUMED type=RACE");
             }
 
-            if (_race != null && IsRestart(_race.LastSnapshot, snapshot, _race.Local, useSessionClock: true))
+            if (_race != null && IsRestart(_race.LastSnapshot, snapshot, _race.Local, local))
             {
                 FinalizeRace(snapshot.CapturedAt, ActivityCompletionStatus.Aborted, "RACE_RESTART_SIGNAL", update);
             }
@@ -277,7 +285,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture
 
         private void ObserveTimeAttack(TelemetrySnapshot snapshot, ParticipantSnapshot local, ActivityCaptureUpdate update)
         {
-            if (_timeAttack != null && IsRestart(_timeAttack.LastSnapshot, snapshot, _timeAttack.Local, useSessionClock: false))
+            if (_timeAttack != null && IsRestart(_timeAttack.LastSnapshot, snapshot, _timeAttack.Local, local))
             {
                 FinalizeTimeAttack("TIME_ATTACK_RESTART_SIGNAL", update);
             }
@@ -458,20 +466,20 @@ namespace AMS2LeagueClient.Core.ActivityCapture
             TelemetrySnapshot previous,
             TelemetrySnapshot current,
             ParticipantSnapshot previousLocal,
-            bool useSessionClock)
+            ParticipantSnapshot currentLocal)
         {
             if (current.KnownGameState == GameState.InGameRestarting) return true;
             if (!string.Equals(previous.TrackLocation, current.TrackLocation, StringComparison.Ordinal)
                 || !string.Equals(previous.TrackVariation, current.TrackVariation, StringComparison.Ordinal)) return true;
-            int viewed = current.ViewedParticipantIndex;
-            if (viewed < 0 || viewed >= current.Participants.Count) return false;
-            ParticipantSnapshot currentLocal = current.Participants[viewed];
+            // The viewed car may change after retirement. Compare the resolved
+            // local participant, never a different spectator target's lap count.
+            if (previousLocal.Index != currentLocal.Index
+                || !string.Equals(previousLocal.Name, currentLocal.Name, StringComparison.Ordinal)
+                || !string.Equals(previousLocal.VehicleName, currentLocal.VehicleName, StringComparison.Ordinal)) return false;
             if (currentLocal.LapsCompleted < previousLocal.LapsCompleted) return true;
             if (currentLocal.CurrentLap + 1 < previousLocal.CurrentLap) return true;
-            // In Time Attack mCurrentTime is the current lap timer and therefore
-            // legitimately rolls back at every completed lap.  It is only a
-            // restart signal for race-session capture.
-            if (useSessionClock && current.CurrentTime + 30 < previous.CurrentTime) return true;
+            // AMS2 mCurrentTime is a lap timer in races too. It rolls back on
+            // every ordinary completed lap and cannot identify a restart.
             return previous.EventTimeRemaining >= 0
                 && current.EventTimeRemaining > previous.EventTimeRemaining + 60;
         }

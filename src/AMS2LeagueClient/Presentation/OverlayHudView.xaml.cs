@@ -44,6 +44,7 @@ namespace AMS2LeagueClient.Presentation
         private ItemsControl RankingItems = null!;
         private bool? _racingDesign;
         private DrivingHudSettings.TextAppearance _textAppearance = new DrivingHudSettings.TextAppearance();
+        private OverlayViewModel? _lastViewModel;
         public OverlayHudView()
         {
             InitializeComponent();
@@ -59,18 +60,23 @@ namespace AMS2LeagueClient.Presentation
             RankingItems = (ItemsControl)TowerContent.Template.FindName("RankingItems", TowerContent);
             RankingItems.ItemsSource = _rankingRows;
             OverlayTextStyler.Apply(this, _textAppearance);
+            Dispatcher.BeginInvoke(new Action(ApplyTowerSizing));
         }
 
         public void ApplyTypography(DrivingHudSettings.TextAppearance appearance)
         {
             _textAppearance = appearance;
             OverlayTextStyler.Apply(this, appearance);
+            ApplyTowerSizing();
         }
 
         public void SetViewModel(OverlayViewModel viewModel)
         {
             if (viewModel == null) throw new ArgumentNullException(nameof(viewModel));
-            double requiredHeight = LeftTowerLayoutMetrics.RequiredHeightForRows(Math.Min(viewModel.RankingRowCapacity, viewModel.RankingRows.Count), viewModel.IsDiagnostic);
+            _lastViewModel = viewModel;
+            int visibleRows = Math.Min(viewModel.RankingRowCapacity, viewModel.RankingRows.Count);
+            double requiredHeight = LeftTowerLayoutMetrics.RequiredHeightForRows(visibleRows, viewModel.IsDiagnostic)
+                + (_textAppearance.TowerRowHeight - 36) * visibleRows;
             bool capacityChanged = Height != requiredHeight;
             Height = requiredHeight;
             DataContext = viewModel;
@@ -80,7 +86,7 @@ namespace AMS2LeagueClient.Presentation
                 viewModel.RankingRows.Select(row => row.ParticipantIndex + "|" + row.Position + "|" + row.Name + "|"
                     + row.Class + "|" + row.CurrentTime + "|" + row.TowerTimeText + "|" + row.Status + "|" + row.IsPlayer + "|" + row.DisplayState
                     + "|" + row.ClassBackground + "|" + row.Foreground + "|" + row.TimeForeground
-                    + "|" + row.PenaltyText + "|" + row.StatusColor));
+                    + "|" + row.PenaltyText + "|" + row.TimeOrGridPenaltyText + "|" + row.StatusColor));
             if (rankingKey == _rankingKey)
             {
                 return;
@@ -174,7 +180,7 @@ namespace AMS2LeagueClient.Presentation
                     if (transition.IsReorder)
                     {
                         TranslateTransform transform = EnsureTranslate(presenter);
-                        double fromY = transition.RowDelta * LeftTowerLayoutMetrics.RankingRowPitch + transform.Y;
+                        double fromY = transition.RowDelta * (LeftTowerLayoutMetrics.RankingRowPitch + _textAppearance.TowerRowHeight - 36) + transform.Y;
                         transform.BeginAnimation(
                             TranslateTransform.YProperty,
                             new DoubleAnimation(fromY, 0, duration) { EasingFunction = easing });
@@ -201,7 +207,13 @@ namespace AMS2LeagueClient.Presentation
 
         private void RankingRow_Loaded(object sender, RoutedEventArgs eventArgs)
         {
-            if (sender is FrameworkElement textRow) OverlayTextStyler.Apply(textRow, _textAppearance);
+            if (sender is FrameworkElement textRow)
+            {
+                OverlayTextStyler.Apply(textRow, _textAppearance);
+                textRow.Height = _textAppearance.TowerRowHeight;
+                if (FindTagged<Grid>(textRow, "tower-columns") is { } columns) ApplyColumnWidths(columns);
+                if (FindTagged<Grid>(textRow, "tower-background-racing") is { } background) ApplyBackgroundWidths(background);
+            }
             if (!(sender is FrameworkElement row) || (bool)row.GetValue(RowEnteredProperty)) return;
             row.SetValue(RowEnteredProperty, true);
             if (!(VisualTreeHelper.GetParent(row) is ContentPresenter presenter)) return;
@@ -213,6 +225,158 @@ namespace AMS2LeagueClient.Presentation
             _entryBatchTick = now;
             AnimateRowEntry(presenter, _entryBatchOrdinal);
         }
+
+        private static readonly string[] LegacyColumnOrder =
+            { "position", "driver", "class", "time", "status", "pitPenalty", "numericPenalty" };
+        private static readonly string[] RacingColumnOrder =
+            { "position", "driver", "class", "status", "time", "pitPenalty", "numericPenalty" };
+
+        private double[] GetColumnWidths(double total)
+        {
+            bool racing = _racingDesign == true;
+            double[] baseline = racing
+                ? new[] { 24d, 0d, 100d, 60d, 104d, 94d, 88d }
+                : new[] { 36d, 0d, 100d, 100d, 52d, 112d, 88d };
+            baseline[1] = Math.Max(1, total - baseline.Sum());
+            string[] order = racing ? RacingColumnOrder : LegacyColumnOrder;
+            double[] widths = baseline.Select((width, index) => width *
+                (_textAppearance.TowerColumnScales.TryGetValue(order[index], out double factor) ? factor : 1)).ToArray();
+            double sum = widths.Sum();
+            return widths.Select(width => width * total / sum).ToArray();
+        }
+
+        private static T? FindTagged<T>(DependencyObject root, string tag) where T : FrameworkElement
+        {
+            for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, index);
+                if (child is T match && Equals(match.Tag, tag)) return match;
+                if (FindTagged<T>(child, tag) is { } nested) return nested;
+            }
+            return null;
+        }
+
+        private Grid? FirstRowColumns()
+        {
+            if (!(RankingItems.ItemContainerGenerator.ContainerFromIndex(0) is ContentPresenter presenter)) return null;
+            return FindTagged<Grid>(presenter, "tower-columns");
+        }
+
+        private void ApplyTowerSizing()
+        {
+            if (RankingItems == null) return;
+            if (_lastViewModel != null)
+            {
+                int rows = Math.Min(_lastViewModel.RankingRowCapacity, _lastViewModel.RankingRows.Count);
+                Height = LeftTowerLayoutMetrics.RequiredHeightForRows(rows, _lastViewModel.IsDiagnostic)
+                    + (_textAppearance.TowerRowHeight - 36) * rows;
+            }
+            if (FindTagged<Grid>(TowerContent, _racingDesign == true ? "tower-header-racing" : "tower-header-legacy") is { } header)
+                ApplyHeaderWidths(header);
+            for (int index = 0; index < _rankingRows.Count; index++)
+            {
+                if (!(RankingItems.ItemContainerGenerator.ContainerFromIndex(index) is ContentPresenter presenter)) continue;
+                if (FindTagged<Border>(presenter, "tower-data-row") is { } row) row.Height = _textAppearance.TowerRowHeight;
+                if (FindTagged<Grid>(presenter, "tower-columns") is { } columns) ApplyColumnWidths(columns);
+                if (FindTagged<Grid>(presenter, "tower-background-racing") is { } background) ApplyBackgroundWidths(background);
+            }
+        }
+
+        private void ApplyColumnWidths(Grid columns)
+        {
+            double[] widths = GetColumnWidths(columns.ActualWidth > 0 ? columns.ActualWidth : _racingDesign == true ? 616 : 616);
+            for (int index = 0; index < columns.ColumnDefinitions.Count; index++)
+                columns.ColumnDefinitions[index].Width = new GridLength(widths[index]);
+            if (FindTagged<Grid>(TowerContent, _racingDesign == true ? "tower-header-racing" : "tower-header-legacy") is { } header)
+                ApplyHeaderWidths(header);
+        }
+
+        private void ApplyHeaderWidths(Grid header)
+        {
+            double total = _racingDesign == true ? header.ActualWidth :
+                FirstRowColumns()?.ActualWidth ?? 616;
+            if (total <= 0) total = 616;
+            double[] widths = GetColumnWidths(total);
+            double[] headerWidths = _racingDesign == true
+                ? new[] { widths[0] + widths[1], widths[2], widths[3], widths[4], widths[5], widths[6] }
+                : new[] { widths[3], widths[4], widths[5], widths[6] };
+            for (int index = 0; index < header.ColumnDefinitions.Count; index++)
+                header.ColumnDefinitions[index].Width = new GridLength(headerWidths[index]);
+        }
+
+        private void ApplyBackgroundWidths(Grid background)
+        {
+            double[] widths = GetColumnWidths(background.ActualWidth > 0 ? background.ActualWidth : 616);
+            double[] backgroundWidths = { widths[0] + widths[1] + widths[2], widths[3], widths[4], widths[5], widths[6] };
+            for (int index = 0; index < background.ColumnDefinitions.Count; index++)
+                background.ColumnDefinitions[index].Width = new GridLength(backgroundWidths[index]);
+        }
+
+        public bool TryGetResizeGeometry(out double[] columnBoundaries, out double top, out double rowBottom)
+        {
+            columnBoundaries = Array.Empty<double>(); top = rowBottom = 0;
+            Grid? columns = FirstRowColumns();
+            if (columns == null || columns.ActualWidth <= 0) return false;
+            Border? row = FindTagged<Border>(RankingItems.ItemContainerGenerator.ContainerFromIndex(0)!, "tower-data-row");
+            if (row == null) return false;
+            Point rowOrigin, columnOrigin;
+            try
+            {
+                rowOrigin = row.TransformToAncestor(this).Transform(new Point(0, 0));
+                columnOrigin = columns.TransformToAncestor(this).Transform(new Point(0, 0));
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            top = rowOrigin.Y - 22;
+            rowBottom = rowOrigin.Y + row.ActualHeight;
+            columnBoundaries = new double[6];
+            double x = columnOrigin.X;
+            for (int index = 0; index < columnBoundaries.Length; index++)
+            {
+                x += columns.ColumnDefinitions[index].ActualWidth;
+                columnBoundaries[index] = x;
+            }
+            return true;
+        }
+
+        public bool ResizeColumn(int boundary, double logicalDelta)
+        {
+            Grid? columns = FirstRowColumns();
+            if (columns == null || boundary < 0 || boundary >= 6) return false;
+            double[] widths = GetColumnWidths(columns.ActualWidth);
+            double[] minimum = _racingDesign == true
+                ? new[] { 18d, 70d, 65d, 42d, 60d, 65d, 60d }
+                : new[] { 22d, 70d, 65d, 60d, 42d, 75d, 60d };
+            double lower = minimum[boundary] - widths[boundary];
+            double upper = widths[boundary + 1] - minimum[boundary + 1];
+            if (lower > upper) return false;
+            double delta = Math.Clamp(logicalDelta, lower, upper);
+            if (Math.Abs(delta) < 0.1) return false;
+            widths[boundary] += delta;
+            widths[boundary + 1] -= delta;
+            double[] baseline = _racingDesign == true
+                ? new[] { 24d, 0d, 100d, 60d, 104d, 94d, 88d }
+                : new[] { 36d, 0d, 100d, 100d, 52d, 112d, 88d };
+            baseline[1] = Math.Max(1, columns.ActualWidth - baseline.Sum());
+            string[] order = _racingDesign == true ? RacingColumnOrder : LegacyColumnOrder;
+            for (int index = 0; index < widths.Length; index++)
+                _textAppearance.TowerColumnScales[order[index]] = Math.Clamp(widths[index] / baseline[index], 0.5, 2);
+            ApplyTowerSizing();
+            return true;
+        }
+
+        public bool ResizeRows(double logicalDelta)
+        {
+            double next = Math.Clamp(_textAppearance.TowerRowHeight + logicalDelta, 28, 64);
+            if (Math.Abs(next - _textAppearance.TowerRowHeight) < 0.1) return false;
+            _textAppearance.TowerRowHeight = next;
+            ApplyTowerSizing();
+            return true;
+        }
+
+        public DrivingHudSettings.TextAppearance CurrentTextAppearance => _textAppearance;
 
         public static void AnimateRowEntry(UIElement rowContainer, int staggerOrdinal)
         {

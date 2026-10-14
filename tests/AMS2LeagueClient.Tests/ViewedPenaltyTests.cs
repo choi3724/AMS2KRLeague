@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using AMS2LeagueClient.Core.Presentation;
 using AMS2LeagueClient.Core.Telemetry;
 using AMS2LeagueClient.Presentation;
+using AMS2LeagueClient.Runtime;
 
 namespace AMS2LeagueClient.Tests
 {
@@ -57,6 +58,50 @@ namespace AMS2LeagueClient.Tests
             fixture.SetParticipantControl(2,PitSchedule.None,FlagColour.Black);
             AssertEqual("실격",Build().AllRankingRows.Single(r=>r.ParticipantIndex==2).PenaltyText);
             Console.WriteLine("PROOF viewed root DT/SG reaches both tower designs; clear, view switch, unknown view, other participants and DSQ preserved; time penalties unavailable in v14 header");
+        }
+
+        private static void NumericPenaltyColumnRendersSeparately()
+        {
+            var preview = DemoSnapshotFactory.CreateViewModel(false);
+            AssertTrue(preview.AllRankingRows.Any(row => row.PenaltyText == "드라이브스루"));
+            AssertTrue(preview.AllRankingRows.Any(row => row.TimeOrGridPenaltyText == "+33초"));
+            AssertTrue(preview.AllRankingRows.Any(row => row.TimeOrGridPenaltyText == "순위 +1"));
+            var fixture = new RawFixtureBuilder(3).SetSession(SessionState.Race).SetViewedIndex(1)
+                .SetParticipantControl(0, PitSchedule.DriveThrough);
+            TelemetrySnapshot snapshot = Parse(fixture);
+            var model = OverlayViewModel.Build(snapshot, ResolveLocal(snapshot), Classify(snapshot),
+                30, 20, false, "FIXTURE", timeOrGridPenalties: new System.Collections.Generic.Dictionary<int, string>
+                {
+                    [0] = "+33초",
+                    [1] = "순위 +1"
+                });
+            AssertEqual("드라이브스루", model.AllRankingRows.Single(row => row.ParticipantIndex == 0).PenaltyText);
+            AssertEqual("+33초", model.AllRankingRows.Single(row => row.ParticipantIndex == 0).TimeOrGridPenaltyText);
+            AssertEqual("순위 +1", model.AllRankingRows.Single(row => row.ParticipantIndex == 1).TimeOrGridPenaltyText);
+            AssertEqual("—", model.AllRankingRows.Single(row => row.ParticipantIndex == 2).TimeOrGridPenaltyText);
+            foreach (bool racing in new[] { false, true })
+            {
+                var tower = new OverlayHudView();
+                tower.SetRacingDesign(racing);
+                var host = new Window { Content = tower, Width = 648, Height = 210,
+                    Left = -5000, Top = -5000, ShowActivated = false };
+                try
+                {
+                    tower.SetViewModel(model);
+                    host.Show(); PumpDispatcher(); tower.UpdateLayout();
+                    var numeric = Descendants<TextBlock>(tower)
+                        .Where(text => text.Name == "TimeOrGridPenaltyText").ToArray();
+                    AssertEqual(3, numeric.Length);
+                    AssertTrue(numeric.All(text => text.IsVisible && text.ActualWidth > 0 && text.ActualHeight > 0));
+                    AssertTrue(numeric.Any(text => text.Text == "+33초"));
+                    AssertTrue(numeric.Any(text => text.Text == "순위 +1"));
+                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Text == "시간·순위"));
+                    AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Name == "PenaltyText"
+                        && text.Text == "드라이브스루"));
+                    CaptureLayout(tower, racing ? "numeric-penalty-racing" : "numeric-penalty-legacy");
+                }
+                finally { host.Content = null; host.Close(); }
+            }
         }
     }
 }

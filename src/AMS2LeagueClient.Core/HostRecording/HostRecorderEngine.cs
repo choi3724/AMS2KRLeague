@@ -24,6 +24,8 @@ namespace AMS2LeagueClient.Core.HostRecording
         private readonly List<HostRecorderIssue> _issues = new List<HostRecorderIssue>();
         private readonly Queue<HostEvidenceSnapshot> _evidence = new Queue<HostEvidenceSnapshot>();
         private readonly Dictionary<int, ParticipantLifecycle> _lifecycle = new Dictionary<int, ParticipantLifecycle>();
+        private readonly Dictionary<string, HostParticipantEvidence> _raceObservations =
+            new Dictionary<string, HostParticipantEvidence>(StringComparer.Ordinal);
         private readonly HashSet<string> _sessionTypes = new HashSet<string>(StringComparer.Ordinal);
         private readonly StableClassificationGate _qualifyingGate = new StableClassificationGate();
         private readonly StableClassificationGate _gridGate = new StableClassificationGate();
@@ -247,6 +249,7 @@ namespace AMS2LeagueClient.Core.HostRecording
             if (snapshot.RaceStateRaw == (uint)RaceState.NotStarted
                 || snapshot.RaceStateRaw == (uint)RaceState.Racing) _racePhaseReady = true;
             if (_latestQualifying != null && !_racePhaseReady) return;
+            PreserveRaceObservations(snapshot);
             bool started = snapshot.RaceStateRaw == (uint)RaceState.Racing
                 || snapshot.Participants.Any(participant => participant.IsActive && participant.RaceStateRaw == (uint)RaceState.Racing);
             if (_startingGrid == null && !started)
@@ -338,6 +341,8 @@ namespace AMS2LeagueClient.Core.HostRecording
                 Qualifying = _qualifying,
                 StartingGrid = _startingGrid,
                 RaceResult = _raceResult,
+                RaceParticipantObservations = _raceObservations.Count == 0 ? null
+                    : _raceObservations.Values.Select(CloneParticipant).ToList(),
                 Issues = _issues.Select(CloneIssue).ToList(),
                 Evidence = _evidence.ToList()
             };
@@ -418,6 +423,27 @@ namespace AMS2LeagueClient.Core.HostRecording
                 SessionState.TimeAttack => "TIME_ATTACK",
                 _ => null
             };
+
+        private void PreserveRaceObservations(TelemetrySnapshot snapshot)
+        {
+            var present = new HashSet<string>(StringComparer.Ordinal);
+            foreach (ParticipantSnapshot participant in snapshot.Participants.Where(HasParticipantEvidence))
+            {
+                HostParticipantEvidence row = ToEvidence(participant, snapshot.CapturedAt);
+                if (string.IsNullOrWhiteSpace(row.NameSnapshot)) continue;
+                string key = row.Slot + ":" + row.Generation + ":" + row.NameSnapshot;
+                present.Add(key);
+                if (!_raceObservations.ContainsKey(key) && _raceObservations.Count >= 128)
+                {
+                    AddIssue(HostIssueSeverity.Warning, "RACE_OBSERVATION_LIMIT", "More than 128 distinct participant observations were retained in local raw evidence.");
+                    continue;
+                }
+                row.Disappeared = false;
+                _raceObservations[key] = row;
+            }
+            foreach (KeyValuePair<string, HostParticipantEvidence> row in _raceObservations)
+                if (!present.Contains(row.Key)) row.Value.Disappeared = true;
+        }
 
         private HostClassification? BuildClassification(TelemetrySnapshot snapshot, string kind)
         {
@@ -631,6 +657,7 @@ namespace AMS2LeagueClient.Core.HostRecording
             _previousRaceState = 0;
             _initialParticipantKey = string.Empty;
             _latestQualifying = null;
+            _raceObservations.Clear();
             _qualifying = null;
             _latestGrid = null;
             _startingGrid = null;
@@ -666,8 +693,13 @@ namespace AMS2LeagueClient.Core.HostRecording
                 || state == (uint)RaceState.Retired
                 || state == (uint)RaceState.Dnf;
 
-        private static bool IsRestartBoundary(TelemetrySnapshot? previous, TelemetrySnapshot current)
+        private bool IsRestartBoundary(TelemetrySnapshot? previous, TelemetrySnapshot current)
         {
+            // AMS2 exposes RACE with the old qualifying FINISHED rows before
+            // publishing the new NOT_STARTED grid. This is the first race,
+            // not a restarted race, even though both snapshots say RACE.
+            if (_latestQualifying != null && !_racePhaseReady
+                && current.SessionStateRaw == (uint)SessionState.Race) return false;
             if (current.KnownGameState == GameState.InGameRestarting) return true;
             if (previous == null
                 || previous.SessionStateRaw != (uint)SessionState.Race
@@ -684,6 +716,9 @@ namespace AMS2LeagueClient.Core.HostRecording
             if (index < 0 || index >= current.Participants.Count || index >= previous.Participants.Count) return false;
             ParticipantSnapshot before = previous.Participants[index];
             ParticipantSnapshot after = current.Participants[index];
+            if (!after.IsActive || before.Index != after.Index
+                || !string.Equals(before.Name, after.Name, StringComparison.Ordinal)
+                || !string.Equals(before.VehicleName, after.VehicleName, StringComparison.Ordinal)) return false;
             return after.LapsCompleted < before.LapsCompleted
                 || after.CurrentLap + 1 < before.CurrentLap;
         }

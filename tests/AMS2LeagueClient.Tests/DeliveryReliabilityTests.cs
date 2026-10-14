@@ -33,6 +33,7 @@ namespace AMS2LeagueClient.Tests
                 (Code: 201, Body: "{\"status\":\"stored\",\"witnessId\":\"different-witness\"}", Sent: false),
                 (Code: 200, Body: "{\"status\":\"stored\",\"bodySha256\":\"different-hash\"}", Sent: false),
                 (Code: 201, Body: "{\"status\":\"stored\",\"witnessId\":\"delivery-witness\"}", Sent: true),
+                (Code: 201, Body: "{\"status\":\"stored\",\"witnessId\":\"delivery-witness\",\"canonicalSessionId\":null}", Sent: true),
                 (Code: 200, Body: "{\"status\":\"stored\",\"duplicate\":true}", Sent: true),
                 (Code: 200, Body: "{\"status\":\"duplicate\"}", Sent: true) })
             WithTemporaryDirectory(directory => {
@@ -56,6 +57,12 @@ namespace AMS2LeagueClient.Tests
                 AssertEqual(original.Metadata.IdempotencyKey, stored.Metadata.IdempotencyKey);
                 AssertEqual((int?)response.Code, stored.State.LastHttpStatus);
                 if (!response.Sent) AssertTrue(stored.State.NextAttemptAtUtc > DateTimeOffset.UtcNow);
+                if (response.Body.Contains("\"canonicalSessionId\":null", StringComparison.Ordinal))
+                {
+                    var restarted = new ActivityUploadQueue(System.IO.Path.Combine(directory, "queue"));
+                    AssertEqual(ActivityUploadStatus.SENT, restarted.Scan().Single().State.Status);
+                    AssertEqual(0, restarted.GetDueBatch(1, DateTimeOffset.UtcNow).Count);
+                }
             });
         }
 

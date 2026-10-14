@@ -380,7 +380,8 @@ namespace AMS2LeagueClient.Tests
                     page.Show(); PumpDispatcher();
                     AssertEqual(1, Descendants<ComboBox>(page).Count(box =>
                         System.Windows.Automation.AutomationProperties.GetName(box).EndsWith(" 글꼴", StringComparison.Ordinal)));
-                    AssertEqual(1, Descendants<Slider>(page).Count(slider =>
+                    AssertEqual(component == OverlayComponentKeys.TimingTower ? 1 + DrivingHudSettings.TowerFontRoles.Length : 1,
+                        Descendants<Slider>(page).Count(slider =>
                         System.Windows.Automation.AutomationProperties.GetName(slider).EndsWith(" 글자 크기", StringComparison.Ordinal)));
                     int colors = component == OverlayComponentKeys.PedalTelemetry || component == OverlayComponentKeys.PedalGauge ? 4
                         : component == OverlayComponentKeys.Speed || component == OverlayComponentKeys.Gear ? 1 : 0;

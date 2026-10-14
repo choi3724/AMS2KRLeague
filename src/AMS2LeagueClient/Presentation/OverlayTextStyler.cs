@@ -39,20 +39,23 @@ namespace AMS2LeagueClient.Presentation
         private static void ApplyLoaded(FrameworkElement root, DrivingHudSettings.TextAppearance appearance)
         {
             FontFamily? chosen = appearance.Font.Length == 0 ? null : DrivingNumberView.ResolveFont(appearance.Font);
-            Visit(root, chosen, appearance.Scale);
+            Visit(root, chosen, appearance.Scale, appearance.ElementScales);
         }
 
-        private static void Visit(DependencyObject node, FontFamily? chosen, double scale)
+        private static void Visit(DependencyObject node, FontFamily? chosen, double scale,
+            System.Collections.Generic.IReadOnlyDictionary<string, double>? elementScales)
         {
             if (node is TextBlock text)
             {
-                if (chosen == null && scale == 1 && !Originals.TryGetValue(text, out _)) return;
+                double elementScale = text.Tag is string role && elementScales != null
+                    && elementScales.TryGetValue(role, out double selected) ? selected : 1;
+                if (chosen == null && scale == 1 && elementScale == 1 && !Originals.TryGetValue(text, out _)) return;
                 Original original = Originals.GetValue(text, item => new Original(item));
                 text.FontFamily = chosen ?? original.Family;
-                text.FontSize = original.Size * scale;
+                text.FontSize = original.Size * scale * elementScale;
             }
             for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
-                Visit(VisualTreeHelper.GetChild(node, i), chosen, scale);
+                Visit(VisualTreeHelper.GetChild(node, i), chosen, scale, elementScales);
         }
     }
 }

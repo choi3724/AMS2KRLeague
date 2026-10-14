@@ -199,6 +199,7 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
                     session.Qualifying,
                     session.StartingGrid,
                     session.RaceResult,
+                    session.RaceParticipantObservations,
                     session.Issues
                 }
             };

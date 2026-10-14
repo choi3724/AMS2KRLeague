@@ -83,14 +83,17 @@ namespace AMS2LeagueClient.Core.Presentation
                 }
                 string identity = driver.Name + "\u001f" + driver.VehicleName + "\u001f" + driver.VehicleClass;
                 if (!_histories.TryGetValue(driver.Index, out ProgressHistory? history)
-                    || history.Identity != identity
-                    || progress < history.LastProgress - 1
-                    || progress - history.LastProgress > delta * 200 + 10)
+                    || history.Identity != identity)
                 {
                     history = new ProgressHistory(identity);
                     _histories[driver.Index] = history;
                 }
-                history.Observe(progress, _elapsed, snapshot.TrackLength);
+                if (!history.Observe(driver, progress, _elapsed, snapshot.TrackLength, delta * 200 + 10))
+                {
+                    history = new ProgressHistory(identity);
+                    _histories[driver.Index] = history;
+                    history.Observe(driver, progress, _elapsed, snapshot.TrackLength, delta * 200 + 10);
+                }
             }
             foreach (int index in new List<int>(_histories.Keys))
                 if (!present.Contains(index)) _histories.Remove(index);
@@ -112,16 +115,16 @@ namespace AMS2LeagueClient.Core.Presentation
             ParticipantSnapshot leader = league.Participants[0].Source;
             gaps[leader.Index] = "0.000";
             _histories.TryGetValue(leader.Index, out ProgressHistory? leaderHistory);
-            bool leaderValid = TryProgress(leader, snapshot.TrackLength, out double leaderProgress)
-                && leaderHistory != null;
+            bool leaderValid = leaderHistory != null;
             foreach (LeagueParticipant item in league.Participants)
             {
                 ParticipantSnapshot driver = item.Source;
                 if (driver.Index == leader.Index || driver.KnownRaceState != RaceState.Racing) continue;
                 string text = "—";
-                if (leaderValid && TryProgress(driver, snapshot.TrackLength, out double progress))
+                if (leaderValid && _histories.TryGetValue(driver.Index, out ProgressHistory? followerHistory))
                 {
-                    double distanceBehind = leaderProgress - progress;
+                    double progress = followerHistory.LastProgress;
+                    double distanceBehind = leaderHistory!.LastProgress - progress;
                     if (distanceBehind >= snapshot.TrackLength)
                     {
                         int laps = Math.Max(1, (int)Math.Floor(distanceBehind / snapshot.TrackLength));
@@ -174,12 +177,35 @@ namespace AMS2LeagueClient.Core.Presentation
         {
             private readonly List<ProgressPoint> _points = new List<ProgressPoint>();
             private int _first;
+            private uint _lastRawLapsCompleted;
+            private double _lastLapDistance;
+            private long _unwrappedLaps;
             public ProgressHistory(string identity) { Identity = identity; }
             public string Identity { get; }
             public double LastProgress { get; private set; }
 
-            public void Observe(double progress, double time, float trackLength)
+            public bool Observe(ParticipantSnapshot driver, double rawProgress, double time,
+                float trackLength, double maxAdvance)
             {
+                long laps = _unwrappedLaps;
+                if (_points.Count == 0) laps = driver.LapsCompleted;
+                else
+                {
+                    if (driver.LapsCompleted < _lastRawLapsCompleted
+                        || driver.LapsCompleted > _lastRawLapsCompleted + 1) return false;
+                    // AMS2 can wrap mCurrentLapDistance before mLapsCompleted
+                    // advances. Track the car through the line without discarding
+                    // its same-point crossing history or borrowing another lap.
+                    if (driver.CurrentLapDistance < _lastLapDistance - trackLength * 0.5)
+                        laps++;
+                }
+                double progress = _points.Count == 0 ? rawProgress
+                    : laps * trackLength + driver.CurrentLapDistance;
+                if (_points.Count > 0 && (progress < LastProgress - 1
+                    || progress - LastProgress > maxAdvance)) return false;
+                _unwrappedLaps = laps;
+                _lastRawLapsCompleted = driver.LapsCompleted;
+                _lastLapDistance = driver.CurrentLapDistance;
                 if (_points.Count == 0 || progress > LastProgress + 0.01)
                 {
                     _points.Add(new ProgressPoint(progress, time));
@@ -190,6 +216,7 @@ namespace AMS2LeagueClient.Core.Presentation
                     if (_first > 1024 && _first > _points.Count / 2)
                     { _points.RemoveRange(0, _first); _first = 0; }
                 }
+                return true;
             }
 
             public bool TryCrossingTime(double progress, out double time)

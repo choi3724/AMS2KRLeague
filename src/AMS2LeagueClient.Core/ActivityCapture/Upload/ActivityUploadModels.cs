@@ -32,6 +32,9 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
         public string ContentType { get; set; } = "application/json";
         public DateTimeOffset CreatedAtUtc { get; set; }
         public string RelatedQueueItemId { get; set; } = string.Empty;
+        // Local-only policy marker. Legacy queue items deserialize as 0 and must
+        // not gain cross-phase upload eligibility merely by upgrading the client.
+        public int PhaseLinkPolicyVersion { get; set; }
     }
 
     public sealed class ActivityUploadState

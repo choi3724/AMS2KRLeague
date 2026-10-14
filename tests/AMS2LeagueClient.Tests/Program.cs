@@ -160,6 +160,7 @@ namespace AMS2LeagueClient.Tests
                 ("Result and replay race mode fields agree", AutomaticModeTests.ModeFields),
                 ("Korean labels and dedicated penalty column", KoreanLabelsAndPenaltyColumn),
                 ("Viewed root penalty reaches both tower designs", ViewedPenaltyReachesTower),
+                ("Time and grid penalty column stays separate in both towers", NumericPenaltyColumnRendersSeparately),
                 ("Tower shrinks and restores with participant count", TowerShrinksAndRestoresWithParticipants),
                 ("Empty panels remain editable with preview", EmptyPanelsRemainEditableWithPreview),
                 ("Game-free edit right-click opens a live per-overlay settings page", GameFreeSettingsPreviewAndRollback),
@@ -285,6 +286,8 @@ namespace AMS2LeagueClient.Tests
                 ,("Participant lap clocks reject stale identity and terminal states", ParticipantLapClocksRejectInvalidContinuity)
                 ,("Tower best lap ignores sector loss and observed clocks", TowerTimingFallsBackForMissingSectors)
                 ,("Race tower follows live same-point gap to P1", TowerShowsLiveLeaderTimeGap)
+                ,("Leader and follower start-line crossings preserve live gap", LeaderGapSurvivesStartLineCrossings)
+                ,("Timing tower edit dividers resize columns and rows in both designs", TimingTowerEditDividersResizeAndPersist)
                 ,("Live leader gap handles lead changes and lapped cars", LiveLeaderGapHandlesLeadChangeAndLaps)
                 ,("Live leader gap respects the timed race clock and pause", LiveLeaderGapRespectsGameClock)
                 ,("Tower best lap uses only the participant best source", OpponentTimingUsesCurrentLapSectors)
@@ -3268,6 +3271,55 @@ namespace AMS2LeagueClient.Tests
             fixture.SetSession(SessionState.Race);
             model = Observe(2);
             AssertEqual("—", model.AllRankingRows.Single(row => row.ParticipantIndex == 1).TowerTimeText);
+        }
+
+        private static void LeaderGapSurvivesStartLineCrossings()
+        {
+            var fixture = new RawFixtureBuilder(2).SetSession(SessionState.Race)
+                .SetTrackTelemetry(1000, 300).SetSequence(1)
+                .SetParticipant(0, true, "LEADER", 1, 2, 3, RaceState.Racing, PitMode.None)
+                .SetParticipant(1, true, "FOLLOWER", 2, 2, 3, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 850).SetParticipantLapDistance(1, 800);
+            var tracker = new LeaderTimeGapTracker();
+            DateTimeOffset start = FixedTime();
+            string Gap(int index, int second)
+            {
+                TelemetrySnapshot snapshot = Parse(fixture, start.AddSeconds(second));
+                LeagueClassification league = new LeagueClassificationResolver().Resolve(snapshot,
+                    snapshot.Participants.Single(item => item.Index == 1));
+                return tracker.Observe(snapshot, league, 1)[index];
+            }
+            AssertEqual("0.000", Gap(0, 0));
+            fixture.SetSequence(2).SetParticipantLapDistance(0, 950).SetParticipantLapDistance(1, 850);
+            AssertEqual("+1.000", Gap(1, 1));
+            // Distance wraps one frame before AMS2 advances mLapsCompleted.
+            fixture.SetSequence(3).SetParticipantLapDistance(0, 20).SetParticipantLapDistance(1, 900);
+            AssertEqual("+1.500", Gap(1, 2));
+            AssertEqual("0.000", Gap(0, 2));
+            fixture.SetSequence(4).SetParticipant(0, true, "LEADER", 1, 3, 4, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 80).SetParticipantLapDistance(1, 950);
+            AssertEqual("+2.000", Gap(1, 3));
+            fixture.SetSequence(5).SetParticipantLapDistance(0, 140).SetParticipantLapDistance(1, 20);
+            AssertEqual("+2.000", Gap(1, 4));
+            fixture.SetSequence(6).SetParticipant(1, true, "FOLLOWER", 2, 3, 4, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 200).SetParticipantLapDistance(1, 80);
+            AssertEqual("+2.000", Gap(1, 5));
+
+            tracker.Reset();
+            fixture.SetSequence(7).SetParticipant(0, true, "LEADER", 1, 2, 3, RaceState.Racing, PitMode.None)
+                .SetParticipant(1, true, "FOLLOWER", 2, 2, 3, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 850).SetParticipantLapDistance(1, 800);
+            AssertEqual("—", Gap(1, 10));
+            // The opposite publication order is also legal: the completed-lap
+            // counter changes before the distance wraps.
+            fixture.SetSequence(8).SetParticipant(0, true, "LEADER", 1, 3, 4, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 950).SetParticipantLapDistance(1, 850);
+            AssertEqual("+1.000", Gap(1, 11));
+            fixture.SetSequence(9).SetParticipantLapDistance(0, 20).SetParticipantLapDistance(1, 900);
+            AssertEqual("+1.500", Gap(1, 12));
+            fixture.SetSequence(10).SetParticipant(0, true, "LEADER", 1, 1, 2, RaceState.Racing, PitMode.None)
+                .SetParticipantLapDistance(0, 40);
+            AssertEqual("—", Gap(1, 13)); // a real lap-counter rollback clears that car's history
         }
 
         private static void LiveLeaderGapHandlesLeadChangeAndLaps()

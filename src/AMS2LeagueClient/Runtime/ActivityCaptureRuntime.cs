@@ -111,6 +111,8 @@ namespace AMS2LeagueClient.Runtime
             _futureTelemetry.FailureDiagnostic = details => LogInfoSafely("ARCHIVE_FAILURE", details);
             _futureTelemetry.IdentityStarted += BindWitnessArchiveIdentity;
             _completionGate = new RaceUploadCompletionGate(_futureTelemetry.ArchiveRoot);
+            LogInfoSafely("PHASE_LINK_POLICY", _completionGate.PhaseLinkPolicyStatus);
+            LogInfoSafely("OBSERVER_UPLOAD_POLICY", _completionGate.ObserverUploadPolicyStatus);
             _telemetryUploadQueue = new TelemetryChunkUploadQueue(_futureTelemetry.ArchiveRoot,
                 uploadEligibility: metadata => _completionGate.Allows(metadata.SessionId) && IsTelemetryUploadAllowed(metadata));
             _telemetryUploadQueue.DeliveryDiagnostic = details => LogInfoSafely("TELEMETRY_DELIVERY", details);

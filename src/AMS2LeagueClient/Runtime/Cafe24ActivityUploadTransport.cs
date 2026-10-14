@@ -156,6 +156,28 @@ namespace AMS2LeagueClient.Runtime
                 return ActivityUploadTransportResult.NetworkFailure("ENROLLMENT_UNAVAILABLE");
             }
 
+            // A large witness can exceed the shared-hosting gateway's plain JSON
+            // request limit even though the application accepts the decoded body.
+            // Startup bootstrap is asynchronous; never risk a non-retryable HTML
+            // 403 just because this transport has not learned gzip support yet.
+            bool largeWitness = endpoint == SessionWitnessEndpoint && payload.Length >= 128 * 1024;
+            if (largeWitness && !_options.SupportsGzipRequest(requestUri, endpoint))
+            {
+                try { await GetBootstrapAsync(cancellationToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    return ActivityUploadTransportResult.NetworkFailure("WITNESS_GZIP_NEGOTIATION_UNAVAILABLE");
+                }
+                catch (Exception exception) when (exception is TimeoutException || exception is HttpRequestException
+                    || exception is IOException || exception is InvalidDataException
+                    || exception is InvalidOperationException || exception is AuthenticationRequiredException)
+                {
+                    return ActivityUploadTransportResult.NetworkFailure("WITNESS_GZIP_NEGOTIATION_UNAVAILABLE");
+                }
+                if (!_options.SupportsGzipRequest(requestUri, endpoint))
+                    return ActivityUploadTransportResult.NetworkFailure("WITNESS_GZIP_UNSUPPORTED");
+            }
+
             using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Headers.TryAddWithoutValidation("Idempotency-Key", item.Metadata.IdempotencyKey);
@@ -166,6 +188,8 @@ namespace AMS2LeagueClient.Runtime
                 byte[] gzip = TelemetryChunkSerializer.Gzip(payload);
                 if (gzip.Length < payload.Length) wirePayload = gzip;
             }
+            if (largeWitness && (ReferenceEquals(wirePayload, payload) || wirePayload.Length >= 128 * 1024))
+                return ActivityUploadTransportResult.NetworkFailure("WITNESS_GZIP_WIRE_TOO_LARGE");
             request.Content = new ByteArrayContent(wirePayload);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             if (!ReferenceEquals(wirePayload, payload)) request.Content.Headers.ContentEncoding.Add("gzip");

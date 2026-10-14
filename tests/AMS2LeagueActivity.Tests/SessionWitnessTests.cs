@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using AMS2LeagueClient.Core.ActivityCapture;
 using AMS2LeagueClient.Core.ActivityCapture.Upload;
 using AMS2LeagueClient.Core.FutureTelemetry;
 using AMS2LeagueClient.Core.HostRecording;
@@ -31,6 +32,62 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Safety car does not prevent full or end-only witness classification", SafetyCarCompletenessUsesDrivers);
             yield return new TestCase("Inactive terminal drivers survive result, evidence, timeline and wire capture", InactiveTerminalDriversAreRetained);
             yield return new TestCase("Inactive missing rows are not fabricated and stale results are not grid entries", InactiveRowsFailClosed);
+            yield return new TestCase("Qualifying copied FINISHED then new grid remains one weekend", QualifyingGridResetIsNotRestart);
+            yield return new TestCase("Vanished race entrants retain last observations without invented results", VanishedEntrantsRetainObservations);
+        }
+
+        private static void QualifyingGridResetIsNotRestart()
+        {
+            DateTimeOffset at = FixedTime();
+            var engine = new SessionWitnessCaptureEngine("qual-grid-reset", "test");
+            engine.Observe(SessionSnapshot(at, 0, SessionState.Qualify, RaceState.Racing, 3, 1790, 30));
+            engine.Observe(SessionSnapshot(at.AddSeconds(1), 1, SessionState.Qualify, RaceState.Finished, 3, 1791, 30));
+            engine.Observe(SessionSnapshot(at.AddSeconds(2), 2, SessionState.Race, RaceState.Finished, 3, 1792, 30));
+            AssertEx.Null(engine.Observe(SessionSnapshot(at.AddSeconds(3), 3, SessionState.Race, RaceState.NotStarted, 0, 0, 30)).FinalizedWitness);
+            engine.Observe(SessionSnapshot(at.AddSeconds(5), 4, SessionState.Race, RaceState.NotStarted, 0, 0, 30));
+            engine.Observe(SessionSnapshot(at.AddSeconds(6), 5, SessionState.Race, RaceState.Racing, 0, 1, 30));
+            engine.Observe(SessionSnapshot(at.AddMinutes(31), 6, SessionState.Race, RaceState.Finished, 10, 1800, 30));
+            SessionWitnessRecord result = Required(engine.Close(at.AddMinutes(31).AddSeconds(2), "TEST_END").FinalizedWitness);
+            AssertEx.NotNull(result.Session.Qualifying);
+            AssertEx.NotNull(result.Session.RaceResult);
+            AssertEx.Equal(1, result.Session.Activity!.AttemptNumber);
+            AssertEx.True(result.Session.RaceResult!.Participants.All(p => p.LapsCompleted == 10));
+        }
+
+        private static void VanishedEntrantsRetainObservations()
+        {
+            var engine = new SessionWitnessCaptureEngine("vanished", "test");
+            ActivityFixtureSnapshot fixture = ResultFixture();
+            fixture.Participants.Add(new ActivityFixtureParticipant { Name = "Driver Missing", Position = 3, RaceState = "NotStarted" });
+            engine.Observe(fixture.ToSnapshot(0));
+            fixture.CapturedAtUtc = FixedTime().AddSeconds(2);
+            fixture.RaceState = "Racing";
+            fixture.Participants[0].RaceState = "Racing";
+            fixture.Participants[1].RaceState = "Retired";
+            fixture.Participants[1].LapsCompleted = 4;
+            fixture.Participants[3].RaceState = "Racing";
+            fixture.Participants[3].LapsCompleted = 7;
+            engine.Observe(fixture.ToSnapshot(2));
+            foreach (int i in new[] { 1, 3 })
+            {
+                fixture.Participants[i].Active = false;
+                fixture.Participants[i].Name = "";
+                fixture.Participants[i].RaceState = "Invalid";
+            }
+            fixture.CapturedAtUtc = FixedTime().AddMinutes(30);
+            fixture.Participants[0].RaceState = "Finished";
+            fixture.RaceState = "Finished";
+            engine.Observe(fixture.ToSnapshot(4));
+            fixture.CapturedAtUtc = fixture.CapturedAtUtc.AddSeconds(2);
+            engine.Observe(fixture.ToSnapshot(6));
+            SessionWitnessRecord result = Required(engine.Close(fixture.CapturedAtUtc, "TEST_END").FinalizedWitness);
+            AssertEx.Equal(2, result.Session.RaceResult!.Participants.Count);
+            HostParticipantEvidence[] vanished = result.Session.RaceParticipantObservations!.Where(p => p.Disappeared).ToArray();
+            AssertEx.Equal(2, vanished.Length);
+            AssertEx.Equal((uint)RaceState.Retired, vanished.Single(p => p.NameSnapshot == "Driver Beta").ResultStateRaw);
+            AssertEx.Equal((uint)RaceState.Racing, vanished.Single(p => p.NameSnapshot == "Driver Missing").ResultStateRaw);
+            using JsonDocument wire = JsonDocument.Parse(SessionWitnessUploadPayloadBuilder.Build(result));
+            AssertEx.Equal(4, wire.RootElement.GetProperty("session").GetProperty("raceParticipantObservations").GetArrayLength());
         }
 
         private static ActivityFixtureSnapshot ResultFixture()
@@ -162,6 +219,7 @@ namespace AMS2LeagueActivity.Tests
         {
             DateTimeOffset start = FixedTime();
             var engine = new SessionWitnessCaptureEngine("install-qual-transition", "0.3.1-test");
+            engine.SetScheduledEvent(new ScheduledLeagueEvent { EventId = "EVT-Q-R-TEST" });
             engine.Observe(SessionSnapshot(start, 0, SessionState.Qualify, RaceState.Racing, 23, 1790, 30));
             engine.Observe(SessionSnapshot(start.AddSeconds(1), 1, SessionState.Qualify, RaceState.Finished, 23, 1791, 30));
             engine.Observe(SessionSnapshot(start.AddSeconds(2), 2, SessionState.Race, RaceState.Finished, 23, 1792, 30));
@@ -170,6 +228,14 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.NotNull(qualified.Session.Qualifying);
             AssertEx.Null(qualified.Session.RaceResult, "Copied qualifying FINISHED standings are not a race result.");
             AssertEx.Null(qualified.Session.StartingGrid, "Copied qualifying standings are not a starting grid.");
+            AssertEx.Equal("EVT-Q-R-TEST", qualified.ScheduledEventHint);
+            AssertEx.Equal(30.0, qualified.Session.Activity!.ConfiguredSettings["QUALIFYING"].DurationMinutes);
+            using (JsonDocument qualifyingPayload = JsonDocument.Parse(SessionWitnessUploadPayloadBuilder.Build(qualified)))
+            {
+                AssertEx.Equal("EVT-Q-R-TEST", qualifyingPayload.RootElement.GetProperty("scheduledEventHint").GetString());
+                AssertEx.Equal(30.0, qualifyingPayload.RootElement.GetProperty("activity")
+                    .GetProperty("configuredSettings").GetProperty("QUALIFYING").GetProperty("durationMinutes").GetDouble());
+            }
 
             engine.Observe(SessionSnapshot(start.AddMinutes(1), 4, SessionState.Race, RaceState.NotStarted, 0, 0, 30));
             engine.Observe(SessionSnapshot(start.AddMinutes(1).AddSeconds(2), 5, SessionState.Race, RaceState.Racing, 0, 2, 30));
@@ -178,6 +244,8 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.NotNull(race.Session.RaceResult);
             AssertEx.True(race.Session.RaceResult!.Participants.All(value => value.LapsCompleted == 33));
             AssertEx.Null(race.Session.Qualifying);
+            AssertEx.Equal(qualified.ScheduledEventHint, race.ScheduledEventHint);
+            AssertEx.Equal(qualified.EventFingerprint, race.EventFingerprint);
         }
 
         private static void SingleWitnessIsRetained()

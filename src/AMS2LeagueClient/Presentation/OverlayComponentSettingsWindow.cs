@@ -117,6 +117,35 @@ namespace AMS2LeagueClient.Presentation
             System.Windows.Automation.AutomationProperties.SetName(font, label + " 글꼴");
             System.Windows.Automation.AutomationProperties.SetName(size, label + " 글자 크기");
 
+            if (component == OverlayComponentKeys.TimingTower)
+            {
+                panel.Children.Add(Heading("순위표 항목별 글씨 크기"));
+                foreach (var role in new[] {
+                    (Key: "header", Label: "제목"), (Key: "position", Label: "순위"),
+                    (Key: "driver", Label: "드라이버"), (Key: "class", Label: "클래스"),
+                    (Key: "time", Label: "시간 차·최고 랩"), (Key: "status", Label: "상태"),
+                    (Key: "pitPenalty", Label: "드라이브스루·스톱앤고"),
+                    (Key: "numericPenalty", Label: "시간·순위 페널티"),
+                    (Key: "diagnostic", Label: "진단 정보") })
+                {
+                    double currentScale = appearance.ElementScales.TryGetValue(role.Key, out double saved) ? saved : 1;
+                    var roleSize = Slider(50, 200, 5, currentScale * 100, 200);
+                    var roleValue = new TextBlock { Text = roleSize.Value.ToString("0") + "%",
+                        VerticalAlignment = VerticalAlignment.Center };
+                    var roleRow = new StackPanel { Orientation = Orientation.Horizontal };
+                    roleRow.Children.Add(roleSize); roleRow.Children.Add(roleValue);
+                    roleSize.ValueChanged += (_, __) =>
+                    {
+                        appearance.ElementScales[role.Key] = roleSize.Value / 100;
+                        Settings.OverlayText[component] = appearance;
+                        roleValue.Text = roleSize.Value.ToString("0") + "%";
+                        Changed();
+                    };
+                    panel.Children.Add(Row(role.Label, roleRow));
+                    System.Windows.Automation.AutomationProperties.SetName(roleSize, "순위 타워 " + role.Label + " 글자 크기");
+                }
+            }
+
             if (component == OverlayComponentKeys.Speed)
                 AddColor(panel, "속도계 그림자", Settings.SpeedShadowColor, value => Settings.SpeedShadowColor = value);
             if (component == OverlayComponentKeys.Gear)

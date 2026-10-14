@@ -82,6 +82,8 @@ namespace AMS2LeagueClient.Overlay
         private bool _layoutPreview;
         private OverlayShellViewModel? _liveViewModelBeforePreview;
         private bool _closing;
+        private readonly Thumb[] _towerColumnHandles = new Thumb[6];
+        private Thumb _towerRowHandle = null!;
 
         internal static string DefaultLayoutPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AMS2KRLeague", "overlay-layout.json");
@@ -91,6 +93,8 @@ namespace AMS2LeagueClient.Overlay
         {
             _diagnostic = diagnostic;
             InitializeComponent();
+            InitializeTowerSizeHandles();
+            TimingHost.LayoutUpdated += (_, __) => { if (_layoutEditing) UpdateTowerSizeHandles(); };
             // Must be selected before the first HWND is created; the startup policy selects the default.
             _useGlass = useGlass && OverlayWindowInterop.IsGlassAvailable();
             _useSoftwareRendering = useSoftwareRendering && !_useGlass;
@@ -970,6 +974,88 @@ namespace AMS2LeagueClient.Overlay
             RefreshDrivingViews();
             _lastEventKey = _lastRaceControlKey = string.Empty;
             ApplyViewModel(_viewModel, false);
+            UpdateTowerSizeHandles();
+        }
+
+        private void InitializeTowerSizeHandles()
+        {
+            var line = new SolidColorBrush(Color.FromArgb(190, 77, 227, 177));
+            for (int index = 0; index < _towerColumnHandles.Length; index++)
+            {
+                int boundary = index;
+                var handle = new Thumb { Width = 8, Background = line, Cursor = Cursors.SizeWE,
+                    ToolTip = "열 경계를 드래그해 양쪽 칸 너비 조절", Visibility = Visibility.Collapsed };
+                handle.Style = (Style)FindResource("TowerColumnResizeThumb");
+                handle.DragDelta += (_, args) =>
+                {
+                    if (TimingHud?.ResizeColumn(boundary, args.HorizontalChange / TowerEditScale()) == true)
+                    {
+                        RecordTowerSizing();
+                        UpdateTowerSizeHandles();
+                    }
+                    args.Handled = true;
+                };
+                _towerColumnHandles[index] = handle;
+                TowerSizeHandles.Children.Add(handle);
+            }
+            _towerRowHandle = new Thumb { Height = 8, Background = line, Cursor = Cursors.SizeNS,
+                ToolTip = "행 경계를 드래그해 모든 행 높이 조절", Visibility = Visibility.Collapsed };
+            _towerRowHandle.Style = (Style)FindResource("TowerRowResizeThumb");
+            _towerRowHandle.DragDelta += (_, args) =>
+            {
+                double previousHeight = TimingHud?.Height ?? 0;
+                double scale = TowerEditScale();
+                if (TimingHud?.ResizeRows(args.VerticalChange / TowerEditScale()) == true)
+                {
+                    Height = Math.Max(MinHeight, Height + (TimingHud.Height - previousHeight) * scale);
+                    RecordTowerSizing();
+                    UpdateTowerSizeHandles();
+                }
+                args.Handled = true;
+            };
+            TowerSizeHandles.Children.Add(_towerRowHandle);
+        }
+
+        private double TowerEditScale()
+        {
+            if (TimingHud == null || !TimingHud.IsLoaded || !IsAncestorOf(TimingHud)) return 1;
+            GeneralTransform transform = TimingHud.TransformToAncestor(this);
+            double scale = transform.Transform(new Point(1, 0)).X - transform.Transform(new Point(0, 0)).X;
+            return scale > 0.01 ? scale : 1;
+        }
+
+        private void RecordTowerSizing()
+        {
+            if (TimingHud == null) return;
+            DrivingHudSettings settings = GetDrivingHudSettings();
+            settings.OverlayText[OverlayComponentKeys.TimingTower] = TimingHud.CurrentTextAppearance;
+            _layoutProfile.DrivingHud = settings;
+        }
+
+        private void UpdateTowerSizeHandles()
+        {
+            if (!_layoutEditing || TimingHud == null || !TimingHud.IsLoaded || !IsAncestorOf(TimingHud)
+                || !TimingHud.TryGetResizeGeometry(out double[] x, out double top, out double rowBottom))
+            {
+                foreach (Thumb handle in _towerColumnHandles) handle.Visibility = Visibility.Collapsed;
+                _towerRowHandle.Visibility = Visibility.Collapsed;
+                return;
+            }
+            GeneralTransform transform = TimingHud.TransformToAncestor(this);
+            double topY = transform.Transform(new Point(0, top)).Y;
+            double bottomY = transform.Transform(new Point(0, rowBottom)).Y;
+            for (int index = 0; index < _towerColumnHandles.Length; index++)
+            {
+                Thumb handle = _towerColumnHandles[index];
+                handle.Visibility = Visibility.Visible;
+                handle.Height = Math.Max(20, bottomY - topY);
+                Canvas.SetLeft(handle, transform.Transform(new Point(x[index], 0)).X - handle.Width / 2);
+                Canvas.SetTop(handle, topY);
+            }
+            _towerRowHandle.Visibility = Visibility.Visible;
+            _towerRowHandle.Width = Math.Max(80, ActualWidth - 20);
+            Canvas.SetLeft(_towerRowHandle, 10);
+            Canvas.SetTop(_towerRowHandle, bottomY - _towerRowHandle.Height / 2);
         }
 
         private void EditDrag_MouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)

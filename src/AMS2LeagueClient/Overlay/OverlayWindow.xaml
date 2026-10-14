@@ -13,12 +13,37 @@
         Topmost="True"
         MinWidth="120" MinHeight="80"
         SizeToContent="Manual">
+    <Window.Resources>
+        <Style x:Key="TowerColumnResizeThumb" TargetType="Thumb" xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Background="Transparent">
+                            <Border Width="2" HorizontalAlignment="Center" Background="#B84DE3B1" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TowerRowResizeThumb" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Background="Transparent">
+                            <Border Height="2" VerticalAlignment="Center" Background="#B84DE3B1" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Viewbox x:Name="TimingHost" Stretch="Uniform" VerticalAlignment="Top" />
         <Grid x:Name="EditChrome" Visibility="Collapsed">
             <Border BorderBrush="#FF4DE3B1" BorderThickness="2" CornerRadius="6" Background="#180B1520"
                     Cursor="SizeAll" ToolTip="순위 타워 · 드래그로 이동 / 오른쪽 아래 모서리로 크기 조절"
                     MouseLeftButtonDown="EditDrag_MouseLeftButtonDown" />
+            <Canvas x:Name="TowerSizeHandles" ClipToBounds="False" />
             <ResizeGrip Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Bottom" Background="Transparent" Cursor="SizeNWSE" />
         </Grid>
     </Grid>

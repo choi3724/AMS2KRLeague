@@ -66,18 +66,36 @@ namespace AMS2LeagueClient.Tests
                     { ShowActivated = false, Left = -5000, Top = -5000, WindowStartupLocation = WindowStartupLocation.Manual };
                 towerDialog.SettingsChanged += (_, __) => overlay.PreviewDrivingHudSettings(towerDialog.Settings);
                 towerDialog.Show(); PumpDispatcher();
+                OverlayHudView towerView = FindDescendant<OverlayHudView>(overlay)!;
+                TextBlock classText = Descendants<TextBlock>(towerView).First(text => (string?)text.Tag == "class");
+                TextBlock driverText = Descendants<TextBlock>(towerView).First(text => (string?)text.Tag == "driver");
+                double originalClassSize = classText.FontSize, originalDriverSize = driverText.FontSize;
+                Slider classSize = Descendants<Slider>(towerDialog).Single(item =>
+                    System.Windows.Automation.AutomationProperties.GetName(item) == "순위 타워 클래스 글자 크기");
+                classSize.Value = 150;
+                PumpDispatcher();
+                AssertTrue(classText.FontSize > originalClassSize);
+                AssertEqual(originalDriverSize, driverText.FontSize);
+                AssertEqual(1.5, overlay.GetDrivingHudSettings().TextFor(OverlayComponentKeys.TimingTower).ElementScales["class"]);
                 ComboBox towerDesign = Descendants<ComboBox>(towerDialog).Single(item =>
                     System.Windows.Automation.AutomationProperties.GetName(item) == "디자인");
                 towerDesign.SelectedIndex = 1;
                 AssertEqual("AMS2 순위 타워 (개량)", overlay.Title);
                 towerDialog.Close();
                 overlay.PreviewDrivingHudSettings(original);
+                PumpDispatcher();
                 AssertEqual("AMS2 순위 타워 (기본)", overlay.Title);
+                AssertEqual(originalClassSize, Descendants<TextBlock>(towerView).First(text => (string?)text.Tag == "class").FontSize);
 
                 var saved = overlay.GetDrivingHudSettings();
                 saved.OverlayText[OverlayComponentKeys.RaceControl] = new DrivingHudSettings.TextAppearance { Scale = 1.5 };
+                saved.OverlayText[OverlayComponentKeys.TimingTower] = new DrivingHudSettings.TextAppearance
+                {
+                    ElementScales = new System.Collections.Generic.Dictionary<string, double> { ["class"] = 1.5, ["driver"] = 0.8 }
+                };
                 overlay.SaveDrivingHudSettings(saved);
                 AssertTrue(File.Exists(path));
+                AssertEqual(1.5, overlay.GetDrivingHudSettings().TextFor(OverlayComponentKeys.TimingTower).ElementScales["class"]);
                 overlay.EndLayoutEdit(true);
                 requested = null;
                 race.RaiseEvent(new MouseButtonEventArgs(InputManager.Current.PrimaryMouseDevice, Environment.TickCount, MouseButton.Right)
@@ -172,6 +190,61 @@ namespace AMS2LeagueClient.Tests
                 AssertTrue(ReferenceEquals(empty.RaceControl, raceView.DataContext));
             }
             finally { window.EndLayoutEdit(false); window.Close(); if (File.Exists(layout)) File.Delete(layout); }
+        }
+
+        private static void TimingTowerEditDividersResizeAndPersist()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "ams2-tower-dividers-" + Guid.NewGuid() + ".json");
+            var overlay = new OverlayWindow(false, path);
+            try
+            {
+                overlay.BeginLayoutPreview(false, new GameWindowSnapshot(IntPtr.Zero, -5000, -5000, 1280, 720, 96, true, false, 0));
+                PumpDispatcher();
+                var tower = FindDescendant<OverlayHudView>(overlay)!;
+                AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Name == "PenaltyText"
+                    && text.Text == "드라이브스루"));
+                var canvas = Descendants<Canvas>(overlay).Single(item => item.Name == "TowerSizeHandles");
+                Thumb[] handles = canvas.Children.OfType<Thumb>().ToArray();
+                AssertEqual(7, handles.Length);
+                AssertTrue(tower.TryGetResizeGeometry(out double[] boundaries, out _, out _));
+                AssertEqual(6, boundaries.Length);
+                AssertEqual(Visibility.Visible, handles[1].Visibility);
+                Grid legacy = Descendants<Grid>(tower).First(grid => (string?)grid.Tag == "tower-columns");
+                double classBefore = legacy.ColumnDefinitions[2].ActualWidth;
+                double totalBefore = legacy.ColumnDefinitions.Sum(column => column.ActualWidth);
+                handles[1].RaiseEvent(new DragDeltaEventArgs(-20, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+                PumpDispatcher();
+                AssertTrue(legacy.ColumnDefinitions[2].ActualWidth > classBefore + 10);
+                AssertTrue(Math.Abs(legacy.ColumnDefinitions.Sum(column => column.ActualWidth) - totalBefore) < 2);
+                double rowBefore = Descendants<Border>(tower).First(row => (string?)row.Tag == "tower-data-row").Height;
+                double windowHeightBefore = overlay.Height;
+                handles[6].RaiseEvent(new DragDeltaEventArgs(0, 8) { RoutedEvent = Thumb.DragDeltaEvent });
+                PumpDispatcher();
+                AssertTrue(Descendants<Border>(tower).Where(row => (string?)row.Tag == "tower-data-row")
+                    .All(row => row.Height > rowBefore));
+                AssertTrue(overlay.Height > windowHeightBefore);
+                CaptureLayout((FrameworkElement)overlay.Content, "tower-direct-edit-legacy");
+
+                var settings = overlay.GetDrivingHudSettings();
+                settings.TowerDesign = "racing";
+                overlay.PreviewDrivingHudSettings(settings);
+                PumpDispatcher();
+                Grid racing = Descendants<Grid>(tower).First(grid => (string?)grid.Tag == "tower-columns");
+                AssertTrue(Descendants<TextBlock>(tower).Any(text => text.Name == "PenaltyText"
+                    && text.Text == "드라이브스루"));
+                double racingClassBefore = racing.ColumnDefinitions[2].ActualWidth;
+                handles[1].RaiseEvent(new DragDeltaEventArgs(-12, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+                PumpDispatcher();
+                AssertTrue(racing.ColumnDefinitions[2].ActualWidth > racingClassBefore);
+                AssertEqual(Visibility.Visible, handles[6].Visibility);
+                CaptureLayout((FrameworkElement)overlay.Content, "tower-direct-edit-racing");
+                overlay.EndLayoutEdit(true);
+                var saved = new OverlayLayoutStore(path).Load().DrivingHud.TextFor(OverlayComponentKeys.TimingTower);
+                AssertTrue(saved.TowerColumnScales["class"] > 1);
+                AssertTrue(saved.TowerRowHeight > 36);
+                Console.WriteLine("PROOF direct edit dividers resized both tower designs, retained total width and persisted row height");
+            }
+            finally { overlay.EndLayoutEdit(false); overlay.Close(); if (File.Exists(path)) File.Delete(path); }
         }
     }
 }

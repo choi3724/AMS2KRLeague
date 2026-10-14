@@ -235,7 +235,8 @@ namespace AMS2LeagueClient.Core.ActivityCapture.Upload
                 IdempotencyKey = idempotencyKey,
                 BodySha256 = bodySha256,
                 CreatedAtUtc = now,
-                RelatedQueueItemId = relatedQueueItemId
+                RelatedQueueItemId = relatedQueueItemId,
+                PhaseLinkPolicyVersion = 2
             };
             var state = new ActivityUploadState
             {

@@ -66,7 +66,8 @@ namespace AMS2LeagueClient.Runtime
                     false,
                     index == playerIndex ? 34.271f : 34.8f,
                     index == playerIndex ? 29.882f : 30.1f,
-                    -1);
+                    -1,
+                    pitScheduleRaw: index == 2 ? (uint)PitSchedule.DriveThrough : (uint)PitSchedule.None);
             }
 
             return new TelemetrySnapshot(
@@ -108,6 +109,9 @@ namespace AMS2LeagueClient.Runtime
             foreach (LeagueParticipant driver in league.Participants)
                 demoLeaderGaps[driver.Source.Index] = driver.LeaguePosition == 1 ? "0.000"
                     : "+" + (driver.LeaguePosition * 1.125).ToString("0.000", CultureInfo.InvariantCulture);
+            var demoNumericPenalties = new Dictionary<int, string>();
+            if (league.Participants.Count > 1) demoNumericPenalties[league.Participants[1].Source.Index] = "+33초";
+            if (league.Participants.Count > 2) demoNumericPenalties[league.Participants[2].Source.Index] = "순위 +1";
             OverlayViewModel timing = OverlayViewModel.Build(
                 snapshot,
                 local.Participant,
@@ -118,7 +122,8 @@ namespace AMS2LeagueClient.Runtime
                 OverlayTextCatalog.Korean.Get(OverlayTextKey.DemoSimulation),
                 item,
                 eventType.HasValue ? 2 : 0,
-                leaderTimeGaps: demoLeaderGaps);
+                leaderTimeGaps: demoLeaderGaps,
+                timeOrGridPenalties: demoNumericPenalties);
             timing.AheadDistanceTrendArrow = "▲";
             timing.AheadDistanceColor = "#FF7777";
             timing.BehindDistanceTrendArrow = "▼";

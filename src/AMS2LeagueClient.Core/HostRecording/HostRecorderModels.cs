@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using AMS2LeagueClient.Core.ActivityCapture;
 
 namespace AMS2LeagueClient.Core.HostRecording
@@ -141,6 +142,10 @@ namespace AMS2LeagueClient.Core.HostRecording
         public HostClassification? Qualifying { get; set; }
         public HostClassification? StartingGrid { get; set; }
         public HostRaceResult? RaceResult { get; set; }
+        // Last observed facts include vanished entrants, without promoting
+        // their stale live position or state into the final classification.
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<HostParticipantEvidence>? RaceParticipantObservations { get; set; }
         public string EvidenceSha256 { get; set; } = string.Empty;
         public string ClosingReason { get; set; } = string.Empty;
         public string AttemptStatus { get; set; } = "INCOMPLETE";

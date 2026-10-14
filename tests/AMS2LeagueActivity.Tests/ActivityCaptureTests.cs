@@ -30,6 +30,7 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Configured and observed weather remain separate", ConfiguredAndObservedWeatherSeparate);
             yield return new TestCase("Unsupported configured fields stay null", UnsupportedConfiguredFieldsStayNull);
             yield return new TestCase("Restart attempts are immutable and distinct", RestartAttemptsAreImmutable);
+            yield return new TestCase("Completed race lap does not create restart attempt", CompletedRaceLapIsNotRestart);
             yield return new TestCase("Multiplayer race menu transitions keep one attempt", MultiplayerRaceMenuTransitionsKeepOneAttempt);
             yield return new TestCase("Race transition without terminal evidence stays aborted", RaceTransitionWithoutTerminalEvidenceStaysAborted);
         }
@@ -265,6 +266,23 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.True(File.Exists(Path.Combine(second.ActivityPath, "activity.json")));
         }
 
+        private static void CompletedRaceLapIsNotRestart()
+        {
+            var engine = new ActivityCaptureEngine("ordinary-lap", "phase1d3-test");
+            DateTimeOffset start = new DateTimeOffset(2026, 10, 6, 13, 0, 0, TimeSpan.Zero);
+            Observe(engine, RaceSnapshot(start, GameState.InGamePlaying, RaceState.Racing, 95, 0, 1));
+            ActivityCaptureUpdate completedLap = Observe(engine,
+                RaceSnapshot(start.AddSeconds(1), GameState.InGamePlaying, RaceState.Racing, 0.5f, 1, 2));
+            AssertEx.Equal(0, completedLap.CompletedRecords.Count);
+            AssertEx.False(completedLap.Events.Any(value => value.Contains("RACE_RESTART_SIGNAL", StringComparison.Ordinal)));
+            ActivityCaptureUpdate followingLap = Observe(engine,
+                RaceSnapshot(start.AddSeconds(20), GameState.InGamePlaying, RaceState.Racing, 20, 1, 2));
+            AssertEx.Equal(0, followingLap.CompletedRecords.Count);
+            ActivityRecord record = AssertEx.Single(Observe(engine,
+                RaceSnapshot(start.AddMinutes(2), GameState.FrontEnd, RaceState.Invalid)).CompletedRecords);
+            AssertEx.Equal(1, record.AttemptNumber);
+        }
+
         private static void MultiplayerRaceMenuTransitionsKeepOneAttempt()
         {
             var engine = new ActivityCaptureEngine("multiplayer-transition", "phase1d3-test");
@@ -319,7 +337,8 @@ namespace AMS2LeagueActivity.Tests
             return engine.Observe(snapshot, local.IsValid ? local.Participant : null);
         }
 
-        private static TelemetrySnapshot RaceSnapshot(DateTimeOffset at, GameState gameState, RaceState localState)
+        private static TelemetrySnapshot RaceSnapshot(DateTimeOffset at, GameState gameState, RaceState localState,
+            float currentTime = 120, uint lapsCompleted = 0, uint currentLap = 1)
         {
             bool frontEnd = gameState == GameState.FrontEnd;
             var fixture = new ActivityFixtureSnapshot
@@ -330,7 +349,7 @@ namespace AMS2LeagueActivity.Tests
                 RaceState = frontEnd ? RaceState.Invalid.ToString() : localState.ToString(),
                 ViewedParticipantIndex = frontEnd ? -1 : 0,
                 LapsInEvent = 1,
-                CurrentTime = frontEnd ? 0 : 120,
+                CurrentTime = frontEnd ? 0 : currentTime,
                 Track = "Monza",
                 Layout = "Monza_2020"
             };
@@ -340,8 +359,8 @@ namespace AMS2LeagueActivity.Tests
                 {
                     Name = "Multiplayer Player",
                     Position = 31,
-                    LapsCompleted = 0,
-                    CurrentLap = 1,
+                    LapsCompleted = lapsCompleted,
+                    CurrentLap = currentLap,
                     RaceState = localState.ToString(),
                     Vehicle = "GT3 Player",
                     VehicleClass = "GT3"

@@ -9,6 +9,7 @@ namespace AMS2LeagueActivity.Tests
     {
         private static int Main(string[] args)
         {
+            if (args.Length == 3 && args[0] == "--league-evidence") return LeagueEvidenceReplay.Run(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--long-track-recheck") return LongTrackTests.Recheck(args[1], args[2]);
             if (args.Length == 2 && args[0] == "--long-track-vectors") return LongTrackTests.Export(args[1]);
             IReadOnlyList<TestCase> tests = ActivityCaptureTests.Cases()

@@ -74,6 +74,7 @@ namespace AMS2LeagueClient.Core.SessionWitness
                     session.Qualifying,
                     session.StartingGrid,
                     session.RaceResult,
+                    session.RaceParticipantObservations,
                     session.Issues
                 },
                 events = witness.Events,

@@ -125,6 +125,7 @@ namespace AMS2LeagueClient.Tests
                 Console.WriteLine("PROOF json-gzip exact bytes; durable files unchanged; dotnet=" + Environment.Version
                     + " sampleBytes=" + original.Length + " meanCompressionMs=" + (watch.Elapsed.TotalMilliseconds / 100).ToString("F3"));
             });
+            LargeWitnessNegotiatesGzipBeforeUpload();
         }
 
         private static void JsonGzipNegotiationLifecycle()
@@ -172,6 +173,39 @@ namespace AMS2LeagueClient.Tests
                 fresh.SendAsync(witness, CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual("", handler.Encoding);
                 AssertFalse(JsonSerializer.Serialize(options).Contains("gzip", StringComparison.OrdinalIgnoreCase));
+            });
+        }
+
+        private static void LargeWitnessNegotiatesGzipBeforeUpload()
+        {
+            WithTemporaryDirectory(directory =>
+            {
+                var options = GzipOptions(directory);
+                var handler = new GzipUploadFixtureHandler { FailBootstrap = true };
+                using var http = new HttpClient(handler);
+                using var upload = new Cafe24ActivityUploadTransport(options, http);
+                var queue = new ActivityUploadQueue(Path.Combine(directory, "queue"));
+                var original = queue.Enqueue("large-witness", Cafe24ActivityUploadTransport.SessionWitnessEndpoint,
+                    "witness:large-gzip-fixture", "{\"schema\":\"ams2-session-witness-v1\",\"witnessId\":\"large-witness\",\"padding\":\""
+                    + new string('x', 160_000) + "\"}").Item;
+                var failed = upload.SendAsync(original, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual("WITNESS_GZIP_NEGOTIATION_UNAVAILABLE", failed.ResultCode);
+                AssertEqual(0, handler.UploadCalls);
+                AssertTrue(original.PayloadUtf8.Span.SequenceEqual(File.ReadAllBytes(Path.Combine(original.DirectoryPath, "payload.json"))));
+
+                handler.FailBootstrap = false;
+                handler.Bootstrap = GzipBootstrap();
+                var unsupported = upload.SendAsync(original, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual("WITNESS_GZIP_UNSUPPORTED", unsupported.ResultCode);
+                AssertEqual(0, handler.UploadCalls);
+
+                handler.Bootstrap = GzipBootstrap(Cafe24ActivityUploadTransport.SessionWitnessEndpoint);
+                var sent = upload.SendAsync(original, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(201, sent.StatusCode);
+                AssertEqual(1, handler.UploadCalls);
+                AssertEqual("gzip", handler.Encoding);
+                using var compressed = new MemoryStream(handler.Wire);
+                AssertTrue(original.PayloadUtf8.Span.SequenceEqual(TelemetryChunkSerializer.Gunzip(compressed)));
             });
         }
 

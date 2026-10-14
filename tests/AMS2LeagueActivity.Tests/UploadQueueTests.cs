@@ -41,6 +41,8 @@ namespace AMS2LeagueActivity.Tests
             ActivityUploadItem restored = AssertEx.Single(restarted.Scan());
             AssertEx.Equal(ActivityUploadStatus.PENDING, restored.State.Status);
             AssertEx.Equal("idem-restart-0001", restored.Metadata.IdempotencyKey);
+            AssertEx.Equal(2, restored.Metadata.PhaseLinkPolicyVersion);
+            AssertEx.Equal(0, System.Text.Json.JsonSerializer.Deserialize<ActivityUploadMetadata>("{}")!.PhaseLinkPolicyVersion);
             AssertEx.Equal("{\"activity\":1}", Encoding.UTF8.GetString(restored.PayloadUtf8.Span));
             AssertEx.Equal(1, restarted.GetDueBatch().Count);
         }
