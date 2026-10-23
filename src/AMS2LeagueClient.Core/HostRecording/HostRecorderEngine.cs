@@ -19,6 +19,8 @@ namespace AMS2LeagueClient.Core.HostRecording
         private static readonly TimeSpan QualifyingStable = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan GridStable = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan ResultStable = TimeSpan.FromSeconds(1.5);
+        // After the leader finishes, others get this long to take the flag.
+        private static readonly TimeSpan LeaderFinishGrace = TimeSpan.FromSeconds(300);
 
         private readonly string _hostInstallationId;
         private readonly List<HostRecorderIssue> _issues = new List<HostRecorderIssue>();
@@ -48,6 +50,7 @@ namespace AMS2LeagueClient.Core.HostRecording
         private HostClassification? _latestRace;
         private HostRaceResult? _raceResult;
         private bool _racePhaseReady;
+        private DateTimeOffset? _leaderFinishedAt;
         private TelemetrySnapshot? _latestSnapshot;
         private uint _sessionBuild;
         private uint _sessionSharedMemoryVersion;
@@ -264,12 +267,27 @@ namespace AMS2LeagueClient.Core.HostRecording
                 TimeSpan stableFor = _resultGate.Observe(Signature(candidate), snapshot.CapturedAt);
                 bool finishing = snapshot.RaceStateRaw == (uint)RaceState.Finished
                     || candidate.Participants.Any(participant => IsTerminal(participant.ResultStateRaw));
+                // Only a race already seen not-started/racing can have a leader
+                // finish; qualifying FINISHED residue must not start the grace.
+                if (_racePhaseReady && !_leaderFinishedAt.HasValue && candidate.Participants.Any(participant =>
+                    Roles.IsLeagueDriver(participant.Vehicle, participant.VehicleClass)
+                    && participant.ResultStateRaw == (uint)RaceState.Finished))
+                {
+                    _leaderFinishedAt = snapshot.CapturedAt;
+                    update.Events.Add("LEADER_FINISHED");
+                }
                 if (finishing)
                 {
                     SetPhase(HostRecorderPhase.RaceFinishing, update);
                     if (stableFor >= ResultStable && AllDriversTerminal(candidate.Participants))
                     {
                         FinalizeRace(candidate, stableFor, update);
+                    }
+                    else if (_leaderFinishedAt.HasValue && snapshot.CapturedAt - _leaderFinishedAt.Value >= LeaderFinishGrace)
+                    {
+                        AddIssue(HostIssueSeverity.Warning, "UNFINISHED_AFTER_LEADER_GRACE",
+                            "Entrants without a terminal state " + LeaderFinishGrace.TotalSeconds + " s after the leader finished are unfinished.");
+                        FinalizeRace(candidate, stableFor, update, leaderGraceElapsed: true);
                     }
                 }
                 else if (started)
@@ -279,15 +297,16 @@ namespace AMS2LeagueClient.Core.HostRecording
             }
         }
 
-        private void FinalizeRace(HostClassification candidate, TimeSpan stableFor, HostRecorderUpdate update)
+        private void FinalizeRace(HostClassification candidate, TimeSpan stableFor, HostRecorderUpdate update, bool leaderGraceElapsed = false)
         {
             if (_raceResult != null) return;
             SetPhase(HostRecorderPhase.PostRaceStabilizing, update);
             _raceResult = new HostRaceResult
             {
                 CapturedAtUtc = candidate.CapturedAtUtc,
-                Stable = stableFor >= ResultStable,
+                Stable = leaderGraceElapsed || stableFor >= ResultStable,
                 StableMilliseconds = (int)stableFor.TotalMilliseconds,
+                LeaderFinishedAtUtc = _leaderFinishedAt,
                 Participants = candidate.Participants
                     .Select(CloneParticipant)
                     .ToList()
@@ -664,6 +683,7 @@ namespace AMS2LeagueClient.Core.HostRecording
             _latestRace = null;
             _raceResult = null;
             _racePhaseReady = false;
+            _leaderFinishedAt = null;
             _latestSnapshot = null;
             _sessionBuild = 0;
             _sessionSharedMemoryVersion = 0;

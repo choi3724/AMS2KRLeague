@@ -118,6 +118,8 @@ namespace AMS2LeagueClient.Core.HostRecording
         public DateTimeOffset CapturedAtUtc { get; set; }
         public bool Stable { get; set; }
         public int StableMilliseconds { get; set; }
+        /// <summary>When the first league driver took the chequered flag; null if never observed.</summary>
+        public DateTimeOffset? LeaderFinishedAtUtc { get; set; }
         public double? OfficialTotalRaceTimeSeconds { get; set; }
         public string OfficialTotalRaceTimeSource { get; set; } = "NOT_SUPPORTED";
         public double? OfficialFinalGapSeconds { get; set; }

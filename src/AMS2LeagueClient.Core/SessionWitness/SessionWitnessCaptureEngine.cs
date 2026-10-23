@@ -345,7 +345,8 @@ namespace AMS2LeagueClient.Core.SessionWitness
                 && (first.RaceStateRaw == (uint)RaceState.NotStarted
                     || (IsFiniteNonNegative(first.CurrentTimeSeconds) && first.CurrentTimeSeconds <= 15));
             bool endObserved = session.RaceResult != null
-                && HostRecorderEngine.AllDriversTerminal(session.RaceResult.Participants);
+                && (HostRecorderEngine.AllDriversTerminal(session.RaceResult.Participants)
+                    || (session.RaceResult.Stable && session.RaceResult.LeaderFinishedAtUtc.HasValue));
             if (startObserved && endObserved) return SessionWitnessCompleteness.FullSession;
             if (terminalAtFirst || (race.Count <= 2 && endObserved)) return SessionWitnessCompleteness.EndOnly;
             return SessionWitnessCompleteness.MidSession;

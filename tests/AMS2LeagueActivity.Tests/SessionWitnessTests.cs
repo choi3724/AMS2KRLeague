@@ -34,6 +34,9 @@ namespace AMS2LeagueActivity.Tests
             yield return new TestCase("Inactive missing rows are not fabricated and stale results are not grid entries", InactiveRowsFailClosed);
             yield return new TestCase("Qualifying copied FINISHED then new grid remains one weekend", QualifyingGridResetIsNotRestart);
             yield return new TestCase("Vanished race entrants retain last observations without invented results", VanishedEntrantsRetainObservations);
+            yield return new TestCase("Leader finish starts a 300 s grace that finalizes unfinished entrants", LeaderFinishGraceFinalizesResult);
+            yield return new TestCase("Reset before the leader grace keeps the leader finish time", ResetBeforeLeaderGraceKeepsFinishTime);
+            yield return new TestCase("Qualifying FINISHED residue does not start the leader grace", QualifyingResidueDoesNotStartLeaderGrace);
         }
 
         private static void QualifyingGridResetIsNotRestart()
@@ -88,6 +91,75 @@ namespace AMS2LeagueActivity.Tests
             AssertEx.Equal((uint)RaceState.Racing, vanished.Single(p => p.NameSnapshot == "Driver Missing").ResultStateRaw);
             using JsonDocument wire = JsonDocument.Parse(SessionWitnessUploadPayloadBuilder.Build(result));
             AssertEx.Equal(4, wire.RootElement.GetProperty("session").GetProperty("raceParticipantObservations").GetArrayLength());
+        }
+
+        private static ActivityFixtureSnapshot LeaderFinishedFixture(SessionWitnessCaptureEngine engine, out DateTimeOffset leaderFinishedAt)
+        {
+            ActivityFixtureSnapshot fixture = ResultFixture();
+            fixture.Participants.Add(new ActivityFixtureParticipant { Name = "Driver Idle", Position = 3, RaceState = "NotStarted" });
+            engine.Observe(fixture.ToSnapshot(0));
+            fixture.CapturedAtUtc = FixedTime().AddSeconds(2);
+            fixture.RaceState = "Racing";
+            fixture.Participants[0].RaceState = "Racing";
+            fixture.Participants[1].RaceState = "Racing";
+            engine.Observe(fixture.ToSnapshot(2));
+            leaderFinishedAt = FixedTime().AddMinutes(30);
+            fixture.CapturedAtUtc = leaderFinishedAt;
+            fixture.Participants[0].RaceState = "Finished";
+            fixture.Participants[0].LapsCompleted = 20;
+            fixture.Participants[1].LapsCompleted = 19;
+            SessionWitnessUpdate update = engine.Observe(fixture.ToSnapshot(4));
+            AssertEx.True(update.Events.Contains("WITNESS_CAPTURE LEADER_FINISHED"), "The leader finish was not recorded.");
+            return fixture;
+        }
+
+        private static void LeaderFinishGraceFinalizesResult()
+        {
+            var engine = new SessionWitnessCaptureEngine("leader-grace", "test");
+            ActivityFixtureSnapshot fixture = LeaderFinishedFixture(engine, out DateTimeOffset leaderFinishedAt);
+            fixture.CapturedAtUtc = leaderFinishedAt.AddSeconds(299);
+            AssertEx.True(!engine.Observe(fixture.ToSnapshot(6)).Events.Contains("WITNESS_CAPTURE RACE_RESULT_CAPTURED"),
+                "The result was frozen before the 300 s grace elapsed.");
+            fixture.CapturedAtUtc = leaderFinishedAt.AddSeconds(300);
+            AssertEx.True(engine.Observe(fixture.ToSnapshot(8)).Events.Contains("WITNESS_CAPTURE RACE_RESULT_CAPTURED"),
+                "The result was not frozen when the 300 s grace elapsed.");
+            // A later flag after the grace must not rewrite the frozen result.
+            fixture.CapturedAtUtc = leaderFinishedAt.AddSeconds(310);
+            fixture.Participants[1].RaceState = "Finished";
+            engine.Observe(fixture.ToSnapshot(10));
+            SessionWitnessRecord result = Required(engine.Close(fixture.CapturedAtUtc, "SESSION_RESET").FinalizedWitness);
+            HostRaceResult race = result.Session.RaceResult!;
+            AssertEx.True(race.Stable, "A grace-finalized result must be stable.");
+            AssertEx.Equal(leaderFinishedAt, race.LeaderFinishedAtUtc!.Value);
+            AssertEx.Equal((uint)RaceState.Racing, race.Participants.Single(p => p.NameSnapshot == "Driver Beta").ResultStateRaw);
+            AssertEx.Equal((uint)RaceState.NotStarted, race.Participants.Single(p => p.NameSnapshot == "Driver Idle").ResultStateRaw);
+            AssertEx.True(result.Session.Issues.Any(issue => issue.Code == "UNFINISHED_AFTER_LEADER_GRACE"), "The unfinished entrants were not reported.");
+            AssertEx.Equal(SessionWitnessCompleteness.FullSession, result.CaptureCompleteness);
+            using JsonDocument wire = JsonDocument.Parse(SessionWitnessUploadPayloadBuilder.Build(result));
+            JsonElement raceResult = wire.RootElement.GetProperty("session").GetProperty("raceResult");
+            AssertEx.True(raceResult.GetProperty("stable").GetBoolean(), "The wire result must be stable.");
+            AssertEx.Equal(leaderFinishedAt, raceResult.GetProperty("leaderFinishedAtUtc").GetDateTimeOffset());
+        }
+
+        private static void ResetBeforeLeaderGraceKeepsFinishTime()
+        {
+            var engine = new SessionWitnessCaptureEngine("leader-reset", "test");
+            ActivityFixtureSnapshot fixture = LeaderFinishedFixture(engine, out DateTimeOffset leaderFinishedAt);
+            SessionWitnessRecord result = Required(engine.Close(leaderFinishedAt.AddSeconds(60), "SESSION_RESET").FinalizedWitness);
+            HostRaceResult race = result.Session.RaceResult!;
+            AssertEx.True(!race.Stable, "A reset before the grace is not a stable result.");
+            AssertEx.Equal(leaderFinishedAt, race.LeaderFinishedAtUtc!.Value);
+            AssertEx.Equal(4, race.Participants.Count);
+        }
+
+        private static void QualifyingResidueDoesNotStartLeaderGrace()
+        {
+            var engine = new SessionWitnessCaptureEngine("leader-residue", "test");
+            DateTimeOffset at = FixedTime();
+            engine.Observe(SessionSnapshot(at, 0, SessionState.Qualify, RaceState.Racing, 2, 100, 30));
+            engine.Observe(SessionSnapshot(at.AddSeconds(1), 1, SessionState.Qualify, RaceState.Finished, 3, 1791, 30));
+            SessionWitnessUpdate residue = engine.Observe(SessionSnapshot(at.AddSeconds(2), 2, SessionState.Race, RaceState.Finished, 3, 1792, 30));
+            AssertEx.True(!residue.Events.Contains("WITNESS_CAPTURE LEADER_FINISHED"), "Qualifying residue started the leader grace.");
         }
 
         private static ActivityFixtureSnapshot ResultFixture()
