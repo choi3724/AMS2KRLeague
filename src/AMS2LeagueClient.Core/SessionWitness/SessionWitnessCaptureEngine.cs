@@ -7,6 +7,7 @@ using System.Text;
 using AMS2LeagueClient.Core.ActivityCapture;
 using AMS2LeagueClient.Core.FutureTelemetry;
 using AMS2LeagueClient.Core.HostRecording;
+using AMS2LeagueClient.Core.Session;
 using AMS2LeagueClient.Core.Telemetry;
 
 namespace AMS2LeagueClient.Core.SessionWitness
@@ -17,6 +18,7 @@ namespace AMS2LeagueClient.Core.SessionWitness
     /// </summary>
     public sealed class SessionWitnessCaptureEngine
     {
+        private static readonly ParticipantRoleClassifier Roles = new ParticipantRoleClassifier();
         private static readonly TimeSpan WeatherInterval = TimeSpan.FromSeconds(60);
         // Enough for a long race with a full grid while preventing an accidental
         // per-frame producer regression from creating an unbounded upload body.
@@ -342,6 +344,8 @@ namespace AMS2LeagueClient.Core.SessionWitness
             bool terminalAtFirst = IsTerminal(first.RaceStateRaw)
                 || HostRecorderEngine.AllDriversTerminal(first.Participants);
             bool startObserved = !terminalAtFirst
+                && !first.Participants.Any(value => value.ResultStateRaw == (uint)RaceState.Finished
+                    && Roles.IsLeagueDriver(value.Vehicle, value.VehicleClass))
                 && (first.RaceStateRaw == (uint)RaceState.NotStarted
                     || (IsFiniteNonNegative(first.CurrentTimeSeconds) && first.CurrentTimeSeconds <= 15));
             bool endObserved = session.RaceResult != null

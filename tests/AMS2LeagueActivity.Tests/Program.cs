@@ -16,6 +16,7 @@ namespace AMS2LeagueActivity.Tests
                 .Concat(UploadQueueTests.Cases())
                 .Concat(PayloadContractTests.Cases())
                 .Concat(SessionWitnessTests.Cases())
+                .Concat(RaceEndClockTests.Cases())
                 .Concat(FutureTelemetryArchiveTests.Cases())
                 .Concat(FutureTelemetryRuntimeAdapterTests.Cases())
                 .Concat(CompactTelemetryCodecTests.Cases())

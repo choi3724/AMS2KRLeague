@@ -264,6 +264,8 @@ namespace AMS2LeagueClient.Tests
                 ,("Long-track upload retries unknown server schema and preserves other failures", LongTrackUploadWaitsForServer)
                 ,("403 JSON HTML diagnostics quarantine without credentials or replay", ForbiddenUploadDiagnostics)
                 ,("Race batch uploads after whole-field finish and preserves late joins", RaceBatchCompletionAndLateJoin)
+                ,("Race end runtime preserves clocks through policy-v2 HTTP retry and restart", RaceEndRuntimeDelivery)
+                ,("Race end runtime waits for an actual new grid or explicit restart", RaceEndRestartBoundary)
                 ,("Transition tracker reports position direction and fastest lap", TransitionTrackerReportsPositionDirection)
                 ,("Position change flashes row and rolls number", PositionChangeFlashesRowAndRollsNumber)
                 ,("Fastest lap status sweeps purple without dimming", FastestLapStatusSweepsPurple)

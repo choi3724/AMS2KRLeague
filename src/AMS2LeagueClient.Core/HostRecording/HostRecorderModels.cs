@@ -118,7 +118,7 @@ namespace AMS2LeagueClient.Core.HostRecording
         public DateTimeOffset CapturedAtUtc { get; set; }
         public bool Stable { get; set; }
         public int StableMilliseconds { get; set; }
-        /// <summary>When the first league driver took the chequered flag; null if never observed.</summary>
+        /// <summary>Observed league leader finish transition; null when already finished on joining.</summary>
         public DateTimeOffset? LeaderFinishedAtUtc { get; set; }
         public double? OfficialTotalRaceTimeSeconds { get; set; }
         public string OfficialTotalRaceTimeSource { get; set; } = "NOT_SUPPORTED";

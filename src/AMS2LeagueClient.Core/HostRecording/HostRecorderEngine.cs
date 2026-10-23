@@ -51,6 +51,7 @@ namespace AMS2LeagueClient.Core.HostRecording
         private HostRaceResult? _raceResult;
         private bool _racePhaseReady;
         private DateTimeOffset? _leaderFinishedAt;
+        private DateTimeOffset? _leaderFinishObservedAt;
         private TelemetrySnapshot? _latestSnapshot;
         private uint _sessionBuild;
         private uint _sessionSharedMemoryVersion;
@@ -263,18 +264,32 @@ namespace AMS2LeagueClient.Core.HostRecording
             HostClassification? candidate = BuildClassification(snapshot, "RACE_FINAL");
             if (candidate != null)
             {
+                HostClassification? previousRace = _latestRace;
                 _latestRace = candidate;
                 TimeSpan stableFor = _resultGate.Observe(Signature(candidate), snapshot.CapturedAt);
                 bool finishing = snapshot.RaceStateRaw == (uint)RaceState.Finished
                     || candidate.Participants.Any(participant => IsTerminal(participant.ResultStateRaw));
-                // Only a race already seen not-started/racing can have a leader
-                // finish; qualifying FINISHED residue must not start the grace.
-                if (_racePhaseReady && !_leaderFinishedAt.HasValue && candidate.Participants.Any(participant =>
-                    Roles.IsLeagueDriver(participant.Vehicle, participant.VehicleClass)
-                    && participant.ResultStateRaw == (uint)RaceState.Finished))
+                HostParticipantEvidence? leader = LeagueLeader(candidate.Participants);
+                if (!_leaderFinishObservedAt.HasValue && leader?.ResultStateRaw == (uint)RaceState.Finished)
                 {
-                    _leaderFinishedAt = snapshot.CapturedAt;
-                    update.Events.Add("LEADER_FINISHED");
+                    // Bound collection even for a late observer, but only publish
+                    // a finish clock after observing this driver's transition.
+                    _leaderFinishObservedAt = snapshot.CapturedAt;
+                    HostParticipantEvidence? previous = previousRace?.Participants.FirstOrDefault(value =>
+                        value.Slot == leader.Slot && value.Generation == leader.Generation
+                        && value.NameSnapshot == leader.NameSnapshot);
+                    if (_racePhaseReady && previous != null
+                        && (previous.ResultStateRaw == (uint)RaceState.Racing
+                            || previous.ResultStateRaw == (uint)RaceState.NotStarted))
+                    {
+                        _leaderFinishedAt = snapshot.CapturedAt;
+                        update.Events.Add("LEADER_FINISHED");
+                    }
+                    else
+                    {
+                        AddIssue(HostIssueSeverity.Warning, "LEADER_FINISH_TIME_UNKNOWN",
+                            "The leader was already finished when observed; the actual finish clock is unknown.");
+                    }
                 }
                 if (finishing)
                 {
@@ -283,10 +298,10 @@ namespace AMS2LeagueClient.Core.HostRecording
                     {
                         FinalizeRace(candidate, stableFor, update);
                     }
-                    else if (_leaderFinishedAt.HasValue && snapshot.CapturedAt - _leaderFinishedAt.Value >= LeaderFinishGrace)
+                    else if (_leaderFinishObservedAt.HasValue && snapshot.CapturedAt - _leaderFinishObservedAt.Value >= LeaderFinishGrace)
                     {
                         AddIssue(HostIssueSeverity.Warning, "UNFINISHED_AFTER_LEADER_GRACE",
-                            "Entrants without a terminal state " + LeaderFinishGrace.TotalSeconds + " s after the leader finished are unfinished.");
+                            "Entrants still have no terminal state " + LeaderFinishGrace.TotalSeconds + " s after the first leader-finished observation.");
                         FinalizeRace(candidate, stableFor, update, leaderGraceElapsed: true);
                     }
                 }
@@ -313,6 +328,19 @@ namespace AMS2LeagueClient.Core.HostRecording
             };
             SetPhase(HostRecorderPhase.ResultCaptured, update);
             update.Events.Add("RACE_RESULT_CAPTURED");
+        }
+
+        private static HostParticipantEvidence? LeagueLeader(List<HostParticipantEvidence> participants)
+        {
+            HostParticipantEvidence? first = participants
+                .Where(value => value.Position > 0 && Roles.IsLeagueDriver(value.Vehicle, value.VehicleClass))
+                .OrderBy(value => value.Position).FirstOrDefault();
+            if (first == null) return null;
+            // Keep raw positions, including safety-car offsets. A missing driver
+            // ahead cannot turn the next observed driver into the race winner.
+            int safetyCarsAhead = participants.Where(value => value.Position > 0 && value.Position < first.Position
+                && !Roles.IsLeagueDriver(value.Vehicle, value.VehicleClass)).Select(value => value.Position).Distinct().Count();
+            return first.Position == 1 + safetyCarsAhead ? first : null;
         }
 
         private HostSessionResult CloseSession(DateTimeOffset at, string reason, HostRecorderUpdate update)
@@ -684,6 +712,7 @@ namespace AMS2LeagueClient.Core.HostRecording
             _raceResult = null;
             _racePhaseReady = false;
             _leaderFinishedAt = null;
+            _leaderFinishObservedAt = null;
             _latestSnapshot = null;
             _sessionBuild = 0;
             _sessionSharedMemoryVersion = 0;

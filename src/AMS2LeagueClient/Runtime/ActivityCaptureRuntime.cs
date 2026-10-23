@@ -202,14 +202,30 @@ namespace AMS2LeagueClient.Runtime
                 if (_disposed || _updateExitReserved) return;
                 if (_completedRace != null)
                 {
+                    if (snapshot.KnownGameState == GameState.InGameRestarting)
+                    {
+                        _completedRace = null;
+                        return;
+                    }
                     bool gameplay = snapshot.KnownGameState == GameState.InGamePlaying
                         || snapshot.KnownGameState == GameState.InGamePaused
                         || snapshot.KnownGameState == GameState.InGameMenuTimeTicking;
                     bool newSession = snapshot.SessionStateRaw != (uint)SessionState.Race
                         && snapshot.SessionStateRaw != (uint)SessionState.FormationLap
                         && snapshot.SessionStateRaw != (uint)SessionState.Invalid;
-                    bool restarted = snapshot.Participants.Any(value => value.IsActive && Roles.IsLeagueDriver(value)
-                        && (value.RaceStateRaw == (uint)RaceState.Racing || value.RaceStateRaw == (uint)RaceState.NotStarted));
+                    // At the collection cap some entrants are still active. They
+                    // cannot reopen the just-completed capture on every frame.
+                    bool restarted = (snapshot.RaceStateRaw == (uint)RaceState.NotStarted
+                        && _completedRace.RaceStateRaw != (uint)RaceState.NotStarted)
+                        || snapshot.Participants.Any(value => value.IsActive && Roles.IsLeagueDriver(value)
+                            && (value.RaceStateRaw == (uint)RaceState.Racing || value.RaceStateRaw == (uint)RaceState.NotStarted)
+                            && _completedRace.Participants.Any(before => before.Index == value.Index
+                                && before.Name == value.Name && before.VehicleName == value.VehicleName
+                                && value.LapsCompleted < before.LapsCompleted
+                                && (before.RaceStateRaw == (uint)RaceState.Finished
+                                    || before.RaceStateRaw == (uint)RaceState.Retired
+                                    || before.RaceStateRaw == (uint)RaceState.Dnf
+                                    || before.RaceStateRaw == (uint)RaceState.Disqualified)));
                     bool newTrack = snapshot.TrackLocation != _completedRace.TrackLocation
                         || snapshot.TrackVariation != _completedRace.TrackVariation;
                     if (!gameplay || string.IsNullOrWhiteSpace(snapshot.TrackLocation) || (!newSession && !restarted && !newTrack)) return;
